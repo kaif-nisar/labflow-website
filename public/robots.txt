@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://labflowlis.com/sitemap.xml
+Host: labflowlis.com
+
+Disallow: /admin/
+Disallow: /superAdmin/
+Disallow: /superFranchisee/
+Disallow: /franchisee/
+Disallow: /subFranchisee/
+Disallow: /private/

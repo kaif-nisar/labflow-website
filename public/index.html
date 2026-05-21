@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LabFlow — Advanced Pathology Lab Management Software</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#091a3b">
+<link rel="stylesheet" href="/css/offline-fonts.css">
+<link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css"/>
+<style>
+:root {
+  --navy: #050e24;
+  --navy-mid: #0a1a3a;
+  --blue: #1a6ef5;
+  --blue-bright: #3d8bff;
+  --cyan: #00d4ff;
+  --cyan-soft: rgba(0,212,255,0.12);
+  --glass: rgba(255,255,255,0.04);
+  --glass-border: rgba(255,255,255,0.08);
+  --text: #e8edf5;
+  --text-muted: #7a8ba8;
+  --card-bg: rgba(10,26,58,0.7);
+  --white: #ffffff;
+  --green: #00e5a0;
+  --gold: #f5c842;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--text);overflow-x:hidden;}
+
+/* ─── NOISE TEXTURE OVERLAY ─── */
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:0;opacity:0.4;
+}
+
+/* ─── SCROLL BAR ─── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--navy);}
+::-webkit-scrollbar-thumb{background:var(--blue);border-radius:4px;}
+
+/* ─── TYPOGRAPHY ─── */
+h1,h2,h3,h4,.syne{font-family:'Syne',sans-serif;}
+
+/* ─── NAVBAR ─── */
+nav{
+  position:fixed;top:0;left:0;width:100%;z-index:100;
+  padding:16px 0;
+  transition:all .35s ease;
+}
+nav.scrolled{
+  background:rgba(5,14,36,0.92);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--glass-border);
+}
+.nav-inner{
+  max-width:1280px;margin:0 auto;padding:0 32px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-logo{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;
+  color:var(--white);text-decoration:none;
+  display:flex;align-items:center;gap:10px;
+}
+.logo-dot-unused{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--cyan);
+  box-shadow:0 0 12px var(--cyan);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 8px var(--cyan);}50%{box-shadow:0 0 20px var(--cyan),0 0 40px rgba(0,212,255,.3);}}
+.nav-links{display:flex;gap:36px;list-style:none;}
+.nav-links a{
+  color:var(--text-muted);text-decoration:none;font-size:.9rem;font-weight:500;
+  transition:color .2s;letter-spacing:.3px;
+}
+.nav-links a:hover{color:var(--white);}
+.nav-cta{
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;padding:10px 24px;border-radius:8px;
+  text-decoration:none;font-weight:600;font-size:.875rem;
+  border:1px solid rgba(255,255,255,.1);
+  transition:all .2s;
+  box-shadow:0 4px 20px rgba(26,110,245,.35);
+}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(26,110,245,.5);}
+.hamburger{display:none;cursor:pointer;flex-direction:column;gap:5px;}
+.hamburger span{width:24px;height:2px;background:var(--text);border-radius:2px;transition:.3s;}
+.mobile-menu{
+  display:none;position:fixed;top:0;left:0;width:100%;height:100vh;
+  background:var(--navy-mid);z-index:99;
+  flex-direction:column;align-items:center;justify-content:center;gap:32px;
+}
+.mobile-menu.open{display:flex;}
+.mobile-menu a{color:var(--text);text-decoration:none;font-size:1.5rem;font-family:'Syne',sans-serif;font-weight:700;}
+
+/* ─── HERO ─── */
+.hero{
+  min-height:100vh;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(26,110,245,.18) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 80% 60%, rgba(0,212,255,.06) 0%, transparent 60%),
+    var(--navy);
+  display:flex;align-items:center;
+  padding:120px 32px 80px;
+  position:relative;overflow:hidden;
+}
+.hero-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(26,110,245,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,110,245,.05) 1px, transparent 1px);
+  background-size:60px 60px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%, black, transparent);
+}
+.hero-inner{max-width:1280px;margin:0 auto;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);
+  border-radius:100px;padding:6px 16px;margin-bottom:24px;
+  font-size:.8rem;color:var(--cyan);font-weight:600;letter-spacing:.5px;
+  text-transform:uppercase;
+}
+.hero-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:pulse 2s infinite;}
+h1.hero-title{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:clamp(2.4rem, 5vw, 4rem);line-height:1.1;
+  color:var(--white);margin-bottom:20px;
+}
+h1.hero-title span{
+  background:linear-gradient(135deg,var(--blue-bright),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-desc{color:var(--text-muted);font-size:1.05rem;line-height:1.7;margin-bottom:40px;max-width:500px;}
+.hero-actions{display:flex;gap:16px;flex-wrap:wrap;}
+.btn-primary{
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;padding:14px 32px;border-radius:10px;
+  text-decoration:none;font-weight:600;font-size:.95rem;
+  border:none;cursor:pointer;
+  box-shadow:0 8px 32px rgba(26,110,245,.4);
+  transition:all .25s;display:inline-flex;align-items:center;gap:8px;
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(26,110,245,.55);}
+.btn-outline{
+  background:transparent;color:var(--text);
+  padding:14px 32px;border-radius:10px;
+  text-decoration:none;font-weight:500;font-size:.95rem;
+  border:1px solid var(--glass-border);cursor:pointer;
+  transition:all .25s;display:inline-flex;align-items:center;gap:8px;
+}
+.btn-outline:hover{background:var(--glass);border-color:rgba(255,255,255,.2);}
+.hero-stats{display:flex;gap:32px;margin-top:48px;}
+.stat{border-left:2px solid var(--blue);padding-left:16px;}
+.stat-num{font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:var(--white);}
+.stat-label{font-size:.8rem;color:var(--text-muted);margin-top:2px;}
+
+/* hero right mockup */
+.hero-visual{position:relative;}
+.hero-mockup{
+  background:linear-gradient(135deg,rgba(10,26,58,.9),rgba(5,14,36,.95));
+  border:1px solid var(--glass-border);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 32px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04);
+}
+.mockup-bar{
+  background:rgba(255,255,255,.04);
+  padding:12px 16px;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid var(--glass-border);
+}
+.mockup-dot{width:10px;height:10px;border-radius:50%;}
+.mockup-content{padding:24px;}
+.mock-header{
+  background:linear-gradient(135deg,var(--blue),#0a4ccd);
+  border-radius:8px;padding:16px 20px;margin-bottom:16px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.mock-header-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:#fff;}
+.mock-header-badge{background:rgba(255,255,255,.15);color:#fff;font-size:.7rem;padding:3px 10px;border-radius:100px;font-weight:600;}
+.mock-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.mock-stat-card{
+  background:rgba(255,255,255,.04);border:1px solid var(--glass-border);
+  border-radius:8px;padding:12px;text-align:center;
+}
+.mock-stat-card .num{font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);}
+.mock-stat-card .lbl{font-size:.65rem;color:var(--text-muted);margin-top:2px;}
+.mock-table{background:rgba(255,255,255,.02);border:1px solid var(--glass-border);border-radius:8px;overflow:hidden;}
+.mock-table-row{display:grid;grid-template-columns:1fr 1fr auto;padding:8px 12px;border-bottom:1px solid var(--glass-border);align-items:center;font-size:.72rem;}
+.mock-table-row:last-child{border-bottom:none;}
+.mock-table-row.head{background:rgba(255,255,255,.04);color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-size:.65rem;}
+.tag{padding:2px 8px;border-radius:100px;font-size:.62rem;font-weight:600;}
+.tag.done{background:rgba(0,229,160,.12);color:var(--green);}
+.tag.pending{background:rgba(245,200,66,.1);color:var(--gold);}
+
+.floating-card{
+  position:absolute;
+  background:rgba(10,26,58,.95);border:1px solid var(--glass-border);
+  border-radius:12px;padding:12px 16px;
+  box-shadow:0 16px 40px rgba(0,0,0,.4);
+  backdrop-filter:blur(20px);
+}
+.floating-card.left{left:-40px;bottom:60px;animation:floatY 4s ease-in-out infinite;}
+.floating-card.right{right:-20px;top:40px;animation:floatY 4s ease-in-out infinite .8s;}
+@keyframes floatY{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+.fc-label{font-size:.65rem;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
+.fc-val{font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);}
+.fc-sub{font-size:.65rem;color:var(--green);margin-top:2px;}
+.hero-dashboard-shot{
+  width:100%;display:block;border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 20px 48px rgba(0,0,0,.35);
+}
+.hero-quick-cards{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;
+}
+.hero-quick-card{
+  background:rgba(255,255,255,.04);border:1px solid var(--glass-border);
+  border-radius:10px;padding:14px;
+}
+.hero-quick-card strong{
+  display:block;font-family:'Syne',sans-serif;font-size:1rem;color:var(--white);margin-bottom:4px;
+}
+.hero-quick-card span{font-size:.72rem;color:var(--text-muted);line-height:1.5;display:block;}
+
+/* ─── SECTION WRAPPER ─── */
+section{position:relative;z-index:1;}
+.section-pad{padding:96px 32px;}
+.section-inner{max-width:1280px;margin:0 auto;}
+.section-label{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:.78rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+  color:var(--cyan);margin-bottom:16px;
+}
+.section-label::before{content:'';width:20px;height:2px;background:var(--cyan);border-radius:2px;}
+h2.section-title{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:clamp(1.8rem,3.5vw,2.8rem);color:var(--white);
+  line-height:1.15;margin-bottom:16px;
+}
+h2.section-title span{
+  background:linear-gradient(135deg,var(--blue-bright),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.section-desc{color:var(--text-muted);font-size:1rem;line-height:1.7;max-width:560px;}
+.section-header{margin-bottom:64px;}
+
+/* ─── FEATURES STRIP ─── */
+.features-strip{
+  background:rgba(26,110,245,.05);
+  border-top:1px solid var(--glass-border);
+  border-bottom:1px solid var(--glass-border);
+  padding:24px 32px;
+}
+.strip-inner{max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;gap:0;}
+.strip-item{
+  flex:1;min-width:180px;
+  display:flex;align-items:center;gap:12px;
+  padding:0 24px;border-right:1px solid var(--glass-border);
+}
+.strip-item:last-child{border-right:none;}
+.strip-icon{color:var(--cyan);font-size:1rem;}
+.strip-text{font-size:.82rem;color:var(--text-muted);font-weight:500;}
+.strip-text strong{color:var(--white);}
+
+/* ─── REPORT SECTION ─── */
+.report-section{
+  background:
+    radial-gradient(ellipse 60% 60% at 0% 50%, rgba(0,212,255,.04) 0%, transparent 70%),
+    var(--navy-mid);
+}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;}
+.report-features{display:flex;flex-direction:column;gap:24px;}
+.rf-item{
+  display:flex;gap:16px;align-items:flex-start;
+  padding:20px;border-radius:12px;
+  border:1px solid transparent;
+  transition:all .3s;cursor:default;
+}
+.rf-item:hover{background:var(--card-bg);border-color:var(--glass-border);}
+.rf-icon{
+  width:44px;height:44px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(26,110,245,.2),rgba(0,212,255,.1));
+  border:1px solid rgba(26,110,245,.25);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--blue-bright);font-size:.9rem;flex-shrink:0;
+}
+.rf-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:var(--white);margin-bottom:6px;}
+.rf-desc{font-size:.82rem;color:var(--text-muted);line-height:1.6;}
+
+.report-preview{position:relative;}
+.report-frame{
+  background:white;border-radius:16px;
+  overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.1);
+  transform:perspective(1000px) rotateY(-4deg) rotateX(2deg);
+  transition:transform .5s;
+}
+.report-frame:hover{transform:perspective(1000px) rotateY(0deg) rotateX(0deg);}
+.report-frame img{width:100%;display:block;}
+.report-gallery{
+  display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start;
+}
+.report-gallery-side{
+  display:grid;gap:18px;
+}
+.report-shot{
+  position:relative;background:#fff;border-radius:18px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 26px 60px rgba(0,0,0,.42);
+}
+.report-shot img{
+  width:100%;height:100%;display:block;object-fit:cover;background:#fff;
+}
+.report-shot.large{min-height:520px;}
+.report-shot.small{min-height:250px;}
+.report-overlay{
+  position:absolute;left:16px;right:16px;bottom:16px;
+  background:linear-gradient(135deg,rgba(5,14,36,.9),rgba(10,26,58,.82));
+  border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px;
+  box-shadow:0 12px 28px rgba(0,0,0,.22);
+}
+.report-overlay .eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-size:.68rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--cyan);margin-bottom:8px;
+}
+.report-overlay .eyebrow::before{
+  content:'';width:16px;height:2px;background:var(--cyan);border-radius:2px;
+}
+.report-overlay h3{
+  font-family:'Syne',sans-serif;font-size:1rem;color:#fff;margin-bottom:6px;
+}
+.report-overlay p{font-size:.76rem;line-height:1.6;color:#c7d4ea;}
+.report-stack-note{
+  margin-top:20px;padding:18px 20px;border-radius:14px;
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  color:var(--text-muted);font-size:.82rem;line-height:1.7;
+}
+.report-stack-note strong{color:var(--white);}
+.report-frame-fallback{
+  background:white;padding:32px;min-height:380px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.report-fallback-header{
+  background:linear-gradient(135deg,#1a6ef5,#0a4ccd);
+  border-radius:8px;padding:16px 20px;color:white;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.rh-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;}
+.rh-sub{font-size:.75rem;opacity:.8;margin-top:4px;}
+.report-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;align-items:center;padding:10px 4px;border-bottom:1px solid #f0f0f0;}
+.report-row.head{background:#f8faff;border-radius:6px;font-weight:700;font-size:.72rem;color:#555;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;}
+.report-row .test-name{font-size:.82rem;color:#1a1a2e;font-weight:500;}
+.report-row .val{font-size:.82rem;font-weight:600;text-align:center;}
+.report-row .val.normal{color:#16a34a;}
+.report-row .val.high{color:#dc2626;}
+.report-row .ref{font-size:.72rem;color:#888;text-align:center;}
+.report-row .unit{font-size:.72rem;color:#888;text-align:center;}
+.report-badge{
+  background:linear-gradient(135deg,rgba(26,110,245,.06),rgba(0,212,255,.04));
+  border:1px solid rgba(26,110,245,.1);
+  border-radius:8px;padding:8px 16px;margin-top:8px;
+  display:flex;align-items:center;gap:8px;font-size:.75rem;color:#555;
+}
+.qr-box{
+  width:50px;height:50px;
+  background:repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 0 0 / 6px 6px;
+  border-radius:4px;border:3px solid #fff;outline:2px solid #000;
+}
+
+/* ─── SERVICES ─── */
+.services-section{
+  background:var(--navy);
+}
+.services-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+.service-card{
+  background:var(--card-bg);
+  border:1px solid var(--glass-border);
+  border-radius:16px;padding:32px;
+  transition:all .35s;
+  position:relative;overflow:hidden;
+}
+.service-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan));
+  transform:scaleX(0);transition:transform .3s;
+  transform-origin:left;
+}
+.service-card:hover{transform:translateY(-4px);border-color:rgba(26,110,245,.3);box-shadow:0 20px 48px rgba(0,0,0,.3);}
+.service-card:hover::before{transform:scaleX(1);}
+.sc-icon{
+  width:52px;height:52px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(26,110,245,.15),rgba(0,212,255,.08));
+  border:1px solid rgba(26,110,245,.2);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--blue-bright);font-size:1.1rem;margin-bottom:24px;
+}
+.sc-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--white);margin-bottom:12px;}
+.sc-desc{font-size:.85rem;color:var(--text-muted);line-height:1.7;}
+
+/* ─── SCREENSHOT SLIDER ─── */
+.screenshots-section{
+  background:var(--navy-mid);
+  overflow:hidden;
+}
+.screenshots-track{
+  display:flex;gap:24px;overflow-x:auto;
+  scrollbar-width:none;padding-bottom:8px;
+  scroll-behavior:smooth;
+}
+.screenshots-track::-webkit-scrollbar{display:none;}
+.ss-card{
+  flex-shrink:0;width:500px;
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  border-radius:16px;overflow:hidden;
+  transition:all .3s;
+}
+.ss-card:hover{border-color:rgba(26,110,245,.3);transform:translateY(-4px);}
+.ss-img{width:100%;height:280px;object-fit:cover;display:block;}
+.ss-img-placeholder{
+  width:100%;height:280px;
+  background:linear-gradient(135deg,rgba(26,110,245,.08),rgba(0,212,255,.04));
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;
+  color:var(--text-muted);
+}
+.ss-info{padding:20px;}
+.ss-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:var(--white);margin-bottom:6px;}
+.ss-desc{font-size:.78rem;color:var(--text-muted);line-height:1.6;}
+.slider-controls{display:flex;gap:12px;margin-top:32px;}
+.slider-btn{
+  width:44px;height:44px;border-radius:10px;
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  color:var(--text);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;font-size:.9rem;
+}
+.slider-btn:hover{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+.workflow-section{
+  background:
+    radial-gradient(ellipse 60% 60% at 100% 0%, rgba(0,212,255,.05) 0%, transparent 70%),
+    var(--navy);
+}
+.workflow-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;}
+.workflow-card{
+  background:var(--card-bg);border:1px solid var(--glass-border);border-radius:18px;
+  overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.24);transition:all .3s;
+}
+.workflow-card:hover{transform:translateY(-4px);border-color:rgba(26,110,245,.32);}
+.workflow-media{
+  background:linear-gradient(135deg,rgba(26,110,245,.12),rgba(0,212,255,.04));
+  padding:14px;border-bottom:1px solid var(--glass-border);
+}
+.workflow-media img{
+  width:100%;display:block;border-radius:12px;background:#fff;
+  box-shadow:0 16px 36px rgba(0,0,0,.2);
+}
+.workflow-body{padding:24px;}
+.workflow-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;
+  font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--cyan);font-weight:700;
+}
+.workflow-eyebrow::before{content:'';width:16px;height:2px;background:var(--cyan);border-radius:2px;}
+.workflow-title{font-family:'Syne',sans-serif;font-size:1.2rem;color:var(--white);margin-bottom:10px;}
+.workflow-desc{font-size:.84rem;color:var(--text-muted);line-height:1.75;margin-bottom:18px;}
+.workflow-points{list-style:none;display:grid;gap:10px;}
+.workflow-points li{
+  display:flex;gap:10px;align-items:flex-start;color:var(--text-muted);font-size:.8rem;line-height:1.65;
+}
+.workflow-points li i{color:var(--green);margin-top:3px;flex-shrink:0;}
+
+/* ─── TESTS SHOWCASE ─── */
+.tests-section{
+  background:var(--navy);
+}
+.tests-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;}
+.test-card{
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  border-radius:14px;padding:24px;
+  transition:all .3s;
+}
+.test-card:hover{border-color:rgba(26,110,245,.4);box-shadow:0 12px 32px rgba(26,110,245,.08);transform:translateY(-2px);}
+.test-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.test-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.92rem;color:var(--white);}
+.test-code{font-size:.7rem;color:var(--text-muted);margin-top:3px;}
+.test-type-badge{
+  padding:4px 10px;border-radius:100px;font-size:.65rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;
+}
+.type-hema{background:rgba(239,68,68,.1);color:#f87171;}
+.type-bio{background:rgba(0,212,255,.08);color:var(--cyan);}
+.type-urine{background:rgba(168,85,247,.1);color:#c084fc;}
+.type-endo{background:rgba(245,158,11,.1);color:#fbbf24;}
+.type-micro{background:rgba(0,229,160,.08);color:var(--green);}
+.type-lipid{background:rgba(249,115,22,.1);color:#fb923c;}
+.test-params{display:flex;flex-direction:column;gap:6px;}
+.test-param-row{
+  display:grid;grid-template-columns:1fr auto auto;
+  align-items:center;gap:8px;
+  padding:6px 10px;border-radius:8px;
+  background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.04);
+}
+.param-name{font-size:.75rem;color:var(--text-muted);}
+.param-val{font-size:.75rem;font-weight:600;color:var(--white);}
+.param-unit{font-size:.65rem;color:var(--text-muted);}
+.test-more{
+  margin-top:10px;font-size:.7rem;color:var(--text-muted);
+  text-align:center;padding:4px;
+  border:1px dashed rgba(255,255,255,.06);border-radius:6px;
+}
+
+/* ─── PRICING ─── */
+.pricing-section{
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 100%, rgba(26,110,245,.08) 0%, transparent 70%),
+    var(--navy-mid);
+}
+.pricing-toggle{
+  display:flex;align-items:center;gap:16px;margin-bottom:48px;
+}
+.toggle-label{font-size:.9rem;color:var(--text-muted);font-weight:500;}
+.toggle-wrap{position:relative;}
+.toggle-wrap input{opacity:0;position:absolute;}
+.toggle-track{
+  width:52px;height:28px;background:rgba(255,255,255,.08);
+  border:1px solid var(--glass-border);border-radius:100px;
+  cursor:pointer;position:relative;transition:.3s;
+  display:block;
+}
+.toggle-wrap input:checked + .toggle-track{background:var(--blue);border-color:var(--blue);}
+.toggle-track::after{
+  content:'';position:absolute;top:4px;left:4px;
+  width:18px;height:18px;border-radius:50%;background:white;
+  transition:.3s;
+}
+.toggle-wrap input:checked + .toggle-track::after{left:calc(100% - 22px);}
+.toggle-save{
+  background:rgba(0,229,160,.1);color:var(--green);
+  font-size:.75rem;font-weight:700;padding:3px 10px;
+  border-radius:100px;border:1px solid rgba(0,229,160,.2);
+}
+.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-items:start;}
+.pricing-card{
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  border-radius:18px;padding:28px;
+  position:relative;overflow:hidden;transition:all .3s;
+}
+.pricing-card.featured{
+  border-color:rgba(26,110,245,.5);
+  box-shadow:0 0 40px rgba(26,110,245,.12);
+}
+.pricing-card.featured::before{
+  content:'MOST POPULAR';
+  position:absolute;top:16px;right:-20px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;font-size:.6rem;font-weight:800;letter-spacing:1px;
+  padding:4px 36px;transform:rotate(12deg);
+}
+.pricing-card:hover{transform:translateY(-4px);}
+.pc-layer{font-size:.7rem;color:var(--cyan);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+.pc-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--white);margin-bottom:4px;}
+.pc-price{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:2rem;color:var(--white);margin:20px 0 4px;
+}
+.pc-price sup{font-size:1rem;color:var(--text-muted);}
+.pc-price span{font-size:.85rem;font-weight:400;color:var(--text-muted);}
+.pc-period{font-size:.75rem;color:var(--text-muted);margin-bottom:24px;}
+.pc-divider{height:1px;background:var(--glass-border);margin-bottom:24px;}
+.pc-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px;}
+.pc-features li{display:flex;align-items:flex-start;gap:10px;font-size:.8rem;color:var(--text-muted);line-height:1.5;}
+.pc-features li i{color:var(--green);margin-top:2px;flex-shrink:0;font-size:.7rem;}
+.pc-btn{
+  width:100%;padding:13px;border-radius:10px;
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;
+  cursor:pointer;border:none;transition:all .25s;
+}
+.pc-btn.outline{
+  background:transparent;color:var(--text);
+  border:1px solid var(--glass-border);
+}
+.pc-btn.outline:hover{background:rgba(255,255,255,.06);}
+.pc-btn.solid{
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;box-shadow:0 6px 24px rgba(26,110,245,.35);
+}
+.pc-btn.solid:hover{box-shadow:0 8px 32px rgba(26,110,245,.5);transform:translateY(-1px);}
+
+/* ─── ABOUT ─── */
+.about-section{background:var(--navy);}
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;}
+.about-img-wrap{position:relative;}
+.about-img{
+  border-radius:16px;overflow:hidden;
+  background:linear-gradient(135deg,rgba(26,110,245,.08),rgba(0,212,255,.04));
+  border:1px solid var(--glass-border);
+  aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
+}
+.about-img img{width:100%;height:100%;object-fit:cover;border-radius:16px;}
+.about-badge-card{
+  position:absolute;bottom:-20px;right:-20px;
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  border-radius:14px;padding:16px 20px;backdrop-filter:blur(20px);
+}
+.about-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px;}
+.about-stat-item{padding:20px;border-radius:12px;background:var(--card-bg);border:1px solid var(--glass-border);}
+.ast-num{font-family:'Syne',sans-serif;font-weight:800;font-size:1.8rem;color:var(--white);}
+.ast-label{font-size:.8rem;color:var(--text-muted);margin-top:4px;}
+.about-text{color:var(--text-muted);font-size:.9rem;line-height:1.8;margin-bottom:20px;}
+
+/* ─── CONTACT ─── */
+.contact-section{
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(26,110,245,.06) 0%, transparent 70%),
+    var(--navy-mid);
+}
+.contact-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+.contact-card{
+  background:var(--card-bg);border:1px solid var(--glass-border);
+  border-radius:16px;padding:32px;
+  transition:all .3s;
+}
+.contact-card:hover{border-color:rgba(26,110,245,.3);transform:translateY(-2px);}
+.cc-icon{
+  width:52px;height:52px;border-radius:12px;margin-bottom:20px;
+  background:linear-gradient(135deg,rgba(26,110,245,.15),rgba(0,212,255,.08));
+  border:1px solid rgba(26,110,245,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;color:var(--blue-bright);
+}
+.cc-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--white);margin-bottom:16px;}
+.cc-label{font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px;}
+.cc-value{font-size:.9rem;color:var(--blue-bright);font-weight:500;margin-bottom:16px;}
+.map-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;padding:10px 20px;border-radius:8px;
+  font-size:.8rem;font-weight:600;text-decoration:none;
+  transition:all .2s;margin-top:8px;
+}
+.map-btn:hover{box-shadow:0 6px 20px rgba(26,110,245,.4);}
+
+/* ─── FOOTER ─── */
+footer{
+  background:rgba(3,8,18,1);
+  border-top:1px solid var(--glass-border);
+  padding:64px 32px 32px;
+}
+.footer-inner{max-width:1280px;margin:0 auto;}
+.footer-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr;gap:48px;margin-bottom:48px;}
+.footer-brand .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.3rem;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:8px;margin-bottom:16px;}
+.footer-brand p{font-size:.83rem;color:var(--text-muted);line-height:1.7;margin-bottom:24px;}
+.social-links{display:flex;gap:12px;}
+.social-link{
+  width:38px;height:38px;border-radius:8px;
+  background:var(--glass);border:1px solid var(--glass-border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-muted);font-size:.85rem;text-decoration:none;
+  transition:all .2s;
+}
+.social-link:hover{background:var(--blue);border-color:var(--blue);color:#fff;}
+.footer-col h4{font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;color:var(--white);margin-bottom:20px;}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px;}
+.footer-col ul a{font-size:.83rem;color:var(--text-muted);text-decoration:none;transition:color .2s;}
+.footer-col ul a:hover{color:var(--white);}
+.newsletter-form{display:flex;border-radius:10px;overflow:hidden;border:1px solid var(--glass-border);}
+.newsletter-form input{
+  flex:1;background:var(--glass);border:none;
+  padding:12px 16px;color:var(--text);font-size:.83rem;outline:none;
+}
+.newsletter-form input::placeholder{color:var(--text-muted);}
+.newsletter-form button{
+  background:var(--blue);border:none;color:#fff;
+  padding:12px 16px;cursor:pointer;font-size:.8rem;font-weight:600;
+  transition:background .2s;
+}
+.newsletter-form button:hover{background:var(--blue-bright);}
+.newsletter-feedback{
+  margin-top:12px;font-size:.78rem;line-height:1.6;color:var(--text-muted);
+}
+.newsletter-feedback.success{color:#7ef3c0;}
+.newsletter-feedback.error{color:#ff9a9a;}
+.newsletter-form button[disabled],
+.form-submit[disabled]{opacity:.7;cursor:not-allowed;}
+.footer-bottom{
+  display:flex;justify-content:space-between;align-items:center;
+  padding-top:24px;border-top:1px solid var(--glass-border);
+  font-size:.78rem;color:var(--text-muted);
+}
+.footer-bottom a{color:var(--text-muted);text-decoration:none;transition:color .2s;}
+.footer-bottom a:hover{color:var(--white);}
+
+/* ─── MODAL ─── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  z-index:200;display:flex;align-items:center;justify-content:center;
+  padding:20px;opacity:0;pointer-events:none;transition:opacity .3s;
+  backdrop-filter:blur(8px);
+}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{
+  background:var(--navy-mid);border:1px solid var(--glass-border);
+  border-radius:20px;padding:40px;width:100%;max-width:480px;
+  position:relative;transform:translateY(20px);transition:transform .3s;
+}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-close{
+  position:absolute;top:16px;right:16px;
+  background:var(--glass);border:1px solid var(--glass-border);
+  color:var(--text-muted);width:32px;height:32px;border-radius:8px;
+  cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.modal-close:hover{background:rgba(255,255,255,.1);color:var(--white);}
+.modal-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--white);margin-bottom:8px;}
+.modal-sub{font-size:.85rem;color:var(--text-muted);margin-bottom:28px;}
+.form-group{margin-bottom:16px;}
+.form-label{font-size:.8rem;color:var(--text-muted);font-weight:600;letter-spacing:.3px;text-transform:uppercase;margin-bottom:6px;display:block;}
+.form-input{
+  width:100%;background:var(--glass);border:1px solid var(--glass-border);
+  border-radius:10px;padding:12px 16px;color:var(--text);font-size:.9rem;
+  outline:none;transition:border-color .2s;
+}
+.form-input:focus{border-color:var(--blue);}
+.form-input::placeholder{color:var(--text-muted);}
+.form-check{display:flex;align-items:center;gap:10px;font-size:.82rem;color:var(--text-muted);margin-bottom:20px;}
+.form-check a{color:var(--blue-bright);}
+.form-submit{
+  width:100%;padding:14px;border-radius:10px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-bright));
+  color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;
+  border:none;cursor:pointer;
+  box-shadow:0 6px 24px rgba(26,110,245,.4);
+  transition:all .25s;
+}
+.form-submit:hover{transform:translateY(-1px);box-shadow:0 8px 32px rgba(26,110,245,.5);}
+.modal-status{
+  margin:0 0 16px;font-size:.8rem;line-height:1.6;color:var(--text-muted);
+}
+.modal-status.success{color:#7ef3c0;}
+.modal-status.error{color:#ff9a9a;}
+.toast-stack{
+  position:fixed;right:20px;bottom:20px;z-index:250;
+  display:flex;flex-direction:column;gap:12px;pointer-events:none;
+}
+.app-toast{
+  min-width:260px;max-width:340px;padding:14px 16px;border-radius:14px;
+  background:rgba(5,14,36,.94);border:1px solid var(--glass-border);
+  color:var(--white);box-shadow:0 16px 40px rgba(0,0,0,.35);
+  transform:translateY(12px);opacity:0;transition:all .25s;
+}
+.app-toast.show{transform:none;opacity:1;}
+.app-toast.success{border-color:rgba(0,229,160,.35);}
+.app-toast.error{border-color:rgba(255,122,122,.35);}
+
+/* ─── ANIMATIONS ─── */
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease, transform .7s ease;}
+.reveal.visible{opacity:1;transform:none;}
+.reveal-delay-1{transition-delay:.1s;}
+.reveal-delay-2{transition-delay:.2s;}
+.reveal-delay-3{transition-delay:.3s;}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:1100px){
+  .pricing-grid{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:900px){
+  .hero-inner,.report-grid,.about-grid{grid-template-columns:1fr;gap:40px;}
+  .services-grid{grid-template-columns:1fr 1fr;}
+  .workflow-grid{grid-template-columns:1fr;}
+  .contact-grid{grid-template-columns:1fr;}
+  .footer-grid{grid-template-columns:1fr 1fr;}
+  .hero-visual{display:none;}
+  .about-img-wrap .about-badge-card{position:static;margin-top:16px;}
+}
+@media(max-width:600px){
+  .section-pad{padding:64px 20px;}
+  .services-grid,.pricing-grid{grid-template-columns:1fr;}
+  .hero-quick-cards,.report-gallery{grid-template-columns:1fr;}
+  .strip-inner{flex-direction:column;gap:16px;}
+  .strip-item{border-right:none;border-bottom:1px solid var(--glass-border);padding:0 0 16px;}
+  .strip-item:last-child{border-bottom:none;}
+  .footer-grid{grid-template-columns:1fr;}
+  .footer-bottom{flex-direction:column;gap:12px;text-align:center;}
+  .nav-links,.nav-cta{display:none;}
+  .hamburger{display:flex;}
+  .hero-stats{flex-direction:column;gap:20px;}
+  .pricing-card.featured::before{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ─── NAVBAR ─── -->
+<nav id="navbar">
+  <div class="nav-inner">
+    <a href="#home" class="nav-logo">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+        <rect width="34" height="34" rx="9" fill="url(#navlg)"/>
+        <path d="M9 10h3v10h7v3H9V10z" fill="white"/>
+        <circle cx="23.5" cy="14" r="3.8" fill="none" stroke="#00d4ff" stroke-width="2.2"/>
+        <line x1="26.2" y1="16.8" x2="29" y2="19.8" stroke="#00d4ff" stroke-width="2.2" stroke-linecap="round"/>
+        <defs><linearGradient id="navlg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse"><stop stop-color="#1a6ef5"/><stop offset="1" stop-color="#0a3fa0"/></linearGradient></defs>
+      </svg>
+      <span>Lab<span style="color:#00d4ff;">Flow</span></span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#home">Home</a></li>
+      <li><a href="#services">Services</a></li>
+      <li><a href="#tests">Tests</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#about">About</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <a href="franchiseelogin.html" class="nav-cta">Franchisee Login</a>
+    <div class="hamburger" id="hamburger">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#home" onclick="closeMobile()">Home</a>
+  <a href="#services" onclick="closeMobile()">Services</a>
+  <a href="#tests" onclick="closeMobile()">Tests</a>
+  <a href="#pricing" onclick="closeMobile()">Pricing</a>
+  <a href="#about" onclick="closeMobile()">About</a>
+  <a href="#contact" onclick="closeMobile()">Contact</a>
+  <a href="franchiseelogin.html" class="btn-primary">Franchisee Login</a>
+</div>
+
+<!-- ─── HERO ─── -->
+<section id="home" class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span>Trusted by 2000+ Labs across India</span>
+      </div>
+      <h1 class="hero-title">
+        Original Portal Screens,<br>
+        <span>Letterhead Reports</span><br>
+        and Multilayer Control
+      </h1>
+      <p class="hero-desc">
+        LabFlow is a complete pathology operations platform with original report formats, invoicing, booking workflows, franchise controls, and dashboard analytics already built for real lab teams.
+      </p>
+      <div class="hero-actions">
+        <button class="btn-primary open-modal" data-plan="Premium">
+          <i class="fa fa-rocket"></i> Start Free Trial
+        </button>
+        <a href="#workflow" class="btn-outline">
+          <i class="fa fa-play-circle"></i> Explore Features
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-num">2000+</div>
+          <div class="stat-label">Labs Active</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">99.9%</div>
+          <div class="stat-label">Uptime SLA</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">24×7</div>
+          <div class="stat-label">Cloud Access</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <div class="hero-mockup">
+        <div class="mockup-bar">
+          <div class="mockup-dot" style="background:#ff5f57"></div>
+          <div class="mockup-dot" style="background:#febc2e"></div>
+          <div class="mockup-dot" style="background:#28c840"></div>
+          <span style="margin-left:12px;font-size:.7rem;color:var(--text-muted);">portal.labflow.in - Original Admin Dashboard</span>
+        </div>
+        <div class="mockup-content">
+          <img class="hero-dashboard-shot" src="images/dashboard.png" alt="Original LabFlow dashboard view">
+          <div class="hero-quick-cards">
+            <div class="hero-quick-card">
+              <strong>Revenue & cases</strong>
+              <span>Daily balance cards, live summary widgets, and analytics panels from the real portal.</span>
+            </div>
+            <div class="hero-quick-card">
+              <strong>Booking flow</strong>
+              <span>Barcode-ready intake, patient registration, and branch-wise operations in a single screen.</span>
+            </div>
+            <div class="hero-quick-card">
+              <strong>Billing ready</strong>
+              <span>Reports, QR invoices, pending tests, and franchise dashboards work together without context switching.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="floating-card left">
+        <div class="fc-label">Original Report Formats</div>
+        <div class="fc-val">3+</div>
+        <div class="fc-sub">Letterhead, barcode and QR ready</div>
+      </div>
+      <div class="floating-card right">
+        <div class="fc-label">Portal Modules</div>
+        <div class="fc-val">10+</div>
+        <div class="fc-sub">Dashboard, cases, booking, expense, inventory</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES STRIP ─── -->
+<div class="features-strip">
+  <div class="strip-inner">
+    <div class="strip-item"><span class="strip-icon"><i class="fa fa-shield-alt"></i></span><span class="strip-text"><strong>HIPAA</strong> Compliant</span></div>
+    <div class="strip-item"><span class="strip-icon"><i class="fa fa-cloud"></i></span><span class="strip-text"><strong>Cloud</strong> Based</span></div>
+    <div class="strip-item"><span class="strip-icon"><i class="fa fa-qrcode"></i></span><span class="strip-text"><strong>QR</strong> Reports</span></div>
+    <div class="strip-item"><span class="strip-icon"><i class="fab fa-whatsapp"></i></span><span class="strip-text"><strong>WhatsApp</strong> Reports</span></div>
+    <div class="strip-item"><span class="strip-icon"><i class="fa fa-network-wired"></i></span><span class="strip-text"><strong>Multi-Layer</strong> Franchisee</span></div>
+  </div>
+</div>
+
+<!-- ─── REPORT SECTION ─── -->
+<section class="report-section section-pad" id="reports">
+  <div class="section-inner">
+    <div class="report-grid">
+      <div>
+        <div class="section-label reveal">Lab Reports</div>
+        <h2 class="section-title reveal reveal-delay-1">Create <span>High Quality</span><br>Reports & Share Online</h2>
+        <p class="section-desc reveal reveal-delay-2" style="margin-bottom:32px;">
+          Generate clear, professional, and branded pathology reports. Share instantly via WhatsApp, SMS, or Email — and let patients scan QR codes for instant access.
+        </p>
+        <button class="btn-primary open-modal reveal reveal-delay-3" data-plan="Growth Lab" style="display:inline-flex;">Start Free Trial <i class="fa fa-arrow-right" style="margin-left:8px;"></i></button>
+
+        <div class="report-features" style="margin-top:40px;">
+          <div class="rf-item reveal">
+            <div class="rf-icon"><i class="fa fa-share-alt"></i></div>
+            <div><div class="rf-title">Send Reports Online</div><div class="rf-desc">Share lab reports via Email, SMS & WhatsApp instantly from dashboard.</div></div>
+          </div>
+          <div class="rf-item reveal reveal-delay-1">
+            <div class="rf-icon"><i class="fa fa-sliders-h"></i></div>
+            <div><div class="rf-title">Powerful Customizations</div><div class="rf-desc">Customize test database, report formats, normal values & interpretations.</div></div>
+          </div>
+          <div class="rf-item reveal reveal-delay-2">
+            <div class="rf-icon"><i class="fa fa-qrcode"></i></div>
+            <div><div class="rf-title">QR Coded Reports</div><div class="rf-desc">Patients scan the QR on their bill to instantly download or view reports.</div></div>
+          </div>
+          <div class="rf-item reveal reveal-delay-3">
+            <div class="rf-icon"><i class="fa fa-calculator"></i></div>
+            <div><div class="rf-title">Auto Calculations</div><div class="rf-desc">Built-in formulas eliminate manual errors and save your team's time.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="report-preview reveal">
+        <div class="report-gallery">
+          <div class="report-shot large">
+            <img src="images/format1.png" alt="Original letterhead pathology report format">
+            <div class="report-overlay">
+              <div class="eyebrow">Letterhead Report</div>
+              <h3>Original branded report format from the portal</h3>
+              <p>Showcase your actual lab letterhead, patient metadata, investigation details, QR code block, and signatories exactly the way users see them inside the software.</p>
+            </div>
+          </div>
+          <div class="report-gallery-side">
+            <div class="report-shot small">
+              <img src="images/format2.png" alt="Alternative LabFlow report format">
+              <div class="report-overlay">
+                <div class="eyebrow">Alternate Layout</div>
+                <h3>Multiple report styling options</h3>
+                <p>Support different panel layouts, parameter tables, and customized interpretations without breaking brand consistency.</p>
+              </div>
+            </div>
+            <div class="report-shot small">
+              <img src="images/invoice.png" alt="Original invoice screen from the portal">
+              <div class="report-overlay">
+                <div class="eyebrow">Invoice & QR Billing</div>
+                <h3>Billing that matches your portal workflow</h3>
+                <p>Generate patient invoices, booking references, totals, and print-ready slips connected to reporting and collections.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="report-stack-note">
+          <strong>No dummy preview here.</strong> This section now highlights the original report format, a secondary report layout, and the real invoice style already available in your portal so visitors understand the product from the first scroll.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SERVICES ─── -->
+<section id="services" class="services-section section-pad">
+  <div class="section-inner">
+    <div class="section-header" style="max-width:600px;">
+      <div class="section-label reveal">Core Features</div>
+      <h2 class="section-title reveal reveal-delay-1">Built for <span>Security</span> &<br>Scale</h2>
+      <p class="section-desc reveal reveal-delay-2">Protect your data and grow your lab business with enterprise-grade features.</p>
+    </div>
+    <div class="services-grid">
+      <div class="service-card reveal">
+        <div class="sc-icon"><i class="fa fa-users-cog"></i></div>
+        <div class="sc-title">Separate Franchisee & Staff Logins</div>
+        <p class="sc-desc">Provide each franchisee their own login with customizable permissions. Proofread and set normal values that technicians cannot change without authorization.</p>
+      </div>
+      <div class="service-card reveal reveal-delay-1">
+        <div class="sc-icon"><i class="fa fa-history"></i></div>
+        <div class="sc-title">Employee Activity Tracking</div>
+        <p class="sc-desc">LabFlow logs all important modifications made by employees. Audit any change at any time — giving lab owners complete peace of mind and accountability.</p>
+      </div>
+      <div class="service-card reveal reveal-delay-2">
+        <div class="sc-icon"><i class="fa fa-sitemap"></i></div>
+        <div class="sc-title">Multi-Layer Franchisee System</div>
+        <p class="sc-desc">An all-in-one portal for diagnostic centers and collection partners. Manage patient registration, billing, test tracking, reports, and business performance effortlessly.</p>
+      </div>
+      <div class="service-card reveal reveal-delay-3">
+        <div class="sc-icon"><i class="fa fa-chart-bar"></i></div>
+        <div class="sc-title">Business Analytics Dashboard</div>
+        <p class="sc-desc">Track daily income, expenses, test volume, and pending cases. Make data-driven decisions with real-time charts and comprehensive financial reports.</p>
+      </div>
+      <div class="service-card reveal">
+        <div class="sc-icon"><i class="fa fa-boxes"></i></div>
+        <div class="sc-title">Smart Inventory Management</div>
+        <p class="sc-desc">Monitor stock levels, track product batches, and receive alerts for low inventory. Keep your healthcare supplies always available and up-to-date.</p>
+      </div>
+      <div class="service-card reveal reveal-delay-1">
+        <div class="sc-icon"><i class="fa fa-file-invoice"></i></div>
+        <div class="sc-title">Professional Billing & Invoicing</div>
+        <p class="sc-desc">Create insurance-compliant, professionally designed bills. Track payments, manage ledgers, and handle UPI/cash/card transactions seamlessly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="workflow" class="workflow-section section-pad">
+  <div class="section-inner">
+    <div class="section-header" style="max-width:760px;">
+      <div class="section-label reveal">Original Portal Workflow</div>
+      <h2 class="section-title reveal reveal-delay-1">Show the real <span>booking to billing</span><br>journey on the front page</h2>
+      <p class="section-desc reveal reveal-delay-2">Visitors now see the actual portal journey instead of abstract placeholders: new booking, all cases, order handling, and expense control using original screenshots from your product.</p>
+    </div>
+    <div class="workflow-grid">
+      <article class="workflow-card reveal">
+        <div class="workflow-media">
+          <img src="images/booking.png" alt="Original new booking screen">
+        </div>
+        <div class="workflow-body">
+          <div class="workflow-eyebrow">Step 01</div>
+          <h3 class="workflow-title">Capture bookings with patient, doctor, lab and barcode details</h3>
+          <p class="workflow-desc">The first operational screen now demonstrates the real entry workflow your users already know from the product instead of a generic illustration.</p>
+          <ul class="workflow-points">
+            <li><i class="fa fa-check-circle"></i><span>Patient demographics, doctor selection, lab mapping and clinical history in one flow.</span></li>
+            <li><i class="fa fa-check-circle"></i><span>Suitable for CTA visitors who want to understand how fast the booking desk can operate.</span></li>
+          </ul>
+        </div>
+      </article>
+      <article class="workflow-card reveal reveal-delay-1">
+        <div class="workflow-media">
+          <img src="images/cases.png" alt="Original all cases screen">
+        </div>
+        <div class="workflow-body">
+          <div class="workflow-eyebrow">Step 02</div>
+          <h3 class="workflow-title">Track received cases, pending reports and completed status clearly</h3>
+          <p class="workflow-desc">This screen communicates operational visibility for admins and franchisees with searchable case listings and action buttons for result entry and report view.</p>
+          <ul class="workflow-points">
+            <li><i class="fa fa-check-circle"></i><span>Search filters for booking number, franchisee, patient and barcode.</span></li>
+            <li><i class="fa fa-check-circle"></i><span>Color-coded status rows help buyers instantly understand the workflow maturity.</span></li>
+          </ul>
+        </div>
+      </article>
+      <article class="workflow-card reveal reveal-delay-2">
+        <div class="workflow-media">
+          <img src="images/manageorders.png" alt="Original order management screen">
+        </div>
+        <div class="workflow-body">
+          <div class="workflow-eyebrow">Step 03</div>
+          <h3 class="workflow-title">Manage orders, filters and dispatch actions from a single operations panel</h3>
+          <p class="workflow-desc">The orders module gives the landing page a practical commerce and sample logistics angle that was missing from the dummy version.</p>
+          <ul class="workflow-points">
+            <li><i class="fa fa-check-circle"></i><span>Date-range filters, customer records, order statuses and action visibility are shown using real UI.</span></li>
+            <li><i class="fa fa-check-circle"></i><span>Helpful for labs handling merchandise, packages, kits or operational stock movement.</span></li>
+          </ul>
+        </div>
+      </article>
+      <article class="workflow-card reveal reveal-delay-3">
+        <div class="workflow-media">
+          <img src="images/expense.png" alt="Original expense dashboard screen">
+        </div>
+        <div class="workflow-body">
+          <div class="workflow-eyebrow">Step 04</div>
+          <h3 class="workflow-title">Keep expenses, revenue splits and decisions visible to management</h3>
+          <p class="workflow-desc">Instead of promising analytics in text only, the front page now shows the original expense view and management-level financial breakdown.</p>
+          <ul class="workflow-points">
+            <li><i class="fa fa-check-circle"></i><span>Expense total cards, category distribution and search-ready finance controls.</span></li>
+            <li><i class="fa fa-check-circle"></i><span>Strong support for decision-makers comparing software before a trial or demo.</span></li>
+          </ul>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SCREENSHOTS SLIDER ─── -->
+<section class="screenshots-section section-pad">
+  <div class="section-inner">
+    <div class="section-header reveal" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:24px;margin-bottom:40px;">
+      <div>
+        <div class="section-label">Software Preview</div>
+        <h2 class="section-title" style="margin-bottom:0;">Manage Everything<br>from <span>One Dashboard</span></h2>
+      </div>
+      <div class="slider-controls">
+        <button class="slider-btn" id="ss-prev"><i class="fa fa-chevron-left"></i></button>
+        <button class="slider-btn" id="ss-next"><i class="fa fa-chevron-right"></i></button>
+      </div>
+    </div>
+    <div class="screenshots-track" id="ssTrack">
+      <div class="ss-card">
+        <img class="ss-img" src="images/dashboard.png" alt="Original dashboard screenshot">
+        <div class="ss-info"><div class="ss-title">Daily Accounting Simplified</div><div class="ss-desc">Track daily income, expenses, and transactions easily for better financial control.</div></div>
+      </div>
+      <div class="ss-card">
+        <img class="ss-img" src="images/cases.png" alt="Original all cases screenshot">
+        <div class="ss-info"><div class="ss-title">Track Pending Tests</div><div class="ss-desc">See which tests are pending, in-progress, or completed — all in one page.</div></div>
+      </div>
+      <div class="ss-card">
+        <img class="ss-img" src="images/manageorders.png" alt="Original order management screenshot">
+        <div class="ss-info"><div class="ss-title">Manage Orders Effortlessly</div><div class="ss-desc">Track, update, and process all orders from a single dashboard with clear status updates.</div></div>
+      </div>
+      <div class="ss-card">
+        <img class="ss-img" src="images/expense.png" alt="Original expense management screenshot">
+        <div class="ss-info"><div class="ss-title">Track Expenses & Transactions</div><div class="ss-desc">Add expenses, view records within date ranges, and track cash, card, or UPI payments.</div></div>
+      </div>
+      <div class="ss-card">
+        <img class="ss-img" src="images/inventory.png" alt="Original inventory management screenshot">
+        <div class="ss-info"><div class="ss-title">Smart Inventory Management</div><div class="ss-desc">Monitor stock, track batches, and receive low-inventory alerts for healthcare supplies.</div></div>
+      </div>
+      <div class="ss-card">
+        <img class="ss-img" src="images/testdata.png" alt="Original test database screenshot">
+        <div class="ss-info"><div class="ss-title">Comprehensive Test Database</div><div class="ss-desc">Manage all pathology tests, set pricing, define reference ranges, and keep catalog updated.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TESTS SHOWCASE ─── -->
+<section id="tests" class="tests-section section-pad">
+  <div class="section-inner">
+    <div class="section-header">
+      <div class="section-label reveal">Test Catalog</div>
+      <h2 class="section-title reveal reveal-delay-1">Comprehensive <span>Pathology Tests</span><br>Built-in to Platform</h2>
+      <p class="section-desc reveal reveal-delay-2">15+ major pathology panels with pre-defined parameters, reference ranges, and auto-calculations — ready to use out of the box.</p>
+    </div>
+    <div class="tests-grid">
+
+      <div class="test-card reveal">
+        <div class="test-card-header">
+          <div><div class="test-name">CBC — Complete Blood Count</div><div class="test-code">Code: CBC-001</div></div>
+          <span class="test-type-badge type-hema">Haematology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Haemoglobin</span><span class="param-val">14.2</span><span class="param-unit">g/dL</span></div>
+          <div class="test-param-row"><span class="param-name">WBC Count</span><span class="param-val">7,400</span><span class="param-unit">/µL</span></div>
+          <div class="test-param-row"><span class="param-name">Platelets</span><span class="param-val">2.3 L</span><span class="param-unit">/µL</span></div>
+          <div class="test-param-row"><span class="param-name">PCV / Haematocrit</span><span class="param-val">42.5</span><span class="param-unit">%</span></div>
+        </div>
+        <div class="test-more">+14 more parameters</div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-1">
+        <div class="test-card-header">
+          <div><div class="test-name">Thyroid Function Test (TFT)</div><div class="test-code">Code: TFT-002</div></div>
+          <span class="test-type-badge type-endo">Endocrinology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">TSH</span><span class="param-val">2.45</span><span class="param-unit">µIU/mL</span></div>
+          <div class="test-param-row"><span class="param-name">T3 (Total)</span><span class="param-val">1.12</span><span class="param-unit">ng/mL</span></div>
+          <div class="test-param-row"><span class="param-name">T4 (Total)</span><span class="param-val">8.6</span><span class="param-unit">µg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Free T3</span><span class="param-val">3.2</span><span class="param-unit">pg/mL</span></div>
+        </div>
+        <div class="test-more">+2 more parameters</div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-2">
+        <div class="test-card-header">
+          <div><div class="test-name">Liver Function Test (LFT)</div><div class="test-code">Code: LFT-003</div></div>
+          <span class="test-type-badge type-bio">Biochemistry</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">SGOT / AST</span><span class="param-val">28</span><span class="param-unit">U/L</span></div>
+          <div class="test-param-row"><span class="param-name">SGPT / ALT</span><span class="param-val">32</span><span class="param-unit">U/L</span></div>
+          <div class="test-param-row"><span class="param-name">Total Bilirubin</span><span class="param-val">0.9</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Albumin</span><span class="param-val">4.2</span><span class="param-unit">g/dL</span></div>
+        </div>
+        <div class="test-more">+9 more parameters</div>
+      </div>
+
+      <div class="test-card reveal">
+        <div class="test-card-header">
+          <div><div class="test-name">Lipid Profile</div><div class="test-code">Code: LIP-004</div></div>
+          <span class="test-type-badge type-lipid">Cardiology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Total Cholesterol</span><span class="param-val">178</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">HDL Cholesterol</span><span class="param-val">52</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">LDL Cholesterol</span><span class="param-val">105</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Triglycerides</span><span class="param-val">140</span><span class="param-unit">mg/dL</span></div>
+        </div>
+        <div class="test-more">+2 more parameters</div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-1">
+        <div class="test-card-header">
+          <div><div class="test-name">Kidney Function Test (KFT)</div><div class="test-code">Code: KFT-005</div></div>
+          <span class="test-type-badge type-bio">Biochemistry</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Serum Creatinine</span><span class="param-val">0.9</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Blood Urea</span><span class="param-val">28</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Uric Acid</span><span class="param-val">5.2</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">eGFR</span><span class="param-val">>90</span><span class="param-unit">mL/min</span></div>
+        </div>
+        <div class="test-more">+6 more parameters</div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-2">
+        <div class="test-card-header">
+          <div><div class="test-name">Urine Routine & Microscopy</div><div class="test-code">Code: URN-006</div></div>
+          <span class="test-type-badge type-urine">Urinology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Colour</span><span class="param-val">Yellow</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Protein</span><span class="param-val">Nil</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Glucose</span><span class="param-val">Nil</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Pus Cells</span><span class="param-val">2–4</span><span class="param-unit">/HPF</span></div>
+        </div>
+        <div class="test-more">+12 more parameters</div>
+      </div>
+
+      <div class="test-card reveal">
+        <div class="test-card-header">
+          <div><div class="test-name">Blood Sugar Tests (BSL)</div><div class="test-code">Code: BSL-007</div></div>
+          <span class="test-type-badge type-endo">Endocrinology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Fasting Blood Sugar</span><span class="param-val">88</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Post Prandial</span><span class="param-val">124</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">HbA1c</span><span class="param-val">5.6</span><span class="param-unit">%</span></div>
+          <div class="test-param-row"><span class="param-name">Random Blood Sugar</span><span class="param-val">102</span><span class="param-unit">mg/dL</span></div>
+        </div>
+        <div class="test-more">+1 more parameter</div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-1">
+        <div class="test-card-header">
+          <div><div class="test-name">Widal Test</div><div class="test-code">Code: MIC-008</div></div>
+          <span class="test-type-badge type-micro">Microbiology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Salmonella O</span><span class="param-val">Neg</span><span class="param-unit">Titre</span></div>
+          <div class="test-param-row"><span class="param-name">Salmonella H</span><span class="param-val">1:80</span><span class="param-unit">Titre</span></div>
+          <div class="test-param-row"><span class="param-name">Salmonella AH</span><span class="param-val">Neg</span><span class="param-unit">Titre</span></div>
+          <div class="test-param-row"><span class="param-name">Salmonella BH</span><span class="param-val">Neg</span><span class="param-unit">Titre</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-2">
+        <div class="test-card-header">
+          <div><div class="test-name">Malaria Antigen (RDT)</div><div class="test-code">Code: MIC-009</div></div>
+          <span class="test-type-badge type-micro">Microbiology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">P. Falciparum Ag</span><span class="param-val">Negative</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">P. Vivax Ag</span><span class="param-val">Negative</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Pan Malaria</span><span class="param-val">Negative</span><span class="param-unit">—</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal">
+        <div class="test-card-header">
+          <div><div class="test-name">Dengue NS1 & Antibody</div><div class="test-code">Code: MIC-010</div></div>
+          <span class="test-type-badge type-micro">Microbiology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Dengue NS1 Ag</span><span class="param-val">Negative</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Dengue IgM</span><span class="param-val">Negative</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Dengue IgG</span><span class="param-val">Reactive</span><span class="param-unit">—</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-1">
+        <div class="test-card-header">
+          <div><div class="test-name">Serum Electrolytes</div><div class="test-code">Code: BIO-011</div></div>
+          <span class="test-type-badge type-bio">Biochemistry</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Sodium (Na⁺)</span><span class="param-val">138</span><span class="param-unit">mEq/L</span></div>
+          <div class="test-param-row"><span class="param-name">Potassium (K⁺)</span><span class="param-val">4.1</span><span class="param-unit">mEq/L</span></div>
+          <div class="test-param-row"><span class="param-name">Chloride (Cl⁻)</span><span class="param-val">102</span><span class="param-unit">mEq/L</span></div>
+          <div class="test-param-row"><span class="param-name">Bicarbonate</span><span class="param-val">24</span><span class="param-unit">mEq/L</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-2">
+        <div class="test-card-header">
+          <div><div class="test-name">ESR & CRP</div><div class="test-code">Code: HAE-012</div></div>
+          <span class="test-type-badge type-hema">Haematology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">ESR (Westergren)</span><span class="param-val">12</span><span class="param-unit">mm/hr</span></div>
+          <div class="test-param-row"><span class="param-name">CRP (Quantitative)</span><span class="param-val">2.4</span><span class="param-unit">mg/L</span></div>
+          <div class="test-param-row"><span class="param-name">hs-CRP</span><span class="param-val">1.8</span><span class="param-unit">mg/L</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal">
+        <div class="test-card-header">
+          <div><div class="test-name">Calcium & Phosphorus</div><div class="test-code">Code: BIO-013</div></div>
+          <span class="test-type-badge type-bio">Biochemistry</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Serum Calcium</span><span class="param-val">9.4</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Serum Phosphorus</span><span class="param-val">3.8</span><span class="param-unit">mg/dL</span></div>
+          <div class="test-param-row"><span class="param-name">Alkaline Phosphatase</span><span class="param-val">74</span><span class="param-unit">U/L</span></div>
+          <div class="test-param-row"><span class="param-name">Vitamin D3</span><span class="param-val">28.5</span><span class="param-unit">ng/mL</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-1">
+        <div class="test-card-header">
+          <div><div class="test-name">HIV Antibody Screening</div><div class="test-code">Code: SER-014</div></div>
+          <span class="test-type-badge type-micro">Serology</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">HIV 1 & 2 Ag/Ab</span><span class="param-val">Non-reactive</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">HIV-1 p24 Ag</span><span class="param-val">Non-reactive</span><span class="param-unit">—</span></div>
+          <div class="test-param-row"><span class="param-name">Western Blot</span><span class="param-val">Indeterminate</span><span class="param-unit">—</span></div>
+        </div>
+      </div>
+
+      <div class="test-card reveal reveal-delay-2">
+        <div class="test-card-header">
+          <div><div class="test-name">Vitamin B12 & Folate</div><div class="test-code">Code: BIO-015</div></div>
+          <span class="test-type-badge type-bio">Biochemistry</span>
+        </div>
+        <div class="test-params">
+          <div class="test-param-row"><span class="param-name">Vitamin B12</span><span class="param-val">285</span><span class="param-unit">pg/mL</span></div>
+          <div class="test-param-row"><span class="param-name">Serum Folate</span><span class="param-val">9.4</span><span class="param-unit">ng/mL</span></div>
+          <div class="test-param-row"><span class="param-name">Homocysteine</span><span class="param-val">11.2</span><span class="param-unit">µmol/L</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ─── -->
+<section id="pricing" class="pricing-section section-pad">
+  <div class="section-inner">
+    <div class="section-header" style="text-align:center;margin-bottom:40px;">
+      <div class="section-label reveal" style="justify-content:center;">Pricing Plans</div>
+      <h2 class="section-title reveal reveal-delay-1" style="text-align:center;margin:0 auto 16px;">Flexible Pricing for<br><span>Every Lab</span></h2>
+      <p class="section-desc reveal reveal-delay-2" style="margin:0 auto 32px;">No hidden fees, easy setup, full support. Choose the plan that fits your lab's growth.</p>
+    </div>
+    <div class="pricing-toggle reveal" style="justify-content:center;">
+      <span class="toggle-label">Monthly</span>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="billingToggle">
+        <span class="toggle-track"></span>
+      </label>
+      <span class="toggle-label">Yearly</span>
+      <span class="toggle-save">Save 20%</span>
+    </div>
+    <div class="pricing-grid">
+
+      <div class="pricing-card reveal">
+        <div class="pc-layer">Layer 1</div>
+        <div class="pc-name">Starter Lab</div>
+        <div class="pc-price"><sup>₹</sup><span id="p1">699</span> <span>+GST/mo</span></div>
+        <div class="pc-period">Billed annually with 20% discount</div>
+        <div class="pc-divider"></div>
+        <ul class="pc-features">
+          <li><i class="fa fa-check-circle"></i>Testing Booking</li>
+          <li><i class="fa fa-check-circle"></i>Doctor Manage</li>
+          <li><i class="fa fa-check-circle"></i>Online Report</li>
+          <li><i class="fa fa-check-circle"></i>Report QR Code</li>
+          <li><i class="fa fa-check-circle"></i>Generate Bill</li>
+          <li><i class="fa fa-check-circle"></i>Manager Staff</li>
+          <li><i class="fa fa-check-circle"></i>Manage Expense</li>
+          <li><i class="fa fa-check-circle"></i>Business Analytics</li>
+          <li><i class="fa fa-check-circle"></i>Test Database</li>
+          <li><i class="fa fa-check-circle"></i>Trek Ledger</li>
+          <li><i class="fa fa-check-circle"></i>Branding</li>
+          <li><i class="fa fa-check-circle"></i>Customized Profile</li>
+        </ul>
+        <button class="pc-btn outline open-modal" data-plan="Starter Lab">Start Free Trial</button>
+      </div>
+
+      <div class="pricing-card featured reveal reveal-delay-1">
+        <div class="pc-layer">Layer 2</div>
+        <div class="pc-name">Growth Lab</div>
+        <div class="pc-price"><sup>₹</sup><span id="p2">1999</span> <span>+GST/mo</span></div>
+        <div class="pc-period">Billed annually with 20% discount</div>
+        <div class="pc-divider"></div>
+        <ul class="pc-features">
+          <li><i class="fa fa-check-circle"></i>Everything in Starter</li>
+          <li><i class="fa fa-check-circle"></i>Staff Login</li>
+          <li><i class="fa fa-check-circle"></i>LIS Integration (extra)</li>
+          <li><i class="fa fa-check-circle"></i>Dynamic Dashboard</li>
+          <li><i class="fa fa-check-circle"></i>Online Report</li>
+          <li><i class="fa fa-check-circle"></i>Report QR Code</li>
+          <li><i class="fa fa-check-circle"></i>Customized Profile</li>
+          <li><i class="fa fa-check-circle"></i>Business Analytics</li>
+          <li><i class="fa fa-check-circle"></i>Test Database</li>
+          <li><i class="fa fa-check-circle"></i>Generate Bill</li>
+          <li><i class="fa fa-check-circle"></i>Manage Staff</li>
+        </ul>
+        <button class="pc-btn solid open-modal" data-plan="Growth Lab">Start Free Trial</button>
+      </div>
+
+      <div class="pricing-card reveal reveal-delay-2">
+        <div class="pc-layer">Layer 3</div>
+        <div class="pc-name">Professional Lab</div>
+        <div class="pc-price"><sup>₹</sup><span id="p3">4999</span> <span>+GST/mo</span></div>
+        <div class="pc-period">Billed annually with 20% discount</div>
+        <div class="pc-divider"></div>
+        <ul class="pc-features">
+          <li><i class="fa fa-check-circle"></i>Everything in Growth</li>
+          <li><i class="fa fa-check-circle"></i>Manage Panel</li>
+          <li><i class="fa fa-check-circle"></i>Manage Packaging</li>
+          <li><i class="fa fa-check-circle"></i>Staff Tracking</li>
+          <li><i class="fa fa-check-circle"></i>Manage Franchises</li>
+          <li><i class="fa fa-check-circle"></i>Manage Sub Franchises</li>
+          <li><i class="fa fa-check-circle"></i>Franchisee Staff Login</li>
+          <li><i class="fa fa-check-circle"></i>Templates</li>
+          <li><i class="fa fa-check-circle"></i>LIS Integration (extra)</li>
+          <li><i class="fa fa-check-circle"></i>Dynamic Dashboard</li>
+        </ul>
+        <button class="pc-btn outline open-modal" data-plan="Professional Lab">Start Free Trial</button>
+      </div>
+
+      <div class="pricing-card reveal reveal-delay-3">
+        <div class="pc-layer">Layer 4</div>
+        <div class="pc-name">Enterprise</div>
+        <div class="pc-price"><sup>₹</sup><span id="p4">9999</span> <span>+GST/mo</span></div>
+        <div class="pc-period">Billed annually with 20% discount</div>
+        <div class="pc-divider"></div>
+        <ul class="pc-features">
+          <li><i class="fa fa-check-circle"></i>Everything in Professional</li>
+          <li><i class="fa fa-check-circle"></i>Unlimited Franchisee Login</li>
+          <li><i class="fa fa-check-circle"></i>Franchisee KYC</li>
+          <li><i class="fa fa-check-circle"></i>Bulk Test Pricing</li>
+          <li><i class="fa fa-check-circle"></i>Certificate Management</li>
+          <li><i class="fa fa-check-circle"></i>Inventory Management</li>
+          <li><i class="fa fa-check-circle"></i>Reagent Stock Management</li>
+          <li><i class="fa fa-check-circle"></i>Payment Gateway</li>
+          <li><i class="fa fa-check-circle"></i>Manage Website</li>
+          <li><i class="fa fa-check-circle"></i>White Labeling (extra)</li>
+          <li><i class="fa fa-check-circle"></i>Manage Domain</li>
+        </ul>
+        <button class="pc-btn outline open-modal" data-plan="Enterprise">Start Free Trial</button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ─── ABOUT ─── -->
+<section id="about" class="about-section section-pad">
+  <div class="section-inner">
+    <div class="about-grid">
+      <div class="about-img-wrap reveal">
+        <div class="about-img">
+          <img src="images/laboratory-3827738_1920.jpg" alt="Modern pathology laboratory environment">
+        </div>
+        <div class="about-badge-card">
+          <div style="font-size:.72rem;color:var(--cyan);font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Original assets used</div>
+          <div style="font-family:'Syne',sans-serif;font-size:1.05rem;color:var(--white);margin:8px 0 6px;">Real portal UI + high-quality lab imagery</div>
+          <div style="font-size:.8rem;color:var(--text-muted);line-height:1.6;">Landing page storytelling now matches the actual software experience.</div>
+        </div>
+        <div class="about-stats-grid" style="margin-top:20px;">
+          <div class="about-stat-item"><div class="ast-num">2000+</div><div class="ast-label">Labs Using Platform</div></div>
+          <div class="about-stat-item"><div class="ast-num">99.9%</div><div class="ast-label">Data Accuracy</div></div>
+          <div class="about-stat-item"><div class="ast-num">24×7</div><div class="ast-label">Cloud Access</div></div>
+          <div class="about-stat-item"><div class="ast-num">HIPAA</div><div class="ast-label">Compliant & Secure</div></div>
+        </div>
+      </div>
+      <div class="reveal reveal-delay-1">
+        <div class="section-label">About LabFlow</div>
+        <h2 class="section-title">Built by Healthcare<br><span>Technology Experts</span></h2>
+        <p class="about-text">Lab Flow has been building healthcare and laboratory software since 2017, combining pathology workflow understanding with practical IT delivery for diagnostics teams, collection centers, and multilayer franchises.</p>
+        <p class="about-text">The front page now highlights what matters most to serious buyers: original report formats, invoice design, dashboard visibility, booking operations, and the real portal modules already inside your product.</p>
+        <p class="about-text">Our goal is simple: help labs move faster with dependable booking, billing, reporting, analytics, and operational control while still keeping the interface approachable for daily staff usage.</p>
+        <div style="margin-top:32px;">
+          <a href="#workflow" class="btn-primary" style="text-decoration:none;display:inline-flex;">
+            <i class="fa fa-compass"></i> Explore Features
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CONTACT ─── -->
+<section id="contact" class="contact-section section-pad">
+  <div class="section-inner">
+    <div class="section-header" style="text-align:center;margin-bottom:48px;">
+      <div class="section-label reveal" style="justify-content:center;">Get In Touch</div>
+      <h2 class="section-title reveal reveal-delay-1" style="text-align:center;margin:0 auto 16px;">Contact Our <span>Team</span></h2>
+      <p class="section-desc reveal reveal-delay-2" style="margin:0 auto;">Have questions about our services or need help? Reach out to our expert team anytime.</p>
+    </div>
+    <div class="contact-grid">
+      <div class="contact-card reveal">
+        <div class="cc-icon"><i class="fa fa-envelope"></i></div>
+        <div class="cc-title">Email Us</div>
+        <div class="cc-label">General Inquiries</div>
+        <div class="cc-value">qodex786@gmail.com</div>
+        <div class="cc-label">Support</div>
+        <div class="cc-value">qodex786@gmail.com</div>
+      </div>
+      <div class="contact-card reveal reveal-delay-1">
+        <div class="cc-icon"><i class="fa fa-phone-alt"></i></div>
+        <div class="cc-title">Call Us</div>
+        <div class="cc-label">Main Office</div>
+        <div class="cc-value">+91 9528201801</div>
+        <div class="cc-label">Support</div>
+        <div class="cc-value">+91 9528201801</div>
+      </div>
+      <div class="contact-card reveal reveal-delay-2">
+        <div class="cc-icon"><i class="fa fa-map-marker-alt"></i></div>
+        <div class="cc-title">Visit Us</div>
+        <div class="cc-label">Address</div>
+        <div class="cc-value" style="font-size:.82rem;">Gangosagar,<br>Uttar Pradesh,<br>India</div>
+        <a href="https://www.google.com/maps/search/?api=1&query=Gangosagar%2C%20Uttar%20Pradesh" target="_blank" rel="noopener noreferrer" class="map-btn">
+          <i class="fa fa-map"></i> Open in Maps
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#home" class="logo" style="text-decoration:none;">
+          <svg width="30" height="30" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+            <rect width="34" height="34" rx="9" fill="url(#ftlg)"/>
+            <path d="M9 10h3v10h7v3H9V10z" fill="white"/>
+            <circle cx="23.5" cy="14" r="3.8" fill="none" stroke="#00d4ff" stroke-width="2.2"/>
+            <line x1="26.2" y1="16.8" x2="29" y2="19.8" stroke="#00d4ff" stroke-width="2.2" stroke-linecap="round"/>
+            <defs><linearGradient id="ftlg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse"><stop stop-color="#1a6ef5"/><stop offset="1" stop-color="#0a3fa0"/></linearGradient></defs>
+          </svg>
+          <span>Lab<span style="color:#00d4ff;">Flow</span></span>
+        </a>
+        <p>Bringing Quality Healthcare Services to Your Doorstep. Advanced pathology lab management for modern diagnostics centers.</p>
+        <div class="social-links">
+          <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+          <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+          <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="X"><i class="fab fa-twitter"></i></a>
+          <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+          <a href="mailto:qodex786@gmail.com" class="social-link" aria-label="Email"><i class="fa fa-envelope"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Services</h4>
+        <ul>
+          <li><a href="#">Multilayer Portal</a></li>
+          <li><a href="#">Security & Privacy</a></li>
+          <li><a href="#">Referral Bonus</a></li>
+          <li><a href="#">Lab Reports</a></li>
+          <li><a href="#">LIMS Software</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Quick Links</h4>
+        <ul>
+          <li><a href="privacyPolicy.html">Privacy Policy</a></li>
+          <li><a href="return_refund.html">Return & Refund</a></li>
+          <li><a href="termsservices.html">Terms of Service</a></li>
+          <li><a href="aboutus.html">About Us</a></li>
+          <li><a href="franchiseelogin.html">Franchisee Login</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Newsletter</h4>
+        <p style="font-size:.83rem;color:var(--text-muted);line-height:1.7;margin-bottom:20px;">Subscribe for the latest updates, health tips, and product news.</p>
+        <form class="newsletter-form" id="subscribeform" data-newsletter-form>
+          <input type="email" id="emailsubscribe" name="email" placeholder="Your email address" autocomplete="email" required>
+          <button type="submit">Subscribe</button>
+        </form>
+        <div class="newsletter-feedback" data-newsletter-feedback aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 LabFlow. All rights reserved.</span>
+      <div style="display:flex;gap:24px;">
+        <a href="privacyPolicy.html">Privacy Policy</a>
+        <a href="termsservices.html">Terms of Service</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ─── MODAL ─── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <div class="modal-title">Get Started Free</div>
+    <div class="modal-sub" id="modalSub">Fill in your details and we'll contact you shortly.</div>
+    <form id="trialForm">
+      <input type="hidden" id="selectedPlan" name="plan">
+      <div class="form-group">
+        <label class="form-label" for="trialName">Full Name</label>
+        <input type="text" class="form-input" id="trialName" name="name" placeholder="Enter your full name" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trialEmail">Email</label>
+        <input type="email" class="form-input" id="trialEmail" name="email" placeholder="Enter your email" autocomplete="email" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trialPhone">Phone Number</label>
+        <input type="tel" class="form-input" id="trialPhone" name="phone" placeholder="Enter your phone number" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="trialCity">City</label>
+        <input type="text" class="form-input" id="trialCity" name="city" placeholder="Enter your city" required>
+      </div>
+      <div class="form-check">
+        <input type="checkbox" id="trialTerms" required>
+        <label for="trialTerms">I agree to the <a href="termsservices.html">Terms & Conditions</a></label>
+      </div>
+      <div class="modal-status" id="trialFormStatus" aria-live="polite"></div>
+      <button class="form-submit" type="submit">Submit Application</button>
+    </form>
+  </div>
+</div>
+
+<script src="index.js"></script>
+</body>
+</html>

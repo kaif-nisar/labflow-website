@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Error</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="theme-color" content="#091a3b">
+    <link rel="stylesheet" href="/css/offline-fonts.css">
+<style>
+        :root {
+            --bg-top: #163257;
+            --bg-mid: #091425;
+            --bg-bottom: #04070d;
+            --panel: rgba(10, 18, 34, 0.88);
+            --panel-border: rgba(141, 182, 255, 0.18);
+            --text: #edf4ff;
+            --muted: #bdd0ef;
+            --accent: #61a5ff;
+            --accent-soft: rgba(97, 165, 255, 0.14);
+            --button-dark: #0b1730;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            color: var(--text);
+            font-family: "Manrope", sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(97, 165, 255, 0.3) 0%, transparent 36%),
+                radial-gradient(circle at 80% 20%, rgba(50, 108, 194, 0.2) 0%, transparent 28%),
+                linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 42%, var(--bg-bottom) 100%);
+        }
+
+        .shell {
+            width: min(100%, 840px);
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 28px;
+            padding: 32px;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(16px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .shell::before,
+        .shell::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(8px);
+            opacity: 0.7;
+        }
+
+        .shell::before {
+            width: 180px;
+            height: 180px;
+            top: -80px;
+            right: -60px;
+            background: rgba(97, 165, 255, 0.16);
+        }
+
+        .shell::after {
+            width: 140px;
+            height: 140px;
+            bottom: -40px;
+            left: -40px;
+            background: rgba(41, 103, 186, 0.18);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: #a7c9ff;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .eyebrow::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--accent);
+            box-shadow: 0 0 16px rgba(97, 165, 255, 0.6);
+        }
+
+        h1 {
+            margin: 18px 0 10px;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(32px, 4vw, 56px);
+            line-height: 1.02;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.75;
+            max-width: 62ch;
+        }
+
+        .meta {
+            margin-top: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .meta-chip {
+            padding: 10px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(160, 188, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+            color: #d8e5ff;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .actions {
+            margin-top: 32px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 16px;
+            padding: 15px 22px;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.18s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #68aaff 0%, #3476d4 100%);
+            color: #fff;
+            box-shadow: 0 14px 32px rgba(53, 108, 197, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            border: 1px solid rgba(173, 199, 255, 0.16);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #d6e5ff;
+            border: 1px solid rgba(173, 199, 255, 0.2);
+        }
+
+        .help {
+            margin-top: 26px;
+            font-size: 14px;
+            color: #9db1d1;
+        }
+
+        @media (max-width: 640px) {
+            .shell {
+                padding: 24px;
+                border-radius: 22px;
+            }
+
+            p {
+                font-size: 15px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <div class="eyebrow" id="eyebrow">Error</div>
+        <h1 id="title">Page Not Found</h1>
+        <p id="message">The page you requested could not be found or may no longer be available.</p>
+
+        <div class="meta">
+            <div class="meta-chip" id="statusChip">Status 404</div>
+            <div class="meta-chip" id="pathChip"></div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="homeButton" type="button">Go to Home</button>
+            <button class="btn btn-secondary" id="loginButton" type="button">Login Again</button>
+            <button class="btn btn-outline" id="backButton" type="button">Go Back</button>
+        </div>
+
+        <div class="help" id="helpText">If the issue continues, refresh the page or login again to restore your session.</div>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const status = Number(params.get("status") || "404");
+        const statusLabel = Number.isFinite(status) ? status : 404;
+        const loginPath = params.get("login") || (statusLabel === 401 ? "/franchiseelogin.html" : "/franchiseelogin.html");
+        const homePath = params.get("home") || "/index.html";
+        const returnTo = params.get("returnTo") || "";
+
+        const defaults = {
+            401: {
+                eyebrow: "Session Required",
+                title: "Your session has expired",
+                message: "Please login again to continue working securely.",
+                help: "Your previous session could not be restored. Logging in again will start a fresh secure session.",
+            },
+            403: {
+                eyebrow: "Access Restricted",
+                title: "You do not have access to this page",
+                message: "Your account is signed in, but it does not have permission to open this route.",
+                help: "Use the correct dashboard for your role or login again with an authorized account.",
+            },
+            404: {
+                eyebrow: "Route Missing",
+                title: "Page Not Found",
+                message: "The page or route you requested could not be found.",
+                help: "Check the address and try again, or return to the main dashboard.",
+            },
+            500: {
+                eyebrow: "Unexpected Error",
+                title: "Something went wrong",
+                message: "We hit an unexpected error while processing your request.",
+                help: "Please try again in a moment. If the issue continues, login again or return home.",
+            },
+        };
+
+        const fallback = defaults[statusLabel] || defaults[500];
+
+        document.getElementById("eyebrow").textContent = params.get("title") ? `Error ${statusLabel}` : fallback.eyebrow;
+        document.getElementById("title").textContent = params.get("title") || fallback.title;
+        document.getElementById("message").textContent = params.get("message") || fallback.message;
+        document.getElementById("statusChip").textContent = `Status ${statusLabel}`;
+        document.getElementById("helpText").textContent = fallback.help;
+
+        const pathChip = document.getElementById("pathChip");
+        const currentPath = returnTo || document.referrer || window.location.pathname;
+        if (currentPath) {
+            pathChip.textContent = currentPath.length > 72 ? `${currentPath.slice(0, 69)}...` : currentPath;
+        } else {
+            pathChip.style.display = "none";
+        }
+
+        const loginButton = document.getElementById("loginButton");
+        if (statusLabel === 404 && !params.get("login")) {
+            loginButton.style.display = "none";
+        }
+
+        document.getElementById("homeButton").addEventListener("click", () => {
+            window.location.replace(homePath);
+        });
+
+        loginButton.addEventListener("click", () => {
+            window.location.replace(loginPath);
+        });
+
+        document.getElementById("backButton").addEventListener("click", () => {
+            if (window.history.length > 1) {
+                window.history.back();
+                return;
+            }
+
+            window.location.replace(homePath);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<head>
+    <title>Doctor Pricing</title>
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        .pricing-shell { width: 95%; margin: 20px auto 40px; display: grid; gap: 20px; }
+        .pricing-card { background: #fff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); padding: 20px; }
+        .pricing-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+        .pricing-title { margin: 0; font-size: 28px; color: #102542; }
+        .pricing-subtitle { margin: 6px 0 0; color: #54657e; font-size: 14px; }
+        .pricing-toolbar, .group-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+        /* Consistent styling for inputs and selects */
+        .pricing-toolbar > select,
+        .pricing-toolbar > input[type="text"],
+        .pricing-toolbar > input[type="file"],
+        .group-toolbar > select,
+        .group-toolbar > input[type="text"],
+        .group-modal input[type="text"],
+        .group-modal textarea,
+        .group-modal select {
+            border: 1px solid #d6deea;
+            border-radius: 8px;
+            padding: 10px 12px;
+            min-width: 160px;
+            font-size: 14px;
+            height: 40px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .pricing-toolbar > input[type="text"]::placeholder,
+        .group-modal input[type="text"]::placeholder,
+        .group-modal textarea::placeholder {
+            color: #9ca3af;
+        }
+
+        .pricing-toolbar > select:hover,
+        .pricing-toolbar > input[type="text"]:hover,
+        .group-toolbar > select:hover,
+        .group-toolbar > input[type="text"]:hover,
+        .group-modal input[type="text"]:hover,
+        .group-modal select:hover {
+            border-color: #a8b3c1;
+        }
+
+        .pricing-toolbar > select:focus,
+        .pricing-toolbar > input[type="text"]:focus,
+        .group-toolbar > select:focus,
+        .group-toolbar > input[type="text"]:focus,
+        .group-modal input[type="text"]:focus,
+        .group-modal select:focus {
+            border-color: #0f62fe;
+            box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.1);
+        }
+
+        .group-modal textarea {
+            height: auto;
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        /* Consistent button styling */
+        .pricing-toolbar button,
+        .group-toolbar button,
+        .group-modal button,
+        .pricing-header button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            min-width: 100px;
+            justify-content: center;
+        }
+
+        .btn-primary { background: #0f62fe; color: #fff; }
+        .btn-primary:hover { background: #0047cc; box-shadow: 0 4px 12px rgba(15, 98, 254, 0.2); }
+        .btn-primary:active { background: #003fa1; }
+
+        .btn-muted { background: #e8edf5; color: #23344f; }
+        .btn-muted:hover { background: #d6deea; }
+        .btn-muted:active { background: #c4cce0; }
+
+        .btn-danger { background: #e5484d; color: #fff; }
+        .btn-danger:hover { background: #d13639; box-shadow: 0 4px 12px rgba(229, 72, 77, 0.2); }
+        .btn-danger:active { background: #ba232c; }
+
+        .panel-note { padding: 12px 14px; border-radius: 12px; background: #eef6ff; color: #26415e; font-size: 14px; margin: 14px 0 0; }
+
+        .rate-card-wrapper { max-height: 500px; overflow-y: auto; border: 1px solid #e8edf5; border-radius: 12px; margin-top: 18px; }
+        .rate-card-table { width: 100%; border-collapse: collapse; }
+        .rate-card-table th, .rate-card-table td { border-bottom: 1px solid #e8edf5; padding: 12px 10px; text-align: left; vertical-align: top; }
+        .rate-card-table th { color: #54657e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: #f8fafc; position: sticky; top: 0; z-index: 10; }
+        .rate-card-table td input { border: 1px solid #d6deea; border-radius: 6px; padding: 6px 8px; font-size: 13px; width: 100%; max-width: 120px; }
+
+        .item-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #eef2f7; color: #23344f; font-size: 12px; margin: 0 8px 8px 0; }
+        .item-chip button { border: none; background: transparent; color: #7b889c; cursor: pointer; padding: 0; }
+
+        .group-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 16px; }
+        .group-list { display: grid; gap: 12px; }
+        .group-item { border: 1px solid #e3e8f0; border-radius: 12px; padding: 14px; background: #fbfcfe; transition: all 0.2s; }
+        .group-item:hover { box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); border-color: #d6deea; }
+        .group-item h4 { margin: 0 0 8px; color: #132238; font-size: 15px; }
+        .group-item p { margin: 0 0 10px; color: #5d6e84; font-size: 13px; line-height: 1.4; }
+        .group-item-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .group-item-count { display: inline-block; background: #e8edf5; color: #23344f; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .group-item .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .group-item .actions button { height: 34px; padding: 6px 12px; font-size: 12px; min-width: auto; border-radius: 6px; }
+        .group-item .actions .btn-muted { background: #e8edf5; }
+        .group-item .actions .btn-danger { background: #f3e8e8; color: #b42318; }
+        .empty-state { padding: 20px; border: 1px dashed #cfd7e3; border-radius: 12px; color: #607089; text-align: center; }
+        .status-text { min-height: 20px; margin-top: 12px; color: #1e6a3c; font-weight: 600; }
+        .status-text.error { color: #b42318; }
+        .group-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 100000; padding: 20px; }
+        .group-modal { width: min(860px, 100%); background: #fff; border-radius: 18px; padding: 22px; display: grid; gap: 16px; max-height: 88vh; overflow: auto; }
+        .group-modal-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 18px; }
+        .group-results, .group-selected-items { border: 1px solid #e3e8f0; border-radius: 12px; padding: 12px; min-height: 200px; max-height: 300px; overflow: auto; background: #fbfcfe; }
+        .group-result-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf1f6; }
+        .group-result-row:last-child { border-bottom: none; }
+        .group-result-meta { color: #607089; font-size: 12px; }
+        @media (max-width: 860px) { .group-modal-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="pricing-shell">
+        <section class="pricing-card">
+            <div class="pricing-header">
+                <div>
+                    <h1 class="pricing-title">Doctor Rate Card</h1>
+                    <p class="pricing-subtitle">Doctor-wise prices, copy tools, Excel import/export, and reusable booking groups.</p>
+                </div>
+                <div class="pricing-toolbar">
+                    <select id="doctorPricingSelect"></select>
+                    <button class="btn-muted" id="refreshDoctorPricingBtn"><i class="fas fa-rotate"></i> Refresh</button>
+                </div>
+            </div>
+            <div class="pricing-toolbar" style="margin-top: 18px;">
+                <input type="text" id="rateCardSearchInput" placeholder="Search test, panel, package">
+                <select id="copySourceDoctorSelect"></select>
+                <button class="btn-muted" id="copyRateCardBtn"><i class="fas fa-copy"></i> Copy</button>
+                <button class="btn-muted" id="exportRateCardBtn"><i class="fas fa-file-export"></i> Export Excel</button>
+                <button class="btn-muted" id="importLabelBtn" onclick="document.getElementById('importRateCardInput').click();"><i class="fas fa-file-import"></i> Import Excel</button>
+                <input type="file" id="importRateCardInput" accept=".xlsx,.xls" style="display:none;">
+                <button class="btn-primary" id="saveRateCardBtn"><i class="fas fa-floppy-disk"></i> Save Rate Card</button>
+            </div>
+            <div class="panel-note" id="selfDoctorNote"></div>
+            <div class="status-text" id="rateCardStatus"></div>
+            <div class="rate-card-wrapper">
+                <table class="rate-card-table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Name</th>
+                            <th>Samples</th>
+                            <th>Current Price</th>
+                            <th>Doctor Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rateCardTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="pricing-card">
+            <div class="pricing-header">
+                <div>
+                    <h2 class="pricing-title" style="font-size:24px;">Quick Groups</h2>
+                    <p class="pricing-subtitle">Global reusable groups jo har booking desk user ke liye same tareeke se kaam karte hain.</p>
+                </div>
+                <div class="group-toolbar">
+                    <button class="btn-primary" id="createGroupBtn"><i class="fas fa-layer-group"></i> New Group</button>
+                </div>
+            </div>
+            <div class="status-text" id="groupStatus"></div>
+            <div class="group-list" id="groupsList"></div>
+        </section>
+    </div>
+
+    <div class="group-modal-overlay" id="groupModalOverlay">
+        <div class="group-modal">
+            <div class="pricing-header">
+                <div>
+                    <h3 class="pricing-title" style="font-size:22px;">Save Quick Group</h3>
+                    <p class="pricing-subtitle">Mixed tests, panels, and packages ko ek reusable booking shortcut me save karein.</p>
+                </div>
+                <button class="btn-muted" id="closeGroupModalBtn">Close</button>
+            </div>
+            <input type="hidden" id="groupIdInput">
+            <div class="pricing-toolbar">
+                <input type="text" id="groupNameInput" placeholder="Group name">
+            </div>
+            <textarea id="groupDescriptionInput" rows="3" placeholder="Description (optional)"></textarea>
+            <div class="group-modal-grid">
+                <div>
+                    <input type="text" id="groupItemSearchInput" placeholder="Search items to add">
+                    <div class="group-results" id="groupResultsList"></div>
+                </div>
+                <div>
+                    <div class="group-selected-items" id="groupSelectedItems"></div>
+                </div>
+            </div>
+            <div class="pricing-toolbar" style="justify-content:flex-end;">
+                <button class="btn-primary" id="saveGroupBtn">Save Group</button>
+            </div>
+        </div>
+    </div>
+</body>

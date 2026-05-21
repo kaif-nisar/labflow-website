@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">LabFlow favicon</title>
+  <desc id="desc">LabFlow brand mark with gradient tile, lab lens, and L monogram.</desc>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2b7cff"/>
+      <stop offset="1" stop-color="#0a3fa0"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="14" y1="10" x2="42" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#bg)"/>
+  <path d="M6 20C14 11 23 8 34 8c9 0 17 3 24 10v-1C58 10 52 6 44 6H20C12 6 6 12 6 20Z" fill="url(#glow)"/>
+  <path d="M18 18h7v17h13v7H18V18Z" fill="#ffffff"/>
+  <circle cx="41.5" cy="25" r="7.2" fill="none" stroke="#00d4ff" stroke-width="3.3"/>
+  <path d="M46.6 30.2 51.8 35.6" fill="none" stroke="#00d4ff" stroke-width="3.3" stroke-linecap="round"/>
+</svg>

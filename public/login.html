@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin Login</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="theme-color" content="#091a3b">
+    <link rel="stylesheet" href="/portal-ui.css">
+    <style>
+        :root {
+            --auth-bg: #06142b;
+            --auth-surface: rgba(255, 255, 255, 0.92);
+            --auth-border: rgba(11, 28, 56, 0.12);
+            --auth-text: #10233f;
+            --auth-text-soft: #62748f;
+            --auth-primary: #1a6ef5;
+            --auth-primary-dark: #0a3fa0;
+            --auth-shadow: 0 30px 60px rgba(2, 14, 32, 0.28);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                linear-gradient(135deg, rgba(6, 20, 43, 0.92), rgba(10, 63, 160, 0.76)),
+                url('./images/premiumimg.avif') center/cover no-repeat;
+            color: var(--auth-text);
+        }
+
+        .auth-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: minmax(0, 1.08fr) minmax(360px, 430px);
+            gap: 32px;
+            padding: 28px;
+            align-items: stretch;
+        }
+
+        .auth-showcase {
+            position: relative;
+            overflow: hidden;
+            border-radius: 32px;
+            padding: 48px;
+            background:
+                radial-gradient(circle at top right, rgba(0, 212, 255, 0.24), transparent 26%),
+                radial-gradient(circle at left bottom, rgba(26, 110, 245, 0.3), transparent 34%),
+                rgba(7, 19, 40, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--auth-shadow);
+            color: #f8fbff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: calc(100vh - 56px);
+        }
+
+        .brand-lockup {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            width: fit-content;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .brand-lockup img {
+            width: 150px;
+            height: auto;
+        }
+
+        .brand-meta {
+            font-size: 0.78rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(240, 247, 255, 0.7);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: whitesmoke;
+            background: rgba(26, 110, 245, 0.08);
+        }
+        .adwork {
+            background: var(--auth-bg);
+        }
+
+        .showcase-copy {
+            max-width: 720px;
+        }
+
+        .showcase-copy h1 {
+            margin: 18px 0;
+            font-size: clamp(2.5rem, 4vw, 4.4rem);
+            line-height: 1.02;
+            color: #ffffff;
+        }
+
+        .showcase-copy p {
+            margin: 0;
+            max-width: 620px;
+            font-size: 1.02rem;
+            line-height: 1.8;
+            color: rgba(232, 240, 249, 0.84);
+        }
+
+        .showcase-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .showcase-card {
+            padding: 22px 20px;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+        }
+
+        .showcase-card strong {
+            display: block;
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+            color: #ffffff;
+        }
+
+        .showcase-card span {
+            display: block;
+            font-size: 0.85rem;
+            line-height: 1.7;
+            color: rgba(232, 240, 249, 0.74);
+        }
+
+        .auth-panel {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .auth-card {
+            width: 100%;
+            border-radius: 30px;
+            padding: 34px 32px 30px;
+            background: var(--auth-surface);
+            border: 1px solid var(--auth-border);
+            box-shadow: var(--auth-shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .auth-card h2 {
+            margin: 16px 0 10px;
+            font-size: 2rem;
+            line-height: 1.05;
+            color: var(--auth-text);
+        }
+
+        .auth-card p {
+            margin: 0;
+            color: var(--auth-text-soft);
+            line-height: 1.7;
+            font-size: 0.96rem;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 18px;
+            margin-top: 26px;
+        }
+
+        .input-group {
+            display: grid;
+            gap: 8px;
+        }
+
+        .input-group label {
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #1d3557;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 13px 16px;
+            font-size: 1rem;
+            color: var(--auth-text);
+        }
+
+        .forgot-password {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .forgot-password a,
+        .register-link a {
+            color: var(--auth-primary);
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .btn {
+            border: none;
+            width: 100%;
+            min-height: 52px;
+            font-size: 1rem;
+            font-weight: 800;
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--auth-primary), var(--auth-primary-dark));
+            box-shadow: 0 20px 32px rgba(26, 110, 245, 0.24);
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.78;
+        }
+
+        .register-link {
+            margin-top: 20px;
+            text-align: center;
+            color: var(--auth-text-soft);
+            font-size: 0.92rem;
+        }
+
+        .error-message {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(204, 55, 77, 0.18);
+            background: rgba(255, 234, 238, 0.94);
+            color: #b42336;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .support-note {
+            margin-top: 22px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.04);
+            color: var(--auth-text-soft);
+            font-size: 0.83rem;
+            line-height: 1.7;
+        }
+
+        #forgotPasswordModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            background: rgba(4, 14, 28, 0.62);
+            backdrop-filter: blur(8px);
+            padding: 18px;
+        }
+
+        .modal-content {
+            width: min(100%, 420px);
+            border-radius: 28px;
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(12, 33, 61, 0.1);
+            box-shadow: 0 28px 60px rgba(4, 14, 28, 0.26);
+            padding: 26px;
+            position: relative;
+        }
+
+        .modal-content h3 {
+            margin: 0 0 10px;
+            font-size: 1.5rem;
+            color: var(--auth-text);
+        }
+
+        .modal-content p {
+            margin: 0 0 18px;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 13px 16px;
+            margin-bottom: 14px;
+        }
+
+        .close {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 999px;
+            background: rgba(26, 110, 245, 0.08);
+            color: var(--auth-primary-dark);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            cursor: pointer;
+        }
+
+        .modal-action {
+            border: none;
+            width: 100%;
+            min-height: 50px;
+            font-size: 0.96rem;
+            font-weight: 800;
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--auth-primary), var(--auth-primary-dark));
+            box-shadow: 0 18px 28px rgba(26, 110, 245, 0.18);
+            cursor: pointer;
+        }
+
+        .modal-message {
+            min-height: 22px;
+            margin-top: 14px;
+            color: #b42336;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 1180px) {
+            .auth-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .auth-showcase {
+                min-height: auto;
+                padding: 36px;
+            }
+
+            .showcase-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .auth-shell {
+                gap: 18px;
+                padding: 16px;
+            }
+
+            .auth-showcase,
+            .auth-card {
+                border-radius: 24px;
+                padding: 24px;
+            }
+
+            .showcase-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .auth-card h2 {
+                font-size: 1.7rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="portal-ui-enhanced">
+    <div class="auth-shell">
+        <section class="auth-showcase">
+            <div class="brand-lockup">
+                <img src="/images/logoLabFlow.svg" alt="LabFlow logo" data-fallback-type="logo">
+                <div class="brand-meta">Professional Lab Operations</div>
+            </div>
+
+            <div class="showcase-copy">
+                <div class="eyebrow">Secure Access Layer</div>
+                <h1>Control diagnostics, billing, reports, and portal operations from one clean command center.</h1>
+                <p>
+                    LabFlow helps pathology teams run faster with streamlined case handling, franchise oversight,
+                    secure reporting, and a workflow built for real lab operations.
+                </p>
+            </div>
+
+            <div class="showcase-grid">
+                <div class="showcase-card">
+                    <strong>Centralized dashboard</strong>
+                    <span>Track bookings, reports, billing, and user activity from a single operational view.</span>
+                </div>
+                <div class="showcase-card">
+                    <strong>Role-based control</strong>
+                    <span>Keep access structured across admins, franchisees, staff, and partner labs.</span>
+                </div>
+                <div class="showcase-card">
+                    <strong>Production-ready reporting</strong>
+                    <span>Original report formats, invoice flows, and daily execution designed for live use.</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="auth-panel">
+            <div class="auth-card">
+                <div class="eyebrow adwork">Admin Workspace</div>
+                <h2>Super Admin Login</h2>
+                <p>Sign in securely to manage system-wide operations, modules, and portal health.</p>
+
+                <div class="error-message" id="errorMessage" aria-live="polite"></div>
+
+                <form id="loginForm" class="form-grid">
+                    <div class="input-group">
+                        <label for="username">Username or Email</label>
+                        <input type="text" id="username" name="username" autocomplete="username" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="password">Password</label>
+                        <div class="portal-password-field">
+                            <input type="password" id="password" name="password" autocomplete="current-password" required>
+                            <button type="button" class="password-toggle" data-password-toggle="password"></button>
+                        </div>
+                    </div>
+
+                    <div class="forgot-password">
+                        <a href="#" id="forgotPasswordLink">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="btn">Login</button>
+                </form>
+
+                <div class="register-link">
+                    <p>Don't have an account? <a href="adminRegister.html">Register</a></p>
+                </div>
+                <div class="register-link">
+                    <a href="franchiseelogin.html">Franchisee login</a>
+                </div>
+
+                <div class="support-note">
+                    Session restore is enabled. If your previous token is still valid, LabFlow will automatically route
+                    you to the correct dashboard.
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="forgotPasswordModal">
+        <div class="modal-content">
+            <button type="button" class="close" aria-label="Close modal">&times;</button>
+            <h3>Reset Password</h3>
+            <p>Enter your registered email address and we will send your reset link.</p>
+            <input type="email" id="resetEmail" placeholder="Enter your email" autocomplete="email" required>
+            <button type="button" id="resetPasswordButton" class="modal-action">Send Reset Link</button>
+            <div class="modal-message" id="resetErrorMessage" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <script src="/js/portal-guard.js"></script>
+    <script src="/js/portal-ui.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const guard = window.AppPortalGuard.configure({
+                loginPath: '/login.html',
+                homePath: '/superAdmin.html'
+            });
+
+            const loginForm = document.getElementById('loginForm');
+            const errorMessage = document.getElementById('errorMessage');
+            const submitButton = loginForm.querySelector('button[type="submit"]');
+            const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+            const closeButton = document.querySelector('.close');
+            const resetPasswordButton = document.getElementById('resetPasswordButton');
+            const resetErrorMessage = document.getElementById('resetErrorMessage');
+            const urlParams = new URLSearchParams(window.location.search);
+            const forceLogin = urlParams.get('forceLogin') === '1';
+
+            const showError = (message) => {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+            };
+
+            const hideError = () => {
+                errorMessage.style.display = 'none';
+                errorMessage.textContent = '';
+            };
+
+            const setSubmitting = (isSubmitting) => {
+                submitButton.disabled = isSubmitting;
+                submitButton.textContent = isSubmitting ? 'Signing in...' : 'Login';
+            };
+
+            const parseApiPayload = async (response) => {
+                const text = await response.text();
+                const normalized = String(text || '').trim();
+
+                if (!normalized || normalized.startsWith('<')) {
+                    return null;
+                }
+
+                try {
+                    return JSON.parse(normalized);
+                } catch (error) {
+                    return { message: normalized };
+                }
+            };
+
+            if (forceLogin) {
+                guard.clearStoredSession();
+            } else {
+                guard.autoLoginFromSession({
+                    type: 'superAdmin',
+                    strict: true,
+                    onSuccess: (session) => {
+                        window.location.replace(session.redirectTo || '/superAdmin.html');
+                    }
+                });
+            }
+
+            loginForm.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                hideError();
+                setSubmitting(true);
+
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+
+                if (!username || !password) {
+                    showError('Please enter both username/email and password.');
+                    setSubmitting(false);
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${window.location.origin}/api/v1/user/login`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ username, email: username, password })
+                    });
+
+                    const data = await parseApiPayload(response);
+
+                    if (!response.ok) {
+                        showError(data?.message || 'Invalid username or password.');
+                        return;
+                    }
+
+                    const session = await guard.restoreSession({
+                        type: 'superAdmin',
+                        strict: true
+                    });
+
+                    if (!session?.authenticated) {
+                        showError('Login completed but your session could not be restored. Please try again.');
+                        return;
+                    }
+
+                    window.location.replace(session.redirectTo || '/superAdmin.html');
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showError('An error occurred. Please try again later.');
+                } finally {
+                    setSubmitting(false);
+                }
+            });
+
+            forgotPasswordLink.addEventListener('click', function (event) {
+                event.preventDefault();
+                resetErrorMessage.textContent = '';
+                forgotPasswordModal.style.display = 'flex';
+            });
+
+            closeButton.addEventListener('click', function () {
+                forgotPasswordModal.style.display = 'none';
+            });
+
+            resetPasswordButton.addEventListener('click', async function (event) {
+                const email = document.getElementById('resetEmail').value.trim();
+
+                if (!email) {
+                    resetErrorMessage.textContent = 'Please enter your email.';
+                    return;
+                }
+
+                event.target.disabled = true;
+                event.target.textContent = 'Sending...';
+                resetErrorMessage.textContent = '';
+
+                try {
+                    const response = await fetch(`${window.location.origin}/api/v1/user/forgotPassword`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email })
+                    });
+
+                    const data = await parseApiPayload(response);
+
+                    if (!response.ok) {
+                        resetErrorMessage.textContent = data?.message || 'Failed to send reset link.';
+                        return;
+                    }
+
+                    forgotPasswordModal.style.display = 'none';
+                    showError('Password reset link sent. Please check your inbox.');
+                } catch (error) {
+                    console.error('Forgot password error:', error);
+                    resetErrorMessage.textContent = 'Something went wrong. Please try again later.';
+                } finally {
+                    event.target.disabled = false;
+                    event.target.textContent = 'Send Reset Link';
+                }
+            });
+
+            window.addEventListener('click', function (event) {
+                if (event.target === forgotPasswordModal) {
+                    forgotPasswordModal.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

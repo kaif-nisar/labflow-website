@@ -1,0 +1,643 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <style>
+    :root {
+      --bg-1: #f6f8fd;
+      --bg-2: #eaf0fb;
+      --card: #ffffff;
+      --line: #d9e2ef;
+      --text: #142033;
+      --muted: #5d6b82;
+      --radius: 14px;
+      --shadow: 0 10px 28px rgba(14, 32, 60, 0.08);
+      --gap: 16px;
+      --pad: 16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; }
+
+
+    /* ─── WRAPPER ──────────────────────────────────────────── */
+    #ops-dashboard {
+      color: var(--text);
+      font-family: "Segoe UI", "Arial", sans-serif;
+      background:
+        radial-gradient(circle at 8% -14%, #d8e5ff 0%, transparent 42%),
+        radial-gradient(circle at 95% 8%, #d9fbf1 0%, transparent 35%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      padding: clamp(8px, 1.4vw, 16px);
+    }
+
+    .dash-wrap {
+      width: 100%;
+      max-width: 1440px;
+      margin: 0 auto;
+      display: grid;
+      gap: var(--gap);
+      min-width: 0;
+    }
+
+    .dash-wrap > * { min-width: 0; }
+
+    /* ─── HEADER ───────────────────────────────────────────── */
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: var(--pad);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .head > div:first-child { min-width: 0; }
+
+    .head h1 {
+      margin: 0;
+      font-size: clamp(16px, 2.5vw, 22px);
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+      font-weight: 700;
+    }
+
+    .head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: clamp(11px, 1.5vw, 13px);
+    }
+
+    .badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 12px;
+      background: #fff;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+      flex-shrink: 0;
+    }
+
+    /* ─── METRIC CARDS ─────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      min-width: 0;
+    }
+
+    .metric-card {
+      position: relative;
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow);
+      min-height: 100px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+    }
+
+    .metric-card::before {
+      content: "";
+      position: absolute;
+      inset: -35% auto auto -20%;
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.42);
+      filter: blur(0.2px);
+      pointer-events: none;
+    }
+
+    .metric-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -20% -46% auto;
+      width: 190px;
+      height: 170px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.34);
+      pointer-events: none;
+    }
+
+    .tone-1 { background: linear-gradient(145deg, #e9f0ff, #dce7ff); }
+    .tone-2 { background: linear-gradient(145deg, #e8fbff, #d3f5fb); }
+    .tone-3 { background: linear-gradient(145deg, #fff1e8, #ffe4d6); }
+    .tone-4 { background: linear-gradient(145deg, #ecfbe8, #daf4d1); }
+    .tone-5 { background: linear-gradient(145deg, #f3efff, #e8ddff); }
+    .tone-6 { background: linear-gradient(145deg, #fff2f6, #ffe2ec); }
+
+    .metric-head {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .metric-head > div { min-width: 0; }
+
+    .metric-head .k {
+      font-size: clamp(9px, 1.2vw, 11px);
+      color: #44536b;
+      text-transform: uppercase;
+      letter-spacing: 0.42px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .metric-head .v {
+      font-size: clamp(16px, 2.2vw, 24px);
+      line-height: 1.05;
+      font-weight: 700;
+      color: #0f2038;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .trend-chip {
+      font-size: clamp(9px, 1vw, 11px);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(18, 38, 63, 0.08);
+      color: #274266;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .spark {
+      position: relative;
+      z-index: 2;
+      margin-top: 8px;
+      height: 28px;
+      width: 100%;
+    }
+
+    .spark polyline {
+      fill: none;
+      stroke-width: 2.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ─── LAYOUT (Subscription + Plans) ───────────────────── */
+    .layout {
+      display: grid;
+      gap: var(--gap);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      min-width: 0;
+    }
+
+    /* ─── PANELS ───────────────────────────────────────────── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: var(--pad);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: clamp(14px, 1.8vw, 16px);
+      letter-spacing: 0.2px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .state-pill {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .state-pill.active,
+    .state-pill.paid  { color: #0b7f5e; background: #e7f9f3; border-color: #bde8da; }
+    .state-pill.grace,
+    .state-pill.pending { color: #9a6107; background: #fff3df; border-color: #f1d6aa; }
+    .state-pill.expired,
+    .state-pill.failed,
+    .state-pill.inactive { color: #9f2d36; background: #ffe8ea; border-color: #f1c2c7; }
+    .state-pill.na { color: #455569; background: #eef3f8; border-color: #d6e0ec; }
+
+    .kv {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .kv div {
+      position: relative;
+      border: 1px solid #e3eaf4;
+      border-radius: 11px;
+      padding: 10px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f6f9ff 100%);
+      min-height: 60px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .kv div::after {
+      content: "";
+      position: absolute;
+      inset: auto -18px -18px auto;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(15, 98, 254, 0.08);
+      pointer-events: none;
+    }
+
+    .kv dt {
+      font-size: 10px;
+      color: #617088;
+      margin: 0 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+      font-weight: 700;
+      position: relative;
+      z-index: 2;
+    }
+
+    .kv dd {
+      margin: 0;
+      font-size: clamp(11px, 1.4vw, 13px);
+      font-weight: 700;
+      word-break: break-word;
+      color: var(--text);
+      position: relative;
+      z-index: 2;
+    }
+
+    /* ─── TABLES ───────────────────────────────────────────── */
+    .plans-table-wrap,
+    .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 520px;
+      max-width: 100%;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid #edf2f8;
+      font-size: clamp(11px, 1.3vw, 13px);
+      white-space: nowrap;
+    }
+
+    th {
+      background: #f4f7fc;
+      color: #2d3b52;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    /* ─── CHARTS SECTION ───────────────────────────────────── */
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--gap);
+      align-items: stretch;
+      min-width: 0;
+    }
+
+    .chart-panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: var(--pad);
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .chart-panel h3 {
+      margin: 0 0 10px;
+      font-size: clamp(13px, 1.6vw, 15px);
+    }
+
+    .chart-box {
+      position: relative;
+      height: 220px;
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .chart-panel.top-tests .chart-box {
+      height: 260px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .chart-panel.top-tests canvas {
+      max-height: 250px !important;
+      max-width: 100%;
+    }
+
+    #ops-dashboard canvas {
+      display: block;
+      width: 100% !important;
+      max-width: 100%;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 8px 0 0;
+    }
+
+    /* ─── SCROLL HINT for tables on small screens ──────────── */
+    .scroll-hint {
+      display: none;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      padding: 4px 0 0;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       RESPONSIVE BREAKPOINTS
+    ════════════════════════════════════════════════════════ */
+
+    /* Large desktop (≥1400px): already wide — no extra changes needed */
+
+    /* Desktop (1200–1399px) */
+    @media (max-width: 1399px) {
+      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    /* Laptop / large tablet landscape (1024–1199px) */
+    @media (max-width: 1199px) {
+      .layout  { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    /* Tablet landscape + small laptop (768–1023px) */
+    @media (max-width: 1023px) {
+      :root { --gap: 14px; --pad: 14px; }
+      .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kv     { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Tablet portrait (600–767px) */
+    @media (max-width: 767px) {
+      :root { --gap: 12px; --pad: 12px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .charts  { grid-template-columns: 1fr; }
+      .layout  { grid-template-columns: 1fr; }
+      .chart-panel.top-tests .chart-box { height: 230px; }
+      .scroll-hint { display: block; }
+    }
+
+    /* Large mobile (480–599px) */
+    @media (max-width: 599px) {
+      :root { --gap: 10px; --pad: 12px; }
+      #ops-dashboard { padding: 10px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .head    { flex-direction: column; align-items: stretch; }
+      .badge   { align-self: flex-start; }
+      .kv      { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric-head .v { font-size: 18px; }
+    }
+
+    /* Small mobile (360–479px) */
+    @media (max-width: 479px) {
+      :root { --gap: 8px; --pad: 10px; }
+      #ops-dashboard { padding: 8px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric-card { min-height: 90px; padding: 10px; }
+      .metric-head .v { font-size: 16px; }
+      .trend-chip { padding: 3px 6px; font-size: 9px; }
+      .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .kv div { min-height: 52px; padding: 8px; }
+      .kv dt  { font-size: 9px; }
+      .kv dd  { font-size: 11px; }
+      .chart-box { height: 200px; }
+      .chart-panel { min-height: 250px; }
+      .chart-panel.top-tests .chart-box { height: 210px; }
+      table { min-width: 440px; }
+    }
+
+    /* Very small mobile (≤359px) */
+    @media (max-width: 359px) {
+      :root { --gap: 6px; --pad: 8px; }
+      .metrics { grid-template-columns: 1fr; }
+      .kv { grid-template-columns: 1fr; }
+      .metric-card { min-height: 80px; }
+      .chart-box { height: 180px; }
+    }
+  </style>
+</head>
+<body>
+  <section id="ops-dashboard">
+    <div class="dash-wrap">
+
+      <header class="head">
+        <div>
+          <h1>Operations &amp; Subscription Dashboard</h1>
+          <p id="dashSubtitle">Realtime tenant and booking performance summary.</p>
+        </div>
+        <div class="badge" id="dashLastUpdated">Last update: --</div>
+      </header>
+
+      <!-- ── METRIC CARDS ─────────────────────────────────── -->
+      <section class="metrics" id="metricsGrid">
+        <article class="metric-card tone-1" data-permission="canManageBookings">
+          <div class="metric-head">
+            <div><div class="k">Total Bookings</div><div class="v" id="totalBookings">--</div></div>
+            <span class="trend-chip" id="trend-totalBookings">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-totalBookings">
+            <polyline points="0,20 20,18 40,16 60,13 80,11 100,12 120,9" stroke="#3763f4"></polyline>
+          </svg>
+        </article>
+
+        <article class="metric-card tone-2" data-permission="canManagePayments canViewReports">
+          <div class="metric-head">
+            <div><div class="k">Total Revenue</div><div class="v" id="totalRevenue">--</div></div>
+            <span class="trend-chip" id="trend-totalRevenue">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-totalRevenue">
+            <polyline points="0,21 20,19 40,17 60,12 80,10 100,9 120,8" stroke="#17a786"></polyline>
+          </svg>
+        </article>
+
+        <article class="metric-card tone-3" id="metric-remainingDays">
+          <div class="metric-head">
+            <div><div class="k">Remaining Days</div><div class="v" id="remainingDaysTop">--</div></div>
+            <span class="trend-chip" id="trend-remainingDays">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-remainingDays">
+            <polyline points="0,19 20,17 40,15 60,15 80,14 100,13 120,12" stroke="#ca7c22"></polyline>
+          </svg>
+        </article>
+
+        <article class="metric-card tone-4" data-permission="canManageBookings">
+          <div class="metric-head">
+            <div><div class="k">Pending Tests</div><div class="v" id="pendingTests">--</div></div>
+            <span class="trend-chip" id="trend-pendingTests">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-pendingTests">
+            <polyline points="0,15 20,16 40,18 60,14 80,17 100,13 120,16" stroke="#4aa942"></polyline>
+          </svg>
+        </article>
+
+        <article class="metric-card tone-5" id="metric-endDate">
+          <div class="metric-head">
+            <div><div class="k">End Date</div><div class="v" id="subscriptionEndTop">--</div></div>
+            <span class="trend-chip" id="trend-endDate">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-endDate">
+            <polyline points="0,20 20,18 40,19 60,15 80,14 100,12 120,13" stroke="#6f56db"></polyline>
+          </svg>
+        </article>
+
+        <article class="metric-card tone-6" id="metric-planType">
+          <div class="metric-head">
+            <div><div class="k">Plan Type</div><div class="v" id="planTypeTop">--</div></div>
+            <span class="trend-chip" id="trend-planType">--</span>
+          </div>
+          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-planType">
+            <polyline points="0,22 20,18 40,17 60,16 80,13 100,12 120,10" stroke="#d74483"></polyline>
+          </svg>
+        </article>
+      </section>
+
+      <!-- ── SUBSCRIPTION + PLANS ROW ─────────────────────── -->
+      <section class="layout">
+        <article class="panel" id="subscriptionPanel">
+          <h2>Subscription Snapshot</h2>
+          <div class="status-row">
+            <span class="state-pill na" id="subStatusPill">STATUS: --</span>
+            <span class="state-pill na" id="payStatusPill">PAYMENT: --</span>
+          </div>
+          <dl class="kv">
+            <div><dt>Plan Type</dt><dd id="subPlanType">--</dd></div>
+            <div><dt>Plan Layer</dt><dd id="subPlanLayer">--</dd></div>
+            <div><dt>Duration (Days)</dt><dd id="subDuration">--</dd></div>
+            <div><dt>Price</dt><dd id="subPrice">--</dd></div>
+            <div><dt>Start Date</dt><dd id="subStart">--</dd></div>
+            <div><dt>End Date</dt><dd id="subEnd">--</dd></div>
+            <div><dt>Effective End</dt><dd id="subEffectiveEnd">--</dd></div>
+            <div><dt>Days Remaining</dt><dd id="subDays">--</dd></div>
+            <div><dt>Grace Period</dt><dd id="subGrace">--</dd></div>
+            <div><dt>Tenant Status</dt><dd id="tenantStatus">--</dd></div>
+            <div><dt>Tenant Name</dt><dd id="tenantName">--</dd></div>
+            <div><dt>Tenant Code</dt><dd id="tenantCode">--</dd></div>
+          </dl>
+          <p class="muted" id="subMessage">--</p>
+        </article>
+
+        <article class="panel" id="rechargePanel">
+          <h2>Recharge Plans (From Server)</h2>
+          <div class="plans-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Plan</th><th>Duration</th><th>Total</th><th>Base</th><th>GST</th><th>Select</th></tr>
+              </thead>
+              <tbody id="plansTbody"></tbody>
+            </table>
+          </div>
+          <p class="scroll-hint">← Scroll table to see more →</p>
+          <p class="muted" id="plansMeta">--</p>
+        </article>
+      </section>
+
+      <!-- ── CHARTS + FRANCHISE ────────────────────────────── -->
+      <section class="charts" id="chartsSection">
+        <article class="chart-panel" data-permission="canManagePayments canViewReports">
+          <h3>Monthly Revenue Trend</h3>
+          <div class="chart-box"><canvas id="revenueChart"></canvas></div>
+        </article>
+
+        <article class="chart-panel" data-permission="canManagePayments canViewReports">
+          <h3>Daily Revenue (Last 30 Days)</h3>
+          <div class="chart-box"><canvas id="samplesChart"></canvas></div>
+        </article>
+
+        <article class="chart-panel top-tests" data-permission="canManageBookings canViewReports">
+          <h3>Top Test Categories</h3>
+          <div class="chart-box"><canvas id="testCategoriesChart"></canvas></div>
+        </article>
+
+        <article class="chart-panel" id="franchisePanel" data-permission="canManageUsers">
+          <h3>Franchise Details</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Location</th><th>Contact</th><th>Status</th></tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <p class="scroll-hint">← Scroll table to see more →</p>
+        </article>
+      </section>
+
+    </div>
+  </section>
+
+  <!-- Chart.js CDN -->
+  <script src="/vendor/chart.js/chart.umd.min.js"></script>
+
+  <!-- ── DASHBOARD LOGIC (unchanged from original) ─────────── -->
+</body>
+</html>

@@ -1,0 +1,578 @@
+<html>
+<head>
+    <title>All Cases</title>
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            color: #1f2937;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        h1 {
+            font-size: 29px;
+            font-weight: 700;
+            margin: 20px 20px 12px;
+        }
+
+        .filter-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin: 0 20px 20px;
+            padding: 16px;
+            border: 1px solid #dbe4ef;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f7fbff 0%, #ffffff 100%);
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.04);
+        }
+
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .filter-field label {
+            margin-bottom: 6px;
+            color: #475467;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .filter-field input,
+        .filter-field select {
+            min-height: 42px;
+            padding: 10px 12px;
+            font-size: 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .filter-field input:focus,
+        .filter-field select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .buttons button {
+            min-height: 42px;
+            padding: 0 18px;
+            border: 0;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        }
+
+        .buttons button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+        }
+
+        #search-btn {
+            background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+            color: #fff;
+        }
+
+        #search-btn:disabled {
+            cursor: wait;
+            opacity: 0.78;
+            transform: none;
+            box-shadow: none;
+        }
+
+        #clearfield {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .totalbarbook {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            margin: 0 20px 12px;
+            padding: 0 2px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #166534;
+            letter-spacing: 0.2px;
+        }
+
+        .container-allcases {
+            min-width: 100%;
+            overflow: auto;
+            scrollbar-width: none;
+            padding: 0 20px 20px;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border: 1px solid #dbe4ef;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        table th,
+        table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid rgba(203, 213, 225, 0.9);
+            vertical-align: top;
+            font-size: 14px;
+        }
+
+        tbody td {
+            box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.32);
+        }
+
+        table th {
+            background: #f8fafc;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        table tr:last-child td {
+            border-bottom: 0;
+        }
+
+        table td .status-btn {
+            padding: 6px 12px;
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            background: #6b7280;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: capitalize;
+        }
+
+        .reg-no {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .booking-date-cell {
+            min-width: 160px;
+            white-space: nowrap;
+        }
+
+        .amount-cell {
+            min-width: 140px;
+            text-align: right;
+            white-space: nowrap;
+            font-weight: 700;
+            color: #14532d;
+        }
+
+        .barcode-cell {
+            min-width: 220px;
+        }
+
+        .barcode-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: 2px 6px 2px 0;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .barcode-empty {
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .barcode-icon-success {
+            color: #16a34a;
+        }
+
+        .barcode-icon-failed {
+            color: #dc2626;
+        }
+
+        .actions {
+            min-width: 280px;
+        }
+
+        .case-action-group {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            flex-wrap: wrap;
+            position: relative;
+        }
+
+        .case-action-btn,
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 36px;
+            padding: 0 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+
+        .case-action-btn:hover,
+        .action-btn:hover,
+        .more-options:hover {
+            transform: translateY(-1px);
+        }
+
+        .case-action-primary {
+            background: linear-gradient(135deg, #0f766e 0%, #0f9f93 100%);
+            color: #fff;
+        }
+
+        .case-action-secondary {
+            background: #ecfeff;
+            color: #155e75;
+            border: 1px solid #a5f3fc;
+        }
+
+        .more-options {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            min-width: 36px;
+            height: 36px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            color: #334155;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .allcases-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            min-width: 190px;
+            padding: 8px;
+            border: 1px solid #dbe4ef;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+            z-index: 1000;
+        }
+
+        .allcases-dropdown-menu .action-btn {
+            justify-content: flex-start;
+            width: 100%;
+            color: #334155;
+        }
+
+        .allcases-dropdown-menu .action-btn:hover {
+            background: #f8fafc;
+        }
+
+        .table-state-row td {
+            padding: 28px 16px;
+            text-align: center;
+            color: #475467;
+            font-weight: 600;
+            background: #fff;
+        }
+
+        .loading-state td {
+            color: #166534;
+            background: #f0fdf4;
+        }
+
+        .error-state td {
+            color: #b42318;
+            background: #fef3f2;
+        }
+
+        .preNext {
+            margin: 18px 0 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .preNext button {
+            min-height: 36px;
+            padding: 0 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .preNext span {
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        #messagePopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(420px, calc(100vw - 32px));
+            background: #fff;
+            padding: 20px;
+            border-radius: 14px;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
+            z-index: 1000;
+        }
+
+        #messagePopup h3 {
+            margin: 0 0 12px;
+        }
+
+        #messages {
+            height: 100px;
+            overflow-y: auto;
+            background: #f8fafc;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        #messageInput {
+            width: 100%;
+            height: 60px;
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+
+        #sendMessage,
+        #closePopup {
+            min-height: 38px;
+            padding: 0 16px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        #sendMessage {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        #closePopup {
+            margin-left: 10px;
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        #popupOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 999;
+        }
+
+        .senderdivs,
+        .receiverdivs {
+            margin-bottom: 6px;
+        }
+
+        .receiverdivs {
+            display: flex;
+            justify-content: right;
+        }
+
+        .senderdivs p,
+        .receiverdivs p {
+            margin: 0;
+            width: fit-content;
+            padding: 6px 10px;
+            border-radius: 10px;
+            color: #fff;
+        }
+
+        .senderdivs p {
+            background: #334155;
+        }
+
+        .receiverdivs p {
+            background: #15803d;
+        }
+
+        @media (max-width: 900px) {
+            .filter-section {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+
+            .actions {
+                min-width: 240px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            h1 {
+                margin-top: 20px;
+            }
+
+            .filter-section,
+            .container-allcases,
+            .totalbarbook {
+                margin-left: 12px;
+                margin-right: 12px;
+            }
+
+            .container-allcases {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .buttons {
+                grid-column: 1 / -1;
+            }
+
+            .case-action-group {
+                align-items: stretch;
+            }
+
+            .case-action-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>All Cases</h1>
+
+    <div class="filter-section">
+        <div class="filter-field">
+            <input type="text" id="reg-no" placeholder="Search by booking no.">
+        </div>
+
+        <div class="filter-field">
+            <input type="text" id="patient-name" placeholder="Search by patient name">
+        </div>
+
+        <div class="filter-field">
+            <input type="text" id="franchisee" placeholder="Search by franchisee">
+        </div>
+
+        <div class="filter-field">
+            <select id="gender">
+                <option value="">Select</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <input type="text" id="patient-phone" placeholder="Search by mobile number">
+        </div>
+
+        <div class="filter-field">
+            <input type="text" id="barcode" placeholder="Search by barcode">
+        </div>
+
+        <div class="filter-field" id="layeredinput">
+            <input type="text" id="lab-name" placeholder="Search by lab name">
+        </div>
+
+        <div class="filter-field">
+            <select id="status">
+                <option value="">Select</option>
+                <option value="pending">pending</option>
+                <option value="completed">Completed</option>
+                <option value="clinical">Clinical</option>
+                <option value="Hold">Hold</option>
+            </select>
+        </div>
+
+        <div class="filter-field">
+            <input type="date" id="start-date" title="Start Date">
+        </div>
+
+        <div class="filter-field">
+            <input type="date" id="end-date" title="End Date">
+        </div>
+
+        <div class="buttons">
+            <button type="button" id="search-btn">Search</button>
+            <button type="button" id="clearfield">Clear Filters</button>
+        </div>
+    </div>
+
+    <div class="totalbarbook">
+        <span id="totalbarcodes"></span>
+        <span id="totalbookings"></span>
+    </div>
+
+    <div class="container-allcases">
+        <table id="bookings-table" aria-busy="false">
+            <thead>
+                <tr>
+                    <th>Booking No.</th>
+                    <th>Date</th>
+                    <th>Patient</th>
+                    <th id="tablecolfour">Franchisee</th>
+                    <th id="tablecolfive">Received Barcodes</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+
+        <div class="preNext">
+            <button type="button" id="previous">Pre</button>
+            <span id="pagecounter">Page 1 of 1</span>
+            <button type="button" id="next">Next</button>
+        </div>
+
+        <div id="messagePopup">
+            <div>
+                <h3>Messages</h3>
+                <div id="messages"></div>
+            </div>
+            <textarea id="messageInput" placeholder="Type your message here..."></textarea>
+            <button type="button" id="sendMessage">Send</button>
+            <button type="button" id="closePopup">Close</button>
+        </div>
+
+        <div id="popupOverlay"></div>
+    </div>
+
+    <script src="allcases.js"></script>
+</body>
+</html>

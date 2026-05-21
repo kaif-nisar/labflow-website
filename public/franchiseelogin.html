@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab Flow Franchisee Login</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#091a3b" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/portal-ui.css" />
+
+    <style>
+        /* ══════════════════════════════════
+           VARIABLES
+        ══════════════════════════════════ */
+        :root {
+            --c-primary:      #1a6ef5;
+            --c-primary-dark: #0a3fa0;
+            --c-accent:       #00d4ff;
+            --c-text:         #0c1e3c;
+            --c-text-soft:    #4d6480;
+            --glass:          rgba(255,255,255,0.07);
+            --glass-b:        rgba(255,255,255,0.10);
+        }
+
+        /* ══════════════════════════════════
+           GLOBAL RESET — nuke portal-ui.css
+        ══════════════════════════════════ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html {
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        html body {
+            font-family: 'DM Sans', sans-serif !important;
+            height: 100vh !important;
+            width: 100vw !important;
+            overflow: hidden !important;
+            background-color: #060e1e !important;
+            background-image:
+                linear-gradient(135deg,
+                    rgba(4,11,26,0.97)   0%,
+                    rgba(6,40,112,0.90) 52%,
+                    rgba(2,20,58,0.97)  100%),
+                url('high-angle-science-elements-composition.jpg') !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            background-attachment: fixed !important;
+            color: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Ambient orbs */
+        html body::before {
+            content: '';
+            position: fixed; top: -180px; right: -120px;
+            width: 560px; height: 560px;
+            background: radial-gradient(circle, rgba(26,110,245,0.22) 0%, transparent 68%);
+            pointer-events: none; z-index: 0;
+            animation: orbPulse 7s ease-in-out infinite alternate;
+        }
+        html body::after {
+            content: '';
+            position: fixed; bottom: -180px; left: -100px;
+            width: 480px; height: 480px;
+            background: radial-gradient(circle, rgba(0,212,255,0.14) 0%, transparent 68%);
+            pointer-events: none; z-index: 0;
+            animation: orbPulse 9s ease-in-out infinite alternate-reverse;
+        }
+        @keyframes orbPulse {
+            from { opacity: .5; transform: scale(1); }
+            to   { opacity: 1; transform: scale(1.12); }
+        }
+
+        /* ══════════════════════════════════
+           SHELL — two-column, full viewport
+        ══════════════════════════════════ */
+        .auth-shell {
+            position: relative; z-index: 1;
+            display: grid;
+            grid-template-columns: 1fr minmax(340px, 430px);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ══════════════════════════════════
+           LEFT VISUAL PANEL
+           Uses CSS Grid internally so every
+           section gets exactly equal space
+        ══════════════════════════════════ */
+        .auth-visual {
+            display: grid;
+            /* 4 rows: brand | copy | lottie | metrics */
+            grid-template-rows: auto auto 1fr auto;
+            gap: 16px;
+            padding: 20px 28px;
+            overflow: hidden;
+            position: relative;
+            min-height: 0;
+        }
+
+        /* Animated grid lines */
+        .auth-visual::after {
+            content: '';
+            position: absolute; inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,.024) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.024) 1px, transparent 1px);
+            background-size: 54px 54px;
+            pointer-events: none;
+            animation: gridDrift 22s linear infinite;
+        }
+        @keyframes gridDrift {
+            from { background-position: 0 0; }
+            to   { background-position: 54px 54px; }
+        }
+
+        /* ── Brand ── */
+        .brand-header {
+            display: inline-flex; align-items: center; gap: 12px;
+            padding: 11px 18px; border-radius: 16px;
+                        background: rgba(255,255,255,0.97);
+border: 1px solid var(--glass-b);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            width: fit-content;
+            position: relative; z-index: 1;
+            animation: slideDown .7s ease both;
+        }
+        .brand-header img { width: 120px; height: auto; }
+
+        /* ── Visual body (copy) ── */
+        .visual-body {
+            display: flex; flex-direction: column; justify-content: center;
+            position: relative; z-index: 1;
+            animation: slideUp .8s ease .2s both;
+        }
+
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 14px; border-radius: 999px;
+            font-family: 'Sora', sans-serif;
+            font-size: .68rem; font-weight: 700;
+            letter-spacing: .12em; text-transform: uppercase;
+            color: var(--c-accent);
+            background: rgba(0,212,255,.10); border: 1px solid rgba(0,212,255,.24);
+            margin-bottom: 16px; width: fit-content;
+        }
+        .eyebrow::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent);
+            animation: blink 2.2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.22} }
+
+        .visual-copy h1 {
+            font-family: 'Sora', sans-serif;
+            font-size: clamp(1.3rem, 1.8vw, 1.9rem);
+            font-weight: 800; line-height: 1.08; letter-spacing: -.025em;
+            color: #fff; margin-bottom: 8px;
+        }
+        .visual-copy h1 em {
+            font-style: normal;
+            background: linear-gradient(90deg, #60b4ff, var(--c-accent));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .visual-copy p {
+            font-size: .8rem; line-height: 1.5;
+            color: rgba(210,228,248,.76); max-width: 520px;
+        }
+
+        /* ── Lottie ── */
+        .lottie-frame {
+            position: relative; z-index: 1;
+            border-radius: 16px;
+            background: var(--glass); border: 1px solid var(--glass-b);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            display: flex; align-items: center; justify-content: center;
+            height: 195px; overflow: hidden;
+            animation: fadeIn 1s ease .4s both;
+        }
+        .lottie-container { width: 100%; height: 160px; }
+
+        /* ── Metric cards ── */
+        .visual-metrics {
+            display: grid; grid-template-columns: repeat(3,1fr); gap: 14px;
+            position: relative; z-index: 1;
+            animation: slideUp .8s ease .5s both;
+            min-height: 0;
+        }
+        .metric-card {
+            padding: 14px 15px; border-radius: 14px;
+            background: var(--glass); border: 1px solid var(--glass-b);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            transition: background .25s, border-color .25s, transform .25s; cursor: default;
+        }
+        .metric-card:hover {
+            background: rgba(255,255,255,.11); border-color: rgba(0,212,255,.24);
+            transform: translateY(-2px);
+        }
+        .metric-card .icon { font-size: 1.1rem; margin-bottom: 6px; display: block; }
+        .metric-card strong {
+            display: block; font-family: 'Sora', sans-serif;
+            font-size: .72rem; font-weight: 700; color: #ddeeff; margin-bottom: 4px;
+        }
+        .metric-card span { font-size: .65rem; line-height: 1.4; color: rgba(190,215,240,.62); }
+
+        /* ══════════════════════════════════
+           RIGHT AUTH PANEL
+        ══════════════════════════════════ */
+        .auth-panel {
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px 22px;
+            background: rgba(5,14,36,0.56);
+            border-left: 1px solid rgba(255,255,255,.07);
+            backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+            overflow: hidden;
+        }
+
+        .auth-card { width: 100%; animation: slideUp .7s ease .15s both; }
+
+        .auth-card-inner {
+            background: rgba(255,255,255,0.97);
+            border-radius: 24px;
+            padding: 26px 26px 22px 26px;
+            border: 1px solid rgba(12,33,61,.10);
+            box-shadow: 0 40px 80px rgba(4,14,28,0.52), inset 0 0 0 1px rgba(255,255,255,.55);
+            position: relative; overflow: hidden;
+        }
+
+        /* Shimmer accent strip */
+        .auth-card-inner::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--c-primary), var(--c-accent), var(--c-primary));
+            background-size: 200% 100%;
+            animation: shimmer 3.5s linear infinite;
+        }
+        @keyframes shimmer { from{background-position:0 0} to{background-position:200% 0} }
+
+        .card-eyebrow {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 6px 13px; border-radius: 999px;
+            font-family: 'Sora', sans-serif;
+            font-size: .68rem; font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
+            color: var(--c-primary-dark);
+            background: rgba(26,110,245,.08); border: 1px solid rgba(26,110,245,.18);
+            margin-bottom: 14px;
+        }
+
+        .auth-card-inner h2 {
+            font-family: 'Sora', sans-serif;
+            font-size: 1.55rem; font-weight: 800; line-height: 1.04; letter-spacing: -.035em;
+            color: var(--c-text); margin-bottom: 8px;
+        }
+
+        .auth-card-inner > p {
+            color: var(--c-text-soft); font-size: .8rem; line-height: 1.5; margin-bottom: 14px;
+        }
+
+        /* Form */
+        .form-grid { display: grid; gap: 13px; }
+        .input-group { display: grid; gap: 5px; }
+        .input-group label {
+            font-family: 'Sora', sans-serif;
+            font-size: .72rem; font-weight: 700; color: #1a2f50; letter-spacing: .02em;
+        }
+        .input-group input {
+            width: 100%; padding: 11px 14px;
+            font-family: 'DM Sans', sans-serif; font-size: .88rem; color: var(--c-text);
+            background: #f2f6fc; border: 1.5px solid #ccdaec; border-radius: 13px;
+            outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
+        }
+        .input-group input:focus {
+            border-color: var(--c-primary); background: #fff;
+            box-shadow: 0 0 0 4px rgba(26,110,245,.11);
+        }
+        .input-group input::placeholder { color: #a8bbd4; }
+        .portal-password-field { position: relative; }
+        .portal-password-field input { padding-right: 50px; }
+
+        .utility-row { display: flex; justify-content: flex-end; margin-top: -2px; }
+        .utility-row a {
+            font-family: 'Sora', sans-serif; font-size: .78rem; font-weight: 600;
+            color: var(--c-primary); text-decoration: none; transition: color .2s;
+        }
+        .utility-row a:hover { color: var(--c-primary-dark); text-decoration: underline; }
+
+        .auth-submit {
+            border: none; width: 100%; min-height: 48px;
+            font-family: 'Sora', sans-serif; font-size: .88rem; font-weight: 800; letter-spacing: .015em;
+            color: #fff;
+            background: linear-gradient(135deg, #2480ff 0%, var(--c-primary-dark) 100%);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(26,110,245,.38);
+            cursor: pointer; position: relative; overflow: hidden; margin-top: 2px;
+            transition: transform .18s, box-shadow .18s, opacity .18s;
+        }
+        .auth-submit::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,.12), transparent);
+            border-radius: inherit;
+        }
+        .auth-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 44px rgba(26,110,245,.46);
+        }
+        .auth-submit:active:not(:disabled) { transform: translateY(0); }
+        .auth-submit:disabled { cursor: not-allowed; opacity: .70; }
+
+        .error {
+            display: none; padding: 10px 12px; border-radius: 10px;
+            background: rgba(255,236,239,.97); border: 1.5px solid rgba(180,35,54,.18);
+            color: #b42336; font-size: .78rem; line-height: 1.5;
+        }
+
+        .support-note {
+            margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+            background: #eef3fb; border: 1px solid #d5e1f2;
+            color: #5a7090; font-size: .7rem; line-height: 1.5;
+        }
+
+        /* ══════════════════════════════════
+           MODAL
+        ══════════════════════════════════ */
+        #forgotPasswordModal {
+            display: none; position: fixed; inset: 0; z-index: 2000;
+            align-items: center; justify-content: center;
+            background: rgba(4,14,28,.72); backdrop-filter: blur(14px);
+            padding: 18px;
+        }
+        .modal-content {
+            width: min(100%, 430px); border-radius: 28px; background: #fff;
+            border: 1px solid rgba(12,33,61,.10);
+            box-shadow: 0 48px 90px rgba(4,14,28,.32);
+            padding: 36px 36px 32px; position: relative; overflow: hidden;
+            animation: slideUp .3s ease both;
+        }
+        .modal-content::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--c-primary), var(--c-accent));
+        }
+        .modal-content h2 {
+            font-family: 'Sora', sans-serif; font-size: 1.75rem; font-weight: 800;
+            letter-spacing: -.03em; color: var(--c-text); margin-bottom: 10px;
+        }
+        .modal-content > p { color: var(--c-text-soft); font-size: .9rem; line-height: 1.7; margin-bottom: 22px; }
+        .modal-content input {
+            width: 100%; padding: 14px 16px;
+            font-family: 'DM Sans', sans-serif; font-size: .95rem; color: var(--c-text);
+            background: #f2f6fc; border: 1.5px solid #ccdaec; border-radius: 13px;
+            outline: none; margin-bottom: 16px; transition: border-color .2s, box-shadow .2s;
+        }
+        .modal-content input:focus {
+            border-color: var(--c-primary); background: #fff;
+            box-shadow: 0 0 0 4px rgba(26,110,245,.11);
+        }
+        .close {
+            position: absolute; top: 20px; right: 20px; width: 36px; height: 36px;
+            border: none; border-radius: 999px; background: rgba(26,110,245,.08);
+            color: var(--c-primary-dark); display: inline-flex; align-items: center;
+            justify-content: center; font-size: 1.25rem; cursor: pointer; transition: background .2s;
+        }
+        .close:hover { background: rgba(26,110,245,.18); }
+        .modal-action {
+            border: none; width: 100%; min-height: 52px;
+            font-family: 'Sora', sans-serif; font-size: .97rem; font-weight: 800; color: #fff;
+            background: linear-gradient(135deg, #2480ff, var(--c-primary-dark));
+            border-radius: 14px; box-shadow: 0 12px 28px rgba(26,110,245,.32);
+            cursor: pointer; transition: transform .18s, box-shadow .18s;
+        }
+        .modal-action:hover:not(:disabled) {
+            transform: translateY(-2px); box-shadow: 0 20px 38px rgba(26,110,245,.42);
+        }
+        .reset-error-message { min-height: 20px; margin-top: 12px; color: #b42336; font-size: .86rem; line-height: 1.6; }
+
+        /* ══════════════════════════════════
+           ANIMATIONS
+        ══════════════════════════════════ */
+        @keyframes slideDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideUp   { from{opacity:0;transform:translateY(16px)}  to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+
+        /* ══════════════════════════════════
+           TABLET — stack, allow scroll
+        ══════════════════════════════════ */
+        @media (max-width: 1080px) {
+            html { overflow: auto; }
+            html body { overflow: auto !important; height: auto !important; }
+
+            .auth-shell {
+                grid-template-columns: 1fr;
+                height: auto; min-height: 100vh; width: 100%;
+                max-width: 100%;
+                margin: 0;
+            }
+            .auth-visual {
+                grid-template-rows: auto auto auto auto;
+                gap: 16px;
+                padding: 18px 20px;
+                min-height: auto;
+            }
+            .visual-metrics { grid-template-columns: repeat(2,1fr); gap: 12px; }
+            .auth-panel {
+                padding: 18px 20px;
+                border-left: none; border-top: 1px solid rgba(255,255,255,.07);
+            }
+        }
+
+        /* ══════════════════════════════════
+           MOBILE ≤640px
+           ONLY login card, perfectly centered
+           NO left panel, NO scroll
+        ══════════════════════════════════ */
+        @media (max-width: 640px) {
+            html { overflow: auto !important; }
+            html body { overflow: auto !important; height: auto !important; }
+
+            .auth-shell {
+                /* Override grid — use flex center */
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                height: auto !important;
+                width: 100vw !important;
+                padding: 24px 18px !important;
+            }
+
+            /* Hide the entire left visual section */
+            .auth-visual {
+                display: none !important;
+            }
+
+            /* Right panel fills available width, no extra bg */
+            .auth-panel {
+                width: 100% !important;
+                max-width: 420px !important;
+                padding: 0 !important;
+                border: none !important;
+                background: transparent !important;
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                flex: unset !important;
+            }
+
+            .auth-card-inner {
+                padding: 32px 26px 28px !important;
+                border-radius: 24px !important;
+            }
+            .auth-card-inner h2 { font-size: 1.75rem !important; }
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.7.6/lottie.min.js"></script>
+</head>
+
+<body class="portal-ui-enhanced">
+<div class="auth-shell">
+
+    <!-- ── LEFT VISUAL ── -->
+    <section class="auth-visual">
+        <div class="brand-header">
+            <img src="/images/logoLabFlow.svg" alt="LabFlow" data-fallback-type="logo">
+        </div>
+
+        <div class="visual-body">
+            <div class="eyebrow">Franchise Workspace</div>
+            <div class="visual-copy">
+                <h1>Stay connected with bookings,<br><em>case progress,</em> reports &amp; operations.</h1>
+                <p>Franchisee teams log in securely, manage daily activity faster, and keep reporting workflows smooth across every device.</p>
+            </div>
+        </div>
+
+        <div class="lottie-frame">
+            <div class="lottie-container" id="lottie"></div>
+        </div>
+
+        <div class="visual-metrics">
+            <div class="metric-card">
+                <span class="icon">⚡</span>
+                <strong>Fast case access</strong>
+                <span>Move from booking to report updates without jumping between tools.</span>
+            </div>
+            <div class="metric-card">
+                <span class="icon">🔒</span>
+                <strong>Secure sessions</strong>
+                <span>Valid sessions restore automatically so teams resume without friction.</span>
+            </div>
+            <div class="metric-card">
+                <span class="icon">🗂️</span>
+                <strong>Operational clarity</strong>
+                <span>Billing, dashboard actions and portal modules all in one place.</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── RIGHT AUTH PANEL ── -->
+    <section class="auth-panel">
+        <div class="auth-card">
+            <div class="auth-card-inner">
+                <div class="card-eyebrow">LabFlow Access</div>
+                <h2>Franchisee Login</h2>
+                <p>Enter your credentials to continue to your portal dashboard and case management workspace.</p>
+
+                <form id="loginForm" class="form-grid">
+                    <div class="input-group">
+                        <label for="username">Username or Email</label>
+                        <input type="text" id="username" name="username" placeholder="you@example.com" autocomplete="username" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="password">Password</label>
+                        <div class="portal-password-field">
+                            <input type="password" id="password" name="password" placeholder="••••••••••" autocomplete="current-password" required>
+                            <button type="button" class="password-toggle" data-password-toggle="password"></button>
+                        </div>
+                    </div>
+                    <div class="utility-row">
+                        <a href="#" id="forgotPasswordLink">Forgot Password?</a>
+                    </div>
+                    <button type="submit" class="auth-submit">Sign In to Portal</button>
+                    <div class="error" id="errorMessage" aria-live="polite"></div>
+                </form>
+
+                <div class="support-note">
+                    If your previous session is still valid, LabFlow will verify your token and redirect you automatically.
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- ── MODAL ── -->
+<div id="forgotPasswordModal">
+    <div class="modal-content">
+        <button type="button" class="close" aria-label="Close">&times;</button>
+        <h2>Reset Password</h2>
+        <p>Enter your registered email and we'll send you a password reset link.</p>
+        <input type="email" id="resetEmail" placeholder="Enter your email address" autocomplete="email" required>
+        <button type="button" id="resetPasswordButton" class="modal-action">Send Reset Link</button>
+        <div class="reset-error-message" id="resetErrorMessage" aria-live="polite"></div>
+    </div>
+</div>
+
+<script src="/js/portal-guard.js"></script>
+<script src="/js/portal-ui.js"></script>
+<script>
+    const BASE_URL = window.location.origin;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const guard = window.AppPortalGuard.configure({
+            loginPath: '/franchiseelogin.html',
+            homePath:  '/index.html'
+        });
+
+        lottie.loadAnimation({
+            container: document.getElementById('lottie'),
+            renderer: 'svg', loop: true, autoplay: true,
+            path: 'Animation - 1731414043375.json'
+        });
+
+        const loginForm           = document.getElementById('loginForm');
+        const errorMessage        = document.getElementById('errorMessage');
+        const submitButton        = loginForm.querySelector('button[type="submit"]');
+        const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+        const forgotPasswordLink  = document.getElementById('forgotPasswordLink');
+        const closeButton         = document.querySelector('.close');
+        const resetPasswordButton = document.getElementById('resetPasswordButton');
+        const resetErrorMessage   = document.getElementById('resetErrorMessage');
+
+        const showError  = (msg) => { errorMessage.textContent = msg; errorMessage.style.display = msg ? 'block' : 'none'; };
+        const hideError  = ()    => { errorMessage.textContent = ''; errorMessage.style.display = 'none'; };
+        const setLoading = (v)   => { submitButton.disabled = v; submitButton.textContent = v ? 'Signing in…' : 'Sign In to Portal'; };
+
+        guard.autoLoginFromSession({
+            type: 'user', strict: false,
+            onSuccess: (s) => window.location.replace(s.redirectTo || '/admin/admin.html')
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); hideError(); setLoading(true);
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (!username || !password) { showError('Please enter both username and password.'); setLoading(false); return; }
+            try {
+                const res  = await fetch(`${BASE_URL}/api/v1/user/login-admin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email: username, username, password })
+                });
+                const data = await res.json();
+                if (!res.ok) { showError(data.message || 'Login failed. Please try again.'); return; }
+                const session = await guard.restoreSession({ type: 'user', strict: true });
+                if (!session?.authenticated) { showError('Session restore failed. Please try again.'); return; }
+                window.location.replace(session.redirectTo || '/admin/admin.html');
+            } catch (err) {
+                console.error(err); showError('Something went wrong. Please try again later.');
+            } finally { setLoading(false); }
+        });
+
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault(); resetErrorMessage.textContent = '';
+            forgotPasswordModal.style.display = 'flex';
+        });
+        closeButton.addEventListener('click', () => { forgotPasswordModal.style.display = 'none'; });
+
+        resetPasswordButton.addEventListener('click', async (e) => {
+            const email = document.getElementById('resetEmail').value.trim();
+            if (!email) { resetErrorMessage.textContent = 'Please enter your email.'; return; }
+            e.target.disabled = true; e.target.textContent = 'Sending…'; resetErrorMessage.textContent = '';
+            try {
+                const res  = await fetch(`${BASE_URL}/api/v1/user/forgotPassword`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                if (!res.ok) { resetErrorMessage.textContent = data.message || 'Failed to send reset link.'; return; }
+                forgotPasswordModal.style.display = 'none';
+                showError('Password reset link sent. Please check your inbox.');
+            } catch (err) {
+                console.error(err); resetErrorMessage.textContent = 'Something went wrong. Please try again later.';
+            } finally { e.target.disabled = false; e.target.textContent = 'Send Reset Link'; }
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === forgotPasswordModal) forgotPasswordModal.style.display = 'none';
+        });
+    });
+</script>
+</body>
+</html>

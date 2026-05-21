@@ -1,0 +1,547 @@
+@import url('/css/offline-fonts.css');
+
+:root {
+  --portal-bg: #eef4fb;
+  --portal-surface: rgba(255, 255, 255, 0.94);
+  --portal-surface-strong: #ffffff;
+  --portal-primary: #1a6ef5;
+  --portal-primary-dark: #0a3fa0;
+  --portal-accent: #00d4ff;
+  --portal-text: #10233f;
+  --portal-text-soft: #5e718f;
+  --portal-border: rgba(16, 35, 63, 0.1);
+  --portal-shadow: 0 18px 45px rgba(11, 31, 60, 0.12);
+  --portal-shadow-soft: 0 10px 24px rgba(11, 31, 60, 0.08);
+  --portal-radius: 18px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body.portal-ui-enhanced {
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  color: var(--portal-text);
+  background:
+    radial-gradient(circle at top left, rgba(26, 110, 245, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(0, 212, 255, 0.08), transparent 24%),
+    var(--portal-bg);
+}
+
+body.portal-ui-enhanced h1,
+body.portal-ui-enhanced h2,
+body.portal-ui-enhanced h3,
+body.portal-ui-enhanced h4,
+body.portal-ui-enhanced .portal-heading-font {
+  font-family: "Space Grotesk", "Manrope", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+body.portal-ui-enhanced img {
+  max-width: 100%;
+  height: auto;
+}
+
+body.portal-ui-enhanced input,
+body.portal-ui-enhanced select,
+body.portal-ui-enhanced textarea,
+body.portal-ui-enhanced button {
+  font-family: inherit;
+}
+
+body.portal-ui-enhanced input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body.portal-ui-enhanced select,
+body.portal-ui-enhanced textarea,
+body.portal-ui-enhanced .form-control {
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid var(--portal-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+body.portal-ui-enhanced input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+body.portal-ui-enhanced select:focus,
+body.portal-ui-enhanced textarea:focus,
+body.portal-ui-enhanced .form-control:focus {
+  outline: none;
+  border-color: rgba(26, 110, 245, 0.45);
+  box-shadow: 0 0 0 4px rgba(26, 110, 245, 0.12);
+  background: #ffffff;
+}
+
+body.portal-ui-enhanced button,
+body.portal-ui-enhanced .btn,
+body.portal-ui-enhanced .video-btn {
+  border-radius: 14px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+body.portal-ui-enhanced button:hover,
+body.portal-ui-enhanced .btn:hover,
+body.portal-ui-enhanced .video-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(26, 110, 245, 0.16);
+}
+
+body.portal-ui-enhanced button:focus-visible,
+body.portal-ui-enhanced .btn:focus-visible,
+body.portal-ui-enhanced a:focus-visible,
+body.portal-ui-enhanced input:focus-visible,
+body.portal-ui-enhanced select:focus-visible,
+body.portal-ui-enhanced textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(26, 110, 245, 0.14);
+}
+
+body.portal-ui-enhanced .modal-content,
+body.portal-ui-enhanced .help-popup-content,
+body.portal-ui-enhanced .user-popup,
+body.portal-ui-enhanced .dashboard-card,
+body.portal-ui-enhanced .content-header,
+body.portal-ui-enhanced .page-card,
+body.portal-ui-enhanced .card,
+body.portal-ui-enhanced .subscription-alert-bar {
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow-soft);
+}
+
+body.portal-ui-enhanced .portal-fallback-avatar,
+body.portal-ui-enhanced img[data-fallback-type="avatar"] {
+  border-radius: 50%;
+  object-fit: cover;
+  background: linear-gradient(135deg, rgba(26, 110, 245, 0.08), rgba(0, 212, 255, 0.1));
+}
+
+body.portal-ui-enhanced .portal-fallback-logo,
+body.portal-ui-enhanced img[data-fallback-type="logo"] {
+  object-fit: contain;
+  background: transparent;
+}
+
+body.portal-ui-enhanced .portal-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid rgba(16, 35, 63, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+body.portal-ui-enhanced .portal-table-scroll > table {
+  min-width: 720px;
+  width: 100%;
+  margin: 0;
+}
+
+body.portal-ui-enhanced .portal-table-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+body.portal-ui-enhanced .portal-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(26, 110, 245, 0.36);
+  border-radius: 999px;
+}
+
+body.portal-ui-enhanced .portal-table-scroll th,
+body.portal-ui-enhanced .portal-table-scroll td {
+  white-space: nowrap;
+}
+
+body.portal-ui-enhanced .portal-modal-fluid,
+body.portal-ui-enhanced .modal-content {
+  max-width: min(760px, calc(100vw - 24px));
+}
+
+body.portal-ui-enhanced .portal-password-field {
+  position: relative;
+}
+
+body.portal-ui-enhanced .portal-password-field input {
+  padding-right: 52px;
+}
+
+body.portal-ui-enhanced .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(26, 110, 245, 0.08);
+  color: var(--portal-primary-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+
+body.portal-ui-enhanced .password-toggle:hover {
+  transform: translateY(-50%);
+  box-shadow: none;
+  filter: brightness(0.98);
+}
+
+body.portal-ui-enhanced .password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .top-navbar,
+body.portal-ui-enhanced.portal-shell-franchise .fra_navbar,
+body.portal-ui-enhanced.portal-shell-superadmin .header,
+body.portal-ui-enhanced.portal-shell-staff .content-header {
+  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(16, 35, 63, 0.08);
+}
+
+body.portal-ui-enhanced.portal-shell-admin .left-navbar,
+body.portal-ui-enhanced.portal-shell-franchise #toggle,
+body.portal-ui-enhanced.portal-shell-superadmin #sidebar,
+body.portal-ui-enhanced.portal-shell-staff .sidebar {
+  box-shadow: 14px 0 32px rgba(15, 23, 42, 0.12);
+}
+
+body.portal-ui-enhanced.portal-shell-admin .content-box,
+body.portal-ui-enhanced.portal-shell-franchise #right-container,
+body.portal-ui-enhanced.portal-shell-superadmin .content,
+body.portal-ui-enhanced.portal-shell-staff .main-content {
+  max-width: 100%;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .left-navbar {
+  width: 252px !important;
+  min-width: 252px;
+  height: 100vh;
+  overflow-x: hidden;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .content-box {
+  width: calc(100% - 262px) !important;
+  margin-left: 262px !important;
+  padding: 112px 18px 28px !important;
+}
+
+body.portal-ui-enhanced.portal-shell-admin #inner-box {
+  width: 100% !important;
+  max-width: 100%;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .toggle {
+  width: 100%;
+  align-items: stretch;
+  box-sizing: border-box;
+  gap: 4px;
+  padding: 12px 10px 22px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .left-panel {
+  margin: 0 6px 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+body.portal-ui-enhanced.portal-shell-admin .panel_list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0 4px 10px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .m_dashbord,
+body.portal-ui-enhanced.portal-shell-admin .bookf {
+  width: 100%;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .bookf {
+  left: 0;
+  height: auto;
+  margin: 12px 0 4px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .booking-inner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .book_po {
+  white-space: nowrap;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .hr-line {
+  width: auto;
+  flex: 1;
+}
+
+body.portal-ui-enhanced.portal-shell-admin a.nav-item {
+  display: flex;
+  width: 100%;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .m_dash,
+body.portal-ui-enhanced.portal-shell-admin .subItem .contar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .subItem .contar {
+  min-height: 40px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .dash_icon {
+  width: 18px;
+  flex: 0 0 18px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .dash_text {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .text_v {
+  margin-left: 0;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .icu {
+  margin-left: auto;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .subItem {
+  left: 0;
+  width: 100%;
+  margin: 4px 0 10px;
+  padding-left: 14px;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .subItem .m_dashbord {
+  width: 100%;
+}
+
+body.portal-ui-enhanced.portal-shell-admin .m_dash:hover,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active .contar,
+body.portal-ui-enhanced.portal-shell-admin .subItem a.nav-item:hover .contar {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+body.portal-ui-enhanced.portal-shell-admin .m_dash:hover .dash,
+body.portal-ui-enhanced.portal-shell-admin .m_dash:hover .dash_text,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active .dash,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active .dash_text,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active .icon_v,
+body.portal-ui-enhanced.portal-shell-admin a.nav-item.active .text_v,
+body.portal-ui-enhanced.portal-shell-admin .subItem a.nav-item:hover .icon_v,
+body.portal-ui-enhanced.portal-shell-admin .subItem a.nav-item:hover .text_v {
+  color: #ffffff;
+}
+
+body.portal-ui-enhanced .user-popup {
+  border: 1px solid rgba(16, 35, 63, 0.08);
+  overflow: hidden;
+}
+
+body.portal-ui-enhanced .user-popup .user-info {
+  background: linear-gradient(180deg, rgba(26, 110, 245, 0.06), rgba(0, 212, 255, 0.04));
+}
+
+@media (max-width: 1100px) {
+  body.portal-ui-enhanced.portal-shell-admin .top-navbar {
+    height: auto !important;
+    min-height: 70px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .left-navbar {
+    width: min(286px, 80vw) !important;
+    max-width: 80vw;
+    min-width: 0;
+    padding-top: 82px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .content-box {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding: 108px 14px 24px !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .navbar {
+    min-height: 70px;
+    padding: 10px 16px !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .toggle {
+    padding: 10px 8px 18px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .toggle-div {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: fixed !important;
+    top: 13px;
+    right: 14px;
+    width: 46px;
+    height: 46px;
+    margin: 0;
+    border-radius: 14px;
+    border: 1px solid rgba(16, 35, 63, 0.1);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 14px 32px rgba(11, 31, 60, 0.16);
+    color: var(--portal-primary-dark);
+    font-size: 1.08rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 100120 !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .inner-nav {
+    display: none !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .logo-div {
+    width: auto !important;
+    max-width: calc(100% - 92px);
+    padding-inline: 12px;
+    background: transparent !important;
+    box-shadow: none !important;
+    z-index: 100080 !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .logo-div .logo {
+    display: flex;
+    align-items: center;
+    min-height: 70px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-admin .logo-div img {
+    width: auto !important;
+    max-width: min(190px, calc(100vw - 112px)) !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise #toggle {
+    width: min(320px, 86vw) !important;
+    max-width: 86vw;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise #right-container {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding: 86px 14px 20px !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise .fra_navbar {
+    min-height: 64px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise .nav_length {
+    height: auto !important;
+    min-height: 64px;
+    align-items: center;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise .logo {
+    width: auto !important;
+    min-width: 168px;
+    padding-right: 16px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise .after-full-div {
+    margin-left: auto;
+    gap: 8px;
+    padding-right: 10px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin .main-content,
+  body.portal-ui-enhanced.portal-shell-staff .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin #sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin #sidebar.active {
+    transform: translateX(0);
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin .toggle-sidebar {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin .content,
+  body.portal-ui-enhanced.portal-shell-staff .main-content {
+    padding: 16px !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-staff .sidebar {
+    width: 92px;
+    overflow-x: hidden;
+  }
+
+  body.portal-ui-enhanced.portal-shell-staff .sidebar-header h3,
+  body.portal-ui-enhanced.portal-shell-staff .sidebar ul li a span {
+    display: none;
+  }
+
+  body.portal-ui-enhanced.portal-shell-staff .sidebar ul li a {
+    text-align: center;
+    padding-inline: 12px;
+  }
+
+  body.portal-ui-enhanced.portal-shell-staff .sidebar ul li a i {
+    margin-right: 0 !important;
+    font-size: 1.15rem;
+  }
+
+  body.portal-ui-enhanced.portal-shell-staff .main-content {
+    margin-left: 92px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  body.portal-ui-enhanced .portal-table-scroll > table {
+    min-width: 640px;
+  }
+
+  body.portal-ui-enhanced .modal-content,
+  body.portal-ui-enhanced .portal-modal-fluid {
+    width: calc(100vw - 20px) !important;
+    margin: 10px auto !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-franchise .logo img,
+  body.portal-ui-enhanced.portal-shell-admin .logo-div img {
+    max-height: 52px !important;
+    width: auto;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin .search-bar {
+    display: none !important;
+  }
+
+  body.portal-ui-enhanced.portal-shell-superadmin .header,
+  body.portal-ui-enhanced.portal-shell-staff .content-header {
+    padding: 14px 16px !important;
+  }
+}

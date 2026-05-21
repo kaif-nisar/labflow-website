@@ -1,0 +1,344 @@
+<style>
+  .edit-model-shell {
+    max-width: 1180px;
+    margin: 8px auto;
+    padding: 12px;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    color: #1f2937;
+  }
+
+  .edit-model-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+    color: #f8fafc;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+
+  .edit-model-header h2 {
+    margin: 0 0 4px;
+    font-size: 1.3rem;
+  }
+
+  .edit-model-header p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #cbd5e1;
+  }
+
+  .edit-panel {
+    background: #ffffff;
+    border: 1px solid #d7e1ee;
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+  }
+
+  #adminEditForm {
+    margin: 0;
+  }
+
+  #adminEditForm .edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(250px, 1fr));
+    gap: 12px;
+  }
+
+  #adminEditForm .edit-section {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fbfdff;
+  }
+
+  #adminEditForm .edit-section.full {
+    grid-column: 1 / -1;
+  }
+
+  #adminEditForm .edit-section h3 {
+    margin: 0 0 8px;
+    font-size: 0.86rem;
+    color: #0f172a;
+    border-bottom: 1px dashed #d9e2ef;
+    padding-bottom: 6px;
+  }
+
+  #adminEditForm .form-group,
+  #adminEditForm .form-group-edit {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 9px;
+    position: relative;
+  }
+
+  #adminEditForm .form-group:last-child,
+  #adminEditForm .form-group-edit:last-child {
+    margin-bottom: 0;
+  }
+
+  #adminEditForm .form-group label,
+  #adminEditForm .form-group-edit label {
+    margin-bottom: 4px;
+    font-size: 0.79rem;
+    font-weight: 600;
+    color: #344054;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #adminEditForm .label-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 0.79rem;
+    font-weight: 600;
+    color: #344054;
+  }
+
+  #adminEditForm .form-group input,
+  #adminEditForm .form-group select,
+  #adminEditForm .form-group-edit input,
+  #adminEditForm .form-group-edit select {
+    width: 100%;
+    border: 1px solid #cfd9e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    background: #fff;
+    color: #0f172a;
+  }
+
+  #adminEditForm .form-group input:focus,
+  #adminEditForm .form-group select:focus,
+  #adminEditForm .form-group-edit input:focus,
+  #adminEditForm .form-group-edit select:focus {
+    outline: none;
+    border-color: #0b63ce;
+    box-shadow: 0 0 0 3px rgba(11, 99, 206, 0.12);
+  }
+
+  .field-help-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid #98a2b3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #475467;
+    background: #fff;
+    cursor: help;
+    flex-shrink: 0;
+  }
+
+  .field-help-tip {
+    display: none;
+  }
+
+  .field-help-tip.show {
+    display: block;
+  }
+
+  #adminEditForm .format-choice {
+    display: flex;
+    gap: 1.5rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  #adminEditForm .format {
+    height: 150px;
+    width: 115px;
+    border: 1px solid grey;
+    border-radius: 2px;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+    overflow: hidden;
+    background-color: #fff;
+  }
+
+  #adminEditForm .format input {
+    margin: 0;
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 15px;
+    height: 15px;
+  }
+
+  #adminEditForm .other-choice {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  #adminEditForm .other-choice label {
+    border: 1px solid #d6e0ee;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 46px;
+    cursor: pointer;
+  }
+
+  #adminEditForm .other-choice label span {
+    line-height: 1.2;
+  }
+
+  #adminEditForm .other-choice input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  #adminEditForm .manual-activate-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #d6e0ee;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    min-height: 46px;
+    cursor: pointer;
+    margin-bottom: 0;
+  }
+
+  #adminEditForm .manual-activate-label input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  #adminEditForm .form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+  }
+
+  #adminEditForm .form-actions button {
+    border: none;
+    border-radius: 9px;
+    padding: 10px 16px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #0b63ce 0%, #1d4ed8 100%);
+  }
+
+  #adminEditForm .form-actions button:hover {
+    filter: brightness(0.96);
+  }
+
+  @media (max-width: 920px) {
+    #adminEditForm .edit-grid {
+      grid-template-columns: 1fr;
+    }
+    #adminEditForm .other-choice {
+      grid-template-columns: 1fr;
+    }
+    #adminEditForm .format-choice {
+      gap: 10px;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .edit-model-shell {
+      padding: 8px;
+    }
+  }
+</style>
+
+<div class="edit-model-shell">
+  <div class="edit-model-header">
+    <h2>Edit Admin User Details</h2>
+    <p>Update account info, plan pricing, expiry rules and visibility controls.</p>
+  </div>
+
+  <form class="edit-panel" id="adminEditForm">
+    <div class="edit-grid">
+      <section class="edit-section">
+        <h3>Profile Details</h3>
+        <div class="form-group"><label for="fullName">Full Name</label><input type="text" id="fullName" name="fullName"></div>
+        <div class="form-group"><label for="username">Username</label><input type="text" id="username" name="username"></div>
+        <div class="form-group"><label for="email">Email</label><input type="email" id="email" name="email"></div>
+        <div class="form-group"><label for="role">Role</label><select id="role" name="role"><option value="admin" selected>Admin</option></select></div>
+        <div class="form-group"><label for="phoneNo">Phone Number</label><input type="text" id="phoneNo" name="phoneNo"></div>
+      </section>
+
+      <section class="edit-section">
+        <h3>Address & Status</h3>
+        <div class="form-group"><label for="state">State</label><input type="text" id="state" name="state"></div>
+        <div class="form-group"><label for="district">District</label><input type="text" id="district" name="district"></div>
+        <div class="form-group"><label for="pinCode">PIN Code</label><input type="text" id="pinCode" name="pinCode"></div>
+        <div class="form-group"><label for="address">Address</label><input type="text" id="address" name="address"></div>
+        <div class="form-group"><label for="wallet">Wallet Balance</label><input type="number" id="wallet" name="wallet"></div>
+        <div class="form-group"><label for="status">Account Status</label><select id="status" name="status"><option value="true" selected>Active</option><option value="false">Inactive</option></select></div>
+      </section>
+
+      <section class="edit-section full">
+        <h3>PDF & Feature Controls</h3>
+        <label for="format1" style="margin-bottom:6px;display:inline-block;font-size:0.79rem;font-weight:600;color:#344054;">Pdf Format</label>
+        <div class="form-group-edit format-choice">
+          <label for="format1"><div class="format1 format"><input type="radio" id="format1" name="format" value="reportFormat3"></div></label>
+          <label for="format2"><div class="format2 format"><input type="radio" name="format" id="format2" value="reportFormat1"></div></label>
+          <label for="format4"><div class="format4 format"><input type="radio" name="format" id="format4" value="reportFormat4"></div></label>
+          <label for="format3"><div class="format3 format"><input type="radio" name="format" id="format3" value="reportFormat"></div></label>
+        </div>
+        <div class="form-group-edit other-choice">
+          <label for="printsetting"><input type="checkbox" id="printsetting" name="printsetting"><span>Show print setting</span></label>
+          <label for="testdatabase"><input type="checkbox" id="testdatabase" name="testdatabase"><span>Show Test Database</span></label>
+          <label for="randomResult"><input type="checkbox" id="randomResult" name="randomResult"><span>Show Random Result</span></label>
+        </div>
+      </section>
+
+      <section class="edit-section">
+        <h3>Subscription Info</h3>
+        <div class="form-group"><label for="planType">Plan Type</label><select id="planType" name="planType"><option value="monthly" selected>Monthly</option><option value="quaterly">Half Year</option><option value="yearly">Yearly</option></select></div>
+        <div class="form-group"><label for="price">Subscription Price</label><input type="number" id="price" name="price"></div>
+        <div class="form-group"><label for="monthlyPrice">Monthly Price</label><input type="number" id="monthlyPrice" name="monthlyPrice"></div>
+        <div class="form-group"><label for="quaterlyPrice">Quarterly Price</label><input type="number" id="quaterlyPrice" name="quaterlyPrice"></div>
+        <div class="form-group"><label for="yearlyPrice">Yearly Price</label><input type="number" id="yearlyPrice" name="yearlyPrice"></div>
+        <div class="form-group"><label for="activeForDays">Plan Active For (Days)</label><input type="number" id="activeForDays" name="activeForDays"></div>
+        <div class="form-group"><label for="customExpiryDate">Custom Expiry Date</label><input type="datetime-local" id="customExpiryDate" name="customExpiryDate"></div>
+        <div class="form-group"><label for="extendFromCurrent">Extend from current expiry</label><select id="extendFromCurrent" name="extendFromCurrent"><option value="true" selected>Yes (extend)</option><option value="false">No (reset from now)</option></select></div>
+        <div class="form-group"><label for="paymentStatus">Payment Status</label><select id="paymentStatus" name="paymentStatus"><option value="paid" selected>Paid</option><option value="unpaid">Unpaid</option></select></div>
+      </section>
+
+      <section class="edit-section">
+        <h3>Grace & Manual Activation</h3>
+        <div class="form-group"><label for="graceMonths">Grace Months</label><input type="number" id="graceMonths" name="graceMonths" value="0" min="0"></div>
+        <div class="form-group"><label for="graceDays">Grace Days</label><input type="number" id="graceDays" name="graceDays" value="0" min="0"></div>
+        <div class="form-group"><label for="graceHours">Grace Hours</label><input type="number" id="graceHours" name="graceHours" value="0" min="0"></div>
+        <div class="form-group"><label for="graceNote">Grace Note</label><input type="text" id="graceNote" name="graceNote"></div>
+        <div class="form-group"><label for="paymentAmount">Manual Payment Amount (cash)</label><input type="number" id="paymentAmount" name="paymentAmount" value="0"></div>
+        <div class="form-group"><label for="paymentMethod">Payment Method</label><select id="paymentMethod" name="paymentMethod"><option value="cash" selected>Cash</option><option value="upi">UPI</option><option value="bank">Bank Transfer</option><option value="manual">Manual</option></select></div>
+        <div class="form-group">
+          <label class="manual-activate-label" for="manualActivate">
+            <input type="checkbox" id="manualActivate" name="manualActivate" />
+            Mark tenant as manually activated (received cash)
+          </label>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <button type="submit">Save Changes</button>
+      </div>
+    </div>
+  </form>
+</div>
