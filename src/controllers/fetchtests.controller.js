@@ -87,18 +87,30 @@ const allTestdetails = asyncHandler(async (req, res) => {
 
 const defaultResultsGet = asyncHandler(async (req, res) => {
 
-    const { testName } = req.body;
+    const { testName, testId, parameterId } = req.body;
 
-    console.log(testName)
+    console.log({ testName, testId, parameterId })
 
-    if (!testName) {
+    if (!testName && !parameterId) {
         throw new ApiError(500, "please click again on edit range")
     }
 
-    const testDocument = await testSchema.findOne({ 
-        tenantId: req.user.tenantId._id,
-        "parameters.Para_name": testName
-     });
+    const tenantId = req.user?.tenantId?._id;
+    const baseQuery = {
+        tenantId
+    };
+
+    if (testId) {
+        baseQuery._id = testId;
+    }
+
+    if (parameterId) {
+        baseQuery["parameters._id"] = parameterId;
+    } else if (testName) {
+        baseQuery["parameters.Para_name"] = testName;
+    }
+
+    const testDocument = await testSchema.findOne(baseQuery);
 
     console.log("testDocument:", testDocument)
 
@@ -106,7 +118,22 @@ const defaultResultsGet = asyncHandler(async (req, res) => {
         throw new ApiError(500, "test not found sorry")
     }
 
-    return res.json(testDocument);
+    const matchedParameter = testDocument.parameters.find((parameter) => {
+        if (parameterId && String(parameter?._id) === String(parameterId)) {
+            return true;
+        }
+
+        return parameter?.Para_name === testName;
+    });
+
+    if (!matchedParameter) {
+        throw new ApiError(404, "parameter not found for this test")
+    }
+
+    return res.json({
+        ...testDocument.toObject(),
+        parameter: matchedParameter
+    });
 
 })
 

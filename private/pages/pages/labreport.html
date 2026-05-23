@@ -16,7 +16,7 @@
             margin: auto;
             border-radius: 8px;
             height: auto;
-            padding: 30px 25px;
+            padding: 0px 30px 25px 25px;
             position: relative;
         }
 
@@ -486,6 +486,7 @@
             left: 50%;
             transform: translate(-50%, -50%);
             overflow-y: scroll;
+            z-index: 2147483647;
         }
 
         .row-container {
@@ -1052,7 +1053,8 @@
         }
 
         .modal {
-            z-index: 500000;
+            z-index: 2147483646;
+            isolation: isolate;
         }
 
         .para-name {

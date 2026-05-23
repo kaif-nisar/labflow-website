@@ -1092,15 +1092,15 @@ const editdefaultresult = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-        const { dataObject, tname, text, selectType } = req.body;
+        const { dataObject, tname, text, selectType, testId, parameterId } = req.body;
 
-        console.log("Request data:", { dataObject, tname, text });
+        console.log("Request data:", { dataObject, tname, text, testId, parameterId });
 
         // Input validation
-        if (!tname) {
+        if (!tname && !parameterId) {
             return res.status(400).json({
                 success: false,
-                message: "Parameter name (tname) is required"
+                message: "Parameter identity is required"
             });
         }
 
@@ -1121,20 +1121,49 @@ const editdefaultresult = asyncHandler(async (req, res) => {
 
         const tenantId = req.user.tenantId._id;
 
+        const matchQuery = {
+            tenantId: tenantId
+        };
+
+        if (testId) {
+            matchQuery._id = testId;
+        }
+
+        if (parameterId) {
+            matchQuery["parameters._id"] = parameterId;
+        } else {
+            matchQuery["parameters.Para_name"] = tname;
+        }
+
         // First check if the test with the parameter exists
-        const existingTest = await testSchema.findOne({
-            tenantId: tenantId,
-            "parameters.Para_name": tname
-        }).session(session);
+        const existingTest = await testSchema.findOne(matchQuery).session(session);
 
         if (!existingTest) {
             return res.status(404).json({
                 success: false,
-                message: `Test parameter '${tname}' not found for this tenant`
+                message: `Test parameter '${tname || parameterId}' not found for this tenant`
             });
         }
 
         console.log("Found existing test:", existingTest._id);
+
+        const matchedParameter = existingTest.parameters.find((parameter) => {
+            if (parameterId && String(parameter?._id) === String(parameterId)) {
+                return true;
+            }
+
+            return parameter?.Para_name === tname;
+        });
+
+        if (!matchedParameter) {
+            return res.status(404).json({
+                success: false,
+                message: "Requested parameter was not found in the matched test"
+            });
+        }
+
+        const resolvedParameterId = matchedParameter._id;
+        const resolvedParameterName = matchedParameter.Para_name;
 
         // Prepare update operations
         const updateOperations = {};
@@ -1142,27 +1171,31 @@ const editdefaultresult = asyncHandler(async (req, res) => {
 
         // Add text update if provided
         if (text !== undefined && text !== null && selectType === "text") {
-            updateOperations["parameters.$.text"] = text;
+            updateOperations["parameters.$[target].text"] = text;
+            updateOperations["parameters.$[target].NormalValue"] = [];
+            updateOperations["parameters.$[target].ValueType"] = "text";
             updateFields.push("text");
         }
 
         // Add NormalValue update if provided
         if (dataObject !== undefined && dataObject !== null && selectType !== "text") {
-            updateOperations["parameters.$.NormalValue"] = dataObject;
-            updateOperations["parameters.$.text"] = "";
+            updateOperations["parameters.$[target].NormalValue"] = dataObject;
+            updateOperations["parameters.$[target].text"] = "";
+            updateOperations["parameters.$[target].ValueType"] = "numeric";
             updateFields.push("NormalValue");
         }
 
         // Perform single atomic update operation
         const updatedTest = await testSchema.findOneAndUpdate(
             {
-                tenantId: tenantId,
-                "parameters.Para_name": tname
+                _id: existingTest._id,
+                tenantId: tenantId
             },
             {
                 $set: updateOperations
             },
             {
+                arrayFilters: [{ "target._id": resolvedParameterId }],
                 new: true,
                 runValidators: true,
                 session: session
@@ -1175,7 +1208,7 @@ const editdefaultresult = asyncHandler(async (req, res) => {
 
         // Find the specific updated parameter for response
         const updatedParameter = updatedTest.parameters.find(
-            param => param.Para_name === tname
+            param => String(param._id) === String(resolvedParameterId)
         );
 
         if (!updatedParameter) {
@@ -1190,7 +1223,7 @@ const editdefaultresult = asyncHandler(async (req, res) => {
                 userName: req.user.fullName || req.user.username,
                 testId: updatedTest._id,
                 testName: updatedTest.Name,
-                parameterName: tname,
+                parameterName: resolvedParameterName,
                 updatedFields: updateFields,
                 oldValues: {},
                 newValues: {}
@@ -1206,7 +1239,7 @@ const editdefaultresult = asyncHandler(async (req, res) => {
             activityLog.details.newValues.NormalValue = dataObject;
         }
 
-        console.log("Update successful for parameter:", tname);
+        console.log("Update successful for parameter:", resolvedParameterName);
 
         // Commit the transaction
         await session.commitTransaction();
@@ -1214,14 +1247,16 @@ const editdefaultresult = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: `Parameter '${tname}' updated successfully`,
+            message: `Parameter '${resolvedParameterName}' updated successfully`,
             data: {
                 testId: updatedTest._id,
                 testName: updatedTest.Name,
                 updatedParameter: {
+                    _id: updatedParameter._id,
                     Para_name: updatedParameter.Para_name,
                     text: updatedParameter.text,
-                    NormalValue: updatedParameter.NormalValue
+                    NormalValue: updatedParameter.NormalValue,
+                    ValueType: updatedParameter.ValueType
                 },
                 updatedFields: updateFields,
                 lastModified: new Date()

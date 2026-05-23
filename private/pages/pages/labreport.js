@@ -252,17 +252,65 @@ async function loadfunction() {
     let uniquetestArray2 = [...new Set(testArray2)];
     let uniquetestArray = [...new Set(testArray)];
 
+    function parseDateInput(value, fallbackTime = "") {
+        if (!value) return null;
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
+        }
+
+        const rawValue = String(value).trim();
+        if (!rawValue) return null;
+
+        const timeMatch = String(fallbackTime || "")
+            .trim()
+            .match(/^(\d{1,2}):(\d{2})/);
+        const fallbackHours = timeMatch ? Number(timeMatch[1]) : 0;
+        const fallbackMinutes = timeMatch ? Number(timeMatch[2]) : 0;
+
+        const isoDateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+        if (isoDateMatch && timeMatch) {
+            const [, year, month, day] = isoDateMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+        }
+
+        const ymdMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (ymdMatch) {
+            const [, year, month, day] = ymdMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+        }
+
+        const dmyMatch = rawValue.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+        if (dmyMatch) {
+            const [, day, month, year] = dmyMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+        }
+
+        const parsedDate = new Date(rawValue);
+        return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
     // Convert to the required format
-    function formatDateTimeLocal(isoDate) {
-        const date = new Date(isoDate);
+    function formatDateTimeLocal(dateInput, fallbackTime = "") {
+        const date = parseDateInput(dateInput, fallbackTime);
+        if (!date) return "";
+
         const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are zero-indexed
+        const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
 
         return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
+    }
+
+    function getRegisteredOnValue() {
+        return formatDateTimeLocal(booking.createdAt || booking.date, booking.createdAt ? "" : booking.time);
+    }
+
+    function getCollectedOnValue() {
+        return formatDateTimeLocal(booking.date, booking.time);
+    }
 
     // Function to apply logic to each abnormal input field 
     const processInput = (input) => {
@@ -2448,7 +2496,6 @@ async function loadfunction() {
                     bootalert.classList.remove("fade", "alert-success");
                     bootalert.classList.add("show", "alert-danger");
                     bootalert.textContent = data.message;
-                    showStatusMessage(data.message || "No LIS data found.", "error");
                     setTimeout(() => {
                         bootalert.classList.remove("show");
                         bootalert.classList.add("fade");
@@ -2465,19 +2512,16 @@ async function loadfunction() {
                     bootalert.classList.remove("fade", "alert-danger");
                     bootalert.classList.add("show", "alert-success");
                     bootalert.textContent = data.message;
-                    showStatusMessage(data.message || "LIS results loaded successfully.", "success");
                 } else {
                     bootalert.classList.remove("fade", "alert-success");
                     bootalert.classList.add("show", "alert-danger");
                     bootalert.textContent = data.message;
-                    showStatusMessage(data.message || "LIS results not available.", "warn");
                 }
 
             } catch (error) {
                 bootalert.classList.remove("fade", "alert-success");
                 bootalert.classList.add("show", "alert-danger");
                 bootalert.textContent = error.message;
-                showStatusMessage(error.message || "Failed to fetch LIS results.", "error");
             } finally {
                 getresultbutton.disabled = false;
             }
@@ -2516,18 +2560,11 @@ async function loadfunction() {
 
     // for seeting default time in input fields
     function defaultdateandtime() {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0'); // Months are 0-based, so we add 1
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const reportedAt = new Date();
+        reportedAt.setMinutes(reportedAt.getMinutes() + 30);
 
-        // Format the date and time to YYYY-MM-DDTHH:MM
-        const formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-
-        document.getElementById('reportedOn').value = formattedDateTime;
-    };
+        document.getElementById('reportedOn').value = formatDateTimeLocal(reportedAt);
+    }
 
     // for populating patient information
     function populateHea() {
@@ -2546,11 +2583,11 @@ async function loadfunction() {
             <div class="right2">
                 <div class="registered-div2">
                     <div class="registeration-tag2">Registered on:</div>
-                    <span style = "text-align: center;"> ${new Date(booking.date).toLocaleDateString().split('T')[0]}    ${booking.time}</span>
+                    <input name="DateTime" type="datetime-local" id="registeredOn" value="${getRegisteredOnValue()}">
                 </div>
                 <div class="registered-div2">
                     <div class="registeration-tag2">Collected on:</div>
-                    <input name="DateTime" type="datetime-local" id="collectedOn" name="collectedOn" value="${new Date(booking.date).toISOString().split('T')[0]}T${booking.time}">
+                    <input name="DateTime" type="datetime-local" id="collectedOn" name="collectedOn" value="${getCollectedOnValue()}">
                 </div>
                 <div class="registered-div2">
                     <div class="registeration-tag2">Received on:</div>
@@ -3301,15 +3338,27 @@ function openModal(button) {
     const valueInput = row?.querySelector('.value-input');
     // Prefer the bound parameter name from the row to avoid mismatches with display text.
     const firstColumnValue = valueInput?.dataset?.paramName || row?.cells?.[1]?.innerText?.trim() || "";
+    const testId = valueInput?.dataset?.testId || "";
+    const parameterId = valueInput?.dataset?.paramId || "";
     const modal = document.getElementById('modal');
     if (modal) {
         modal.dataset.referenceTestName = firstColumnValue;
+        modal.dataset.referenceTestId = testId;
+        modal.dataset.referenceParamId = parameterId;
     }
-    fetchDefaultResults(firstColumnValue);
+    fetchDefaultResults({
+        testName: firstColumnValue,
+        testId,
+        parameterId
+    });
     // Trigger data collection and send when needed
     const submitBtn = document.getElementById('submit-button');
     submitBtn.onclick = function () {
-        gatherFormData(firstColumnValue);
+        gatherFormData({
+            testName: firstColumnValue,
+            testId,
+            parameterId
+        });
     };
 }
 
@@ -3477,9 +3526,21 @@ function resolveDisplayedReference(dataObject = [], patient = {}) {
     };
 }
 
-function syncRenderedReferenceValues(testName, payload = {}) {
-    const normalizedTargetName = String(testName || "").trim();
-    if (!normalizedTargetName) return;
+function refreshReferenceComparisonEffects(input) {
+    if (!input) return;
+
+    processInput(input);
+
+    if (typeof handleInputChange === "function") {
+        handleInputChange(input);
+    }
+}
+
+function syncRenderedReferenceValues(referenceTarget = {}, payload = {}) {
+    const normalizedTargetName = String(referenceTarget?.testName || referenceTarget || "").trim();
+    const normalizedTestId = String(referenceTarget?.testId || "").trim();
+    const normalizedParameterId = String(referenceTarget?.parameterId || "").trim();
+    if (!normalizedTargetName && !normalizedParameterId) return;
 
     const patient = getCurrentReferencePatient();
     const referenceType = String(payload.selectType || "numeric").toLowerCase();
@@ -3491,8 +3552,18 @@ function syncRenderedReferenceValues(testName, payload = {}) {
     document.querySelectorAll("table tbody tr").forEach((row) => {
         const testNameCell = row.cells?.[1];
         if (!testNameCell) return;
+        const valueInput = row.querySelector(".unit input");
+        const rowTestId = String(valueInput?.dataset?.testId || "").trim();
+        const rowParameterId = String(valueInput?.dataset?.paramId || "").trim();
 
-        if (String(testNameCell.innerText || "").trim() !== normalizedTargetName) {
+        const isSameParameter = normalizedParameterId
+            ? rowParameterId === normalizedParameterId
+            : (
+                String(testNameCell.innerText || "").trim() === normalizedTargetName &&
+                (!normalizedTestId || rowTestId === normalizedTestId)
+            );
+
+        if (!isSameParameter) {
             return;
         }
 
@@ -3505,18 +3576,21 @@ function syncRenderedReferenceValues(testName, payload = {}) {
             }
             referenceCell.append(referenceText);
         }
-
-        const valueInput = row.querySelector(".unit input");
         if (valueInput) {
             valueInput.dataset.referenceType = referenceType;
             valueInput.dataset.lower = referenceType === "numeric" ? resolvedNumericReference.lowerValue : "";
             valueInput.dataset.upper = referenceType === "numeric" ? resolvedNumericReference.upperValue : "";
+            refreshReferenceComparisonEffects(valueInput);
         }
     });
 }
 
 // for gathering reference data 
-async function gatherFormData(tname) {
+async function gatherFormData(referenceTarget = {}) {
+    const tname = String(referenceTarget?.testName || referenceTarget || "").trim();
+    const testId = String(referenceTarget?.testId || "").trim();
+    const parameterId = String(referenceTarget?.parameterId || "").trim();
+
     // for normal value data retrieve
     const selectType = document.getElementById('select-type').value;
     let dataObject = {};
@@ -3543,7 +3617,7 @@ async function gatherFormData(tname) {
     await fetch(`${BASE_URL}/api/v1/user/edit-defaultresults`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataObject, tname, text, selectType })
+        body: JSON.stringify({ dataObject, tname, text, selectType, testId, parameterId })
     })
         .then(async response => {
             const body = await response.json().catch(() => ({}));
@@ -3551,7 +3625,7 @@ async function gatherFormData(tname) {
         })
         .then(result => {
             if (result.ok) {
-                syncRenderedReferenceValues(tname, { dataObject, text, selectType });
+                syncRenderedReferenceValues({ testName: tname, testId, parameterId }, { dataObject, text, selectType });
                 window.showStatusMessage?.(result.body?.message || "Reference value updated successfully.", "success");
                 closeModal();
             } else {
@@ -3568,8 +3642,12 @@ async function gatherFormData(tname) {
 
 //-----------------------------fetching data result----------------------------------
 // for fetching referene value 
-async function fetchDefaultResults(testName) {
+async function fetchDefaultResults(referenceTarget = {}) {
     try {
+        const testName = String(referenceTarget?.testName || referenceTarget || "").trim();
+        const testId = String(referenceTarget?.testId || "").trim();
+        const parameterId = String(referenceTarget?.parameterId || "").trim();
+
         if (!testName) {
             throw new Error("Missing parameter name for reference edit.");
         }
@@ -3579,7 +3657,7 @@ async function fetchDefaultResults(testName) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ testName })
+            body: JSON.stringify({ testName, testId, parameterId })
         });
         const data = await response.json().catch(() => ({}));
 
@@ -3587,8 +3665,15 @@ async function fetchDefaultResults(testName) {
             throw new Error(data?.message || "Failed to fetch reference value.");
         }
 
-        const parameters = Array.isArray(data?.parameters) ? data.parameters : [];
-        const matchedParameter = parameters.find((para) => para?.Para_name === testName);
+        const matchedParameter = data?.parameter
+            || (Array.isArray(data?.parameters)
+                ? data.parameters.find((para) => {
+                    if (parameterId && String(para?._id || "") === parameterId) {
+                        return true;
+                    }
+                    return para?.Para_name === testName;
+                })
+                : null);
 
         if (!matchedParameter) {
             throw new Error(`Reference configuration not found for '${testName}'.`);

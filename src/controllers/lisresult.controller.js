@@ -18,7 +18,7 @@ const getresult = async (req, res) => {
 
         const doc = await lisdata.create({
             lisData: dataObject
-        })
+        });
 
         if (!doc) {
             return res.status(500).json({
@@ -43,7 +43,7 @@ const getresult = async (req, res) => {
             success: false
         });
     }
-}
+};
 
 const getbarcoderesult = async (req, res) => {
     try {
@@ -52,7 +52,6 @@ const getbarcoderesult = async (req, res) => {
         console.log(barcodeIds);
 
         if (!Array.isArray(barcodeIds) || barcodeIds.length === 0) {
-
             console.log("barcodeIds should be a non-empty array");
 
             return res.status(400).json({
@@ -69,19 +68,18 @@ const getbarcoderesult = async (req, res) => {
 
         const groupedResults = {};
         for (const barcodeId of barcodeIds) {
-            groupedResults[barcodeId] = docs.filter(doc => doc.lisData.sample_id === barcodeId);
+            groupedResults[barcodeId] = docs.filter((doc) => doc.lisData.sample_id === barcodeId);
         }
 
         console.log(groupedResults);
 
-        if (!groupedResults || Object.values(groupedResults).every(arr => arr.length === 0)) {
-
+        if (!groupedResults || Object.values(groupedResults).every((arr) => arr.length === 0)) {
             const lisdocs = await lisdata.findOne({});
 
             if (!lisdocs) {
                 return res.status(500).json({
                     data: null,
-                    message: "❗ The LIS (Laboratory Information System) setup for your machines has not yet been completed. As a result, data is currently not being automatically received on your portal. If you would like to enable this feature, we are ready to assist you with the configuration right away.Please feel free to contact us at 9520034895 or email us at LabFlowfo1@gmail.com for further assistance.",
+                    message: "The LIS (Laboratory Information System) setup for your machines has not yet been completed. As a result, data is currently not being automatically received on your portal. If you would like to enable this feature, we are ready to assist you with the configuration right away. Please feel free to contact us at 9520976242 or email us at qodex786@gmail.com for further assistance.",
                     status: "success",
                     success: true
                 });
@@ -115,4 +113,4 @@ const getbarcoderesult = async (req, res) => {
 export {
     getresult,
     getbarcoderesult
-}
+};
