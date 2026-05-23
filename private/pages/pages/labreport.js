@@ -381,6 +381,7 @@ async function loadfunction() {
             if (highLowSpan) highLowSpan.textContent = "";
         }
     };
+    window.__labReportProcessInput = processInput;
 
     // --- Text reference dropdown state/helpers ---
     const textDropdownState = {
@@ -2227,6 +2228,7 @@ async function loadfunction() {
             setValue(NeutrophilsAbsoluteCount, (percentage / 100) * wbc);
         }
     }
+    window.__labReportHandleInputChange = handleInputChange;
 
     // for order in sequence heading, pannels, tests, tables
     async function groupTablesByCategory() {
@@ -3332,7 +3334,12 @@ initialization();
 
 // Function to open the modal
 function openModal(button) {
-    document.getElementById('modal').style.display = 'flex';
+    const modalElement = document.getElementById('modal');
+    const contentBox = document.getElementById('content-box');
+    if (contentBox) {
+        contentBox.classList.add('reference-modal-active');
+    }
+    modalElement.style.display = 'flex';
     // Get the row of the clicked button
     const row = button.closest('tr');
     const valueInput = row?.querySelector('.value-input');
@@ -3364,7 +3371,14 @@ function openModal(button) {
 
 // Function to close the modal
 function closeModal() {
-    document.getElementById('modal').style.display = 'none';
+    const modalElement = document.getElementById('modal');
+    const contentBox = document.getElementById('content-box');
+    if (modalElement) {
+        modalElement.style.display = 'none';
+    }
+    if (contentBox) {
+        contentBox.classList.remove('reference-modal-active');
+    }
 }
 
 // Close the modal if clicked outside the form-section
@@ -3529,11 +3543,9 @@ function resolveDisplayedReference(dataObject = [], patient = {}) {
 function refreshReferenceComparisonEffects(input) {
     if (!input) return;
 
-    processInput(input);
+    window.__labReportProcessInput?.(input);
 
-    if (typeof handleInputChange === "function") {
-        handleInputChange(input);
-    }
+    window.__labReportHandleInputChange?.(input);
 }
 
 function syncRenderedReferenceValues(referenceTarget = {}, payload = {}) {

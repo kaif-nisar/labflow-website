@@ -489,6 +489,11 @@
             z-index: 2147483647;
         }
 
+        #content-box.reference-modal-active {
+            z-index: 3000000001;
+            isolation: auto;
+        }
+
         .row-container {
             display: flex;
             align-items: center;
@@ -1572,6 +1577,27 @@
             top: 75px;
             right: 2%;
             width: 75%;
+            z-index: 50000;
+            opacity: 1;
+            background-color: #ffffff;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+        }
+
+        .alert.alert-success {
+            background-color: #dff6e7;
+            border-color: #7bc69a;
+            color: #135c2b;
+        }
+
+        .alert.alert-danger {
+            background-color: #fde7e7;
+            border-color: #e3a1a1;
+            color: #8f1d1d;
+        }
+
+        .alert.show {
+            opacity: 1;
         }
 
         /* .table td,
