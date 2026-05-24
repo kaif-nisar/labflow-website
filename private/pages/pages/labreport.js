@@ -47,60 +47,798 @@ async function loadfunction() {
     const DIFFERENTIAL_PERCENTAGE_FIELD_NAMES = [
         "Neutrophils Percentage",
         "Monocytes Percentage",
-        "Lymphocyte Percentage",
+        "Lymphocytes Percentage",
         "Eosinophils Percentage",
         "Basophils Percentage",
     ];
-    const DIFFERENTIAL_PERCENTAGE_FIELD_SET = new Set(DIFFERENTIAL_PERCENTAGE_FIELD_NAMES);
+    const DIFFERENTIAL_PERCENTAGE_FIELD_ALIASES = {
+        "Neutrophils Percentage": ["Neutrophils Percentage"],
+        "Monocytes Percentage": ["Monocytes Percentage"],
+        "Lymphocytes Percentage": ["Lymphocytes Percentage", "Lymphocyte Percentage"],
+        "Eosinophils Percentage": ["Eosinophils Percentage"],
+        "Basophils Percentage": ["Basophils Percentage"],
+    };
     const DIFFERENTIAL_TOTAL_TARGET = 100;
     const DIFFERENTIAL_TOTAL_TOLERANCE = 0.01;
-
-    const FORMULA_FIELD_DEFINITIONS = {
-        "Neutrophils-Absolute Count": "(Total Leucocytes Count / 100) * Neutrophils Percentage",
-        "Lymphocytes-Absolute Count": "(Lymphocyte Percentage / 100) * Total Leucocytes Count",
-        "Eosinophil-Absolute Count": "(Eosinophils Percentage / 100) * Total Leucocytes Count",
-        "Monocyte- Absolute Count": "(Monocytes Percentage / 100) * Total Leucocytes Count",
-        "Basophils-Absolute Count": "(Basophils Percentage / 100) * Total Leucocytes Count",
-        "Neutrophil Lymphocyte Ratio": "Neutrophils-Absolute Count / Lymphocytes-Absolute Count",
-        "Mean Corpuscular Volume (MCV)": "Hematocrit (HCT) * 10 / Total Red Blood Cell Count",
-        "Mean Corpuscular Hemoglobin (MCH)": "Hemoglobin * 10 / Total Red Blood Cell Count",
-        "Mean Corpuscular Hemoglobin Concentration (MCHC)": "Hemoglobin * 100 / Hematocrit (HCT)",
-        "MCV": "PACKED CELL VOLUME (PCV) * 10 / RBC COUNT",
-        "MCH": "HAEMOGLOBIN (HB) * 10 / RBC COUNT",
-        "MCHC": "HAEMOGLOBIN (HB) * 100 / PACKED CELL VOLUME (PCV)",
-        "VLDL Cholesterol": "Triglycerides / 5",
-        "LDL Cholesterol": "Total Cholesterol - HDL Cholesterol - VLDL Cholesterol",
-        "LDL / HDL Ratio": "LDL Cholesterol / HDL Cholesterol",
-        "Total Cholesterol / HDL": "Total Cholesterol / HDL Cholesterol",
-        "TG / HDL": "Triglycerides / HDL Cholesterol",
-        "Non-HDL cholesterol": "Total Cholesterol - HDL Cholesterol",
-        "Serum Bilirubin (Indirect)": "Serum Bilirubin (Total) - Serum Bilirubin (Direct)",
-        "Globulin": "Serum Protein - Serum Albumin",
-        "A/G Ratio": "Serum Albumin / Globulin",
-        "Sgot/Sgpt Ratio Formula": "SGPT (ALT) / SGOT (AST)",
-        "BUN": "Serum Urea * 0.467",
-        "Urea / Creatinine Ratio": "Serum Urea / Serum Creatinine",
-        "BUN / Creatinine Ratio": "BUN / Serum Creatinine",
-        "Transferrin Saturation": "Iron * 100 / Total Iron Binding Capacity",
-        "Estimated average glucose": "(28.7 * GLYCATED HAEMOGLOBIN(HbA1c)) - 46.7",
-        "index": "Prothrombin Time Patient Value / Prothrombin Time Control Value",
+    const FORMULA_FUNCTIONS = {
+        abs: (...values) => Math.abs(values[0]),
+        ceil: (...values) => Math.ceil(values[0]),
+        floor: (...values) => Math.floor(values[0]),
+        max: (...values) => Math.max(...values),
+        min: (...values) => Math.min(...values),
+        pow: (...values) => Math.pow(values[0], values[1]),
+        round: (...values) => {
+            const number = Number(values[0] || 0);
+            const precision = Number.isFinite(values[1]) ? values[1] : 0;
+            const scale = 10 ** precision;
+            return Math.round(number * scale) / scale;
+        },
     };
+    const formulaState = {
+        formulas: [],
+        formulaByTargetMasterKey: new Map(),
+        dependentsBySourceMasterKey: new Map(),
+        inputByMasterKey: new Map(),
+    };
+    const LEGACY_FORMULA_CONFIGS = [
+        {
+            targetNames: ["Neutrophils-Absolute Count"],
+            displayExpression: "(Total Leucocytes Count / 100) * Neutrophils Percentage",
+            expressionTemplate: "({{tlc}} / 100) * {{neutrophilsPercentage}}",
+            dependencies: {
+                tlc: ["Total Leucocytes Count"],
+                neutrophilsPercentage: ["Neutrophils Percentage"],
+            },
+        },
+        {
+            targetNames: ["Lymphocytes-Absolute Count"],
+            displayExpression: "(Lymphocyte Percentage / 100) * Total Leucocytes Count",
+            expressionTemplate: "({{lymphocytePercentage}} / 100) * {{tlc}}",
+            dependencies: {
+                lymphocytePercentage: ["Lymphocyte Percentage"],
+                tlc: ["Total Leucocytes Count"],
+            },
+        },
+        {
+            targetNames: ["Eosinophil-Absolute Count"],
+            displayExpression: "(Eosinophils Percentage / 100) * Total Leucocytes Count",
+            expressionTemplate: "({{eosinophilsPercentage}} / 100) * {{tlc}}",
+            dependencies: {
+                eosinophilsPercentage: ["Eosinophils Percentage"],
+                tlc: ["Total Leucocytes Count"],
+            },
+        },
+        {
+            targetNames: ["Monocyte- Absolute Count"],
+            displayExpression: "(Monocytes Percentage / 100) * Total Leucocytes Count",
+            expressionTemplate: "({{monocytesPercentage}} / 100) * {{tlc}}",
+            dependencies: {
+                monocytesPercentage: ["Monocytes Percentage"],
+                tlc: ["Total Leucocytes Count"],
+            },
+        },
+        {
+            targetNames: ["Basophils-Absolute Count"],
+            displayExpression: "(Basophils Percentage / 100) * Total Leucocytes Count",
+            expressionTemplate: "({{basophilsPercentage}} / 100) * {{tlc}}",
+            dependencies: {
+                basophilsPercentage: ["Basophils Percentage"],
+                tlc: ["Total Leucocytes Count"],
+            },
+        },
+        {
+            targetNames: ["Neutrophil Lymphocyte Ratio"],
+            displayExpression: "Neutrophils-Absolute Count / Lymphocytes-Absolute Count",
+            expressionTemplate: "{{neutrophilsAbsolute}} / {{lymphocytesAbsolute}}",
+            dependencies: {
+                neutrophilsAbsolute: ["Neutrophils-Absolute Count"],
+                lymphocytesAbsolute: ["Lymphocytes-Absolute Count"],
+            },
+        },
+        {
+            targetNames: ["Mean Corpuscular Volume (MCV)"],
+            displayExpression: "Hematocrit (HCT) * 10 / Total Red Blood Cell Count",
+            expressionTemplate: "({{hct}} * 10) / {{rbcCount}}",
+            dependencies: {
+                hct: ["Hematocrit (HCT)", "PACKED CELL VOLUME (PCV)", "PCV"],
+                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC"],
+            },
+        },
+        {
+            targetNames: ["Mean Corpuscular Hemoglobin (MCH)"],
+            displayExpression: "Hemoglobin * 10 / Total Red Blood Cell Count",
+            expressionTemplate: "({{hemoglobin}} * 10) / {{rbcCount}}",
+            dependencies: {
+                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB"],
+                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC"],
+            },
+        },
+        {
+            targetNames: ["Mean Corpuscular Hemoglobin Concentration (MCHC)"],
+            displayExpression: "Hemoglobin * 100 / Hematocrit (HCT)",
+            expressionTemplate: "({{hemoglobin}} * 100) / {{hct}}",
+            dependencies: {
+                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB"],
+                hct: ["Hematocrit (HCT)", "PACKED CELL VOLUME (PCV)", "PCV"],
+            },
+        },
+        {
+            targetNames: ["MCV"],
+            displayExpression: "PACKED CELL VOLUME (PCV) * 10 / RBC COUNT",
+            expressionTemplate: "({{pcv}} * 10) / {{rbcCount}}",
+            dependencies: {
+                pcv: ["PACKED CELL VOLUME (PCV)", "Hematocrit (HCT)", "PCV"],
+                rbcCount: ["RBC COUNT", "Total Red Blood Cell Count", "RBC"],
+            },
+        },
+        {
+            targetNames: ["MCH"],
+            displayExpression: "HAEMOGLOBIN (HB) * 10 / RBC COUNT",
+            expressionTemplate: "({{hemoglobin}} * 10) / {{rbcCount}}",
+            dependencies: {
+                hemoglobin: ["HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "Hemoglobin", "HB"],
+                rbcCount: ["RBC COUNT", "Total Red Blood Cell Count", "RBC"],
+            },
+        },
+        {
+            targetNames: ["MCHC"],
+            displayExpression: "HAEMOGLOBIN (HB) * 100 / PACKED CELL VOLUME (PCV)",
+            expressionTemplate: "({{hemoglobin}} * 100) / {{pcv}}",
+            dependencies: {
+                hemoglobin: ["HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "Hemoglobin", "HB"],
+                pcv: ["PACKED CELL VOLUME (PCV)", "Hematocrit (HCT)", "PCV"],
+            },
+        },
+        {
+            targetNames: ["VLDL Cholesterol"],
+            displayExpression: "Triglycerides / 5",
+            expressionTemplate: "{{triglycerides}} / 5",
+            dependencies: {
+                triglycerides: ["Triglycerides"],
+            },
+        },
+        {
+            targetNames: ["LDL Cholesterol"],
+            displayExpression: "Total Cholesterol - HDL Cholesterol - VLDL Cholesterol",
+            expressionTemplate: "{{totalCholesterol}} - {{hdlCholesterol}} - {{vldlCholesterol}}",
+            dependencies: {
+                totalCholesterol: ["Total Cholesterol"],
+                hdlCholesterol: ["HDL Cholesterol"],
+                vldlCholesterol: ["VLDL Cholesterol"],
+            },
+        },
+        {
+            targetNames: ["LDL / HDL Ratio"],
+            displayExpression: "LDL Cholesterol / HDL Cholesterol",
+            expressionTemplate: "{{ldlCholesterol}} / {{hdlCholesterol}}",
+            dependencies: {
+                ldlCholesterol: ["LDL Cholesterol"],
+                hdlCholesterol: ["HDL Cholesterol"],
+            },
+        },
+        {
+            targetNames: ["Total Cholesterol / HDL"],
+            displayExpression: "Total Cholesterol / HDL Cholesterol",
+            expressionTemplate: "{{totalCholesterol}} / {{hdlCholesterol}}",
+            dependencies: {
+                totalCholesterol: ["Total Cholesterol"],
+                hdlCholesterol: ["HDL Cholesterol"],
+            },
+        },
+        {
+            targetNames: ["TG / HDL"],
+            displayExpression: "Triglycerides / HDL Cholesterol",
+            expressionTemplate: "{{triglycerides}} / {{hdlCholesterol}}",
+            dependencies: {
+                triglycerides: ["Triglycerides"],
+                hdlCholesterol: ["HDL Cholesterol"],
+            },
+        },
+        {
+            targetNames: ["Non-HDL cholesterol"],
+            displayExpression: "Total Cholesterol - HDL Cholesterol",
+            expressionTemplate: "{{totalCholesterol}} - {{hdlCholesterol}}",
+            dependencies: {
+                totalCholesterol: ["Total Cholesterol"],
+                hdlCholesterol: ["HDL Cholesterol"],
+            },
+        },
+        {
+            targetNames: ["Serum Bilirubin (Indirect)"],
+            displayExpression: "Serum Bilirubin (Total) - Serum Bilirubin (Direct)",
+            expressionTemplate: "{{bilirubinTotal}} - {{bilirubinDirect}}",
+            dependencies: {
+                bilirubinTotal: ["Serum Bilirubin (Total)"],
+                bilirubinDirect: ["Serum Bilirubin (Direct)"],
+            },
+        },
+        {
+            targetNames: ["Globulin"],
+            displayExpression: "Serum Protein - Serum Albumin",
+            expressionTemplate: "{{serumProtein}} - {{serumAlbumin}}",
+            dependencies: {
+                serumProtein: ["Serum Protein"],
+                serumAlbumin: ["Serum Albumin"],
+            },
+        },
+        {
+            targetNames: ["A/G Ratio"],
+            displayExpression: "Serum Albumin / Globulin",
+            expressionTemplate: "{{serumAlbumin}} / {{globulin}}",
+            dependencies: {
+                serumAlbumin: ["Serum Albumin"],
+                globulin: ["Globulin"],
+            },
+        },
+        {
+            targetNames: ["Sgot/Sgpt Ratio Formula", "SGOT/SGPT RATIO"],
+            displayExpression: "SGPT (ALT) / SGOT (AST)",
+            expressionTemplate: "{{sgpt}} / {{sgot}}",
+            dependencies: {
+                sgpt: ["SGPT (ALT)"],
+                sgot: ["SGOT (AST)"],
+            },
+        },
+        {
+            targetNames: ["BUN"],
+            displayExpression: "Serum Urea * 0.467",
+            expressionTemplate: "{{serumUrea}} * 0.467",
+            dependencies: {
+                serumUrea: ["Serum Urea"],
+            },
+        },
+        {
+            targetNames: ["Urea / Creatinine Ratio"],
+            displayExpression: "Serum Urea / Serum Creatinine",
+            expressionTemplate: "{{serumUrea}} / {{serumCreatinine}}",
+            dependencies: {
+                serumUrea: ["Serum Urea"],
+                serumCreatinine: ["Serum Creatinine"],
+            },
+        },
+        {
+            targetNames: ["BUN / Creatinine Ratio"],
+            displayExpression: "BUN / Serum Creatinine",
+            expressionTemplate: "{{bun}} / {{serumCreatinine}}",
+            dependencies: {
+                bun: ["BUN"],
+                serumCreatinine: ["Serum Creatinine"],
+            },
+        },
+        {
+            targetNames: ["Transferrin Saturation"],
+            displayExpression: "Iron * 100 / Total Iron Binding Capacity",
+            expressionTemplate: "({{iron}} * 100) / {{tibc}}",
+            dependencies: {
+                iron: ["Iron"],
+                tibc: ["Total Iron Binding Capacity"],
+            },
+        },
+        {
+            targetNames: ["Estimated average glucose", "Estimatedaverageglucose"],
+            displayExpression: "(28.7 * GLYCATED HAEMOGLOBIN(HbA1c)) - 46.7",
+            expressionTemplate: "(28.7 * {{hba1c}}) - 46.7",
+            dependencies: {
+                hba1c: ["GLYCATED HAEMOGLOBIN(HbA1c)"],
+            },
+        },
+        {
+            targetNames: ["index"],
+            displayExpression: "Prothrombin Time Patient Value / Prothrombin Time Control Value",
+            expressionTemplate: "{{ptPatient}} / {{ptControl}}",
+            dependencies: {
+                ptPatient: ["Prothrombin Time Patient Value"],
+                ptControl: ["Prothrombin Time Control Value"],
+            },
+        },
+    ];
 
-    function normalizeFormulaLookupKey(value) {
+    function normalizeFieldIdentity(value) {
         return String(value || "")
             .trim()
             .toLowerCase()
             .replace(/\s+/g, "");
     }
 
-    function getFormulaDefinition(fieldName) {
-        const normalizedFieldName = normalizeFormulaLookupKey(fieldName);
-        for (const [key, formula] of Object.entries(FORMULA_FIELD_DEFINITIONS)) {
-            if (normalizeFormulaLookupKey(key) === normalizedFieldName) {
-                return formula;
+    const DIFFERENTIAL_PERCENTAGE_FIELD_SET = new Set(
+        Object.values(DIFFERENTIAL_PERCENTAGE_FIELD_ALIASES)
+            .flat()
+            .map((fieldName) => normalizeFieldIdentity(fieldName))
+    );
+
+    function tokenizeFormulaExpression(expression) {
+        const source = String(expression || "").trim();
+        const tokens = [];
+        let index = 0;
+
+        while (index < source.length) {
+            const char = source[index];
+
+            if (/\s/.test(char)) {
+                index += 1;
+                continue;
+            }
+
+            if ("+-*/(),".includes(char)) {
+                tokens.push({ type: char, value: char });
+                index += 1;
+                continue;
+            }
+
+            if (char === "{" && source[index + 1] === "{") {
+                const endIndex = source.indexOf("}}", index + 2);
+                if (endIndex === -1) {
+                    throw new Error("Formula placeholder बंद नहीं हुआ है।");
+                }
+
+                const parameterId = source.slice(index + 2, endIndex).trim();
+                tokens.push({ type: "variable", value: parameterId });
+                index = endIndex + 2;
+                continue;
+            }
+
+            if (/\d|\./.test(char)) {
+                let endIndex = index + 1;
+                while (endIndex < source.length && /[\d.]/.test(source[endIndex])) {
+                    endIndex += 1;
+                }
+
+                tokens.push({
+                    type: "number",
+                    value: Number.parseFloat(source.slice(index, endIndex)),
+                });
+                index = endIndex;
+                continue;
+            }
+
+            if (/[a-zA-Z_]/.test(char)) {
+                let endIndex = index + 1;
+                while (endIndex < source.length && /[a-zA-Z0-9_]/.test(source[endIndex])) {
+                    endIndex += 1;
+                }
+
+                tokens.push({
+                    type: "identifier",
+                    value: source.slice(index, endIndex).toLowerCase(),
+                });
+                index = endIndex;
+                continue;
+            }
+
+            throw new Error(`Unsupported token "${char}"`);
+        }
+
+        return tokens;
+    }
+
+    function createFormulaCursor(tokens) {
+        let index = 0;
+
+        return {
+            peek() {
+                return tokens[index] || null;
+            },
+            next() {
+                return tokens[index++] || null;
+            },
+            isComplete() {
+                return index >= tokens.length;
+            },
+        };
+    }
+
+    function parseFormulaExpression(expression, resolveVariable) {
+        const tokens = tokenizeFormulaExpression(expression);
+        const cursor = createFormulaCursor(tokens);
+
+        function parseExpression() {
+            let value = parseTerm();
+
+            while (true) {
+                const token = cursor.peek();
+                if (!token || (token.type !== "+" && token.type !== "-")) {
+                    return value;
+                }
+
+                cursor.next();
+                const right = parseTerm();
+                value = token.type === "+" ? value + right : value - right;
+            }
+        }
+
+        function parseTerm() {
+            let value = parseFactor();
+
+            while (true) {
+                const token = cursor.peek();
+                if (!token || (token.type !== "*" && token.type !== "/")) {
+                    return value;
+                }
+
+                cursor.next();
+                const right = parseFactor();
+
+                if (token.type === "/") {
+                    if (right === 0) {
+                        throw new Error("Division by zero");
+                    }
+                    value /= right;
+                    continue;
+                }
+
+                value *= right;
+            }
+        }
+
+        function parseFactor() {
+            const token = cursor.peek();
+            if (!token) {
+                throw new Error("Formula expression अधूरा है।");
+            }
+
+            if (token.type === "+") {
+                cursor.next();
+                return parseFactor();
+            }
+
+            if (token.type === "-") {
+                cursor.next();
+                return -parseFactor();
+            }
+
+            if (token.type === "number") {
+                cursor.next();
+                return token.value;
+            }
+
+            if (token.type === "variable") {
+                cursor.next();
+                return resolveVariable(token.value);
+            }
+
+            if (token.type === "(") {
+                cursor.next();
+                const nestedValue = parseExpression();
+                const closing = cursor.next();
+                if (!closing || closing.type !== ")") {
+                    throw new Error("Closing bracket missing");
+                }
+                return nestedValue;
+            }
+
+            if (token.type === "identifier") {
+                cursor.next();
+                const opening = cursor.next();
+                if (!opening || opening.type !== "(") {
+                    throw new Error(`Function ${token.value} malformed`);
+                }
+
+                const args = [];
+                if (cursor.peek()?.type !== ")") {
+                    while (true) {
+                        args.push(parseExpression());
+                        if (cursor.peek()?.type === ",") {
+                            cursor.next();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+
+                const closing = cursor.next();
+                if (!closing || closing.type !== ")") {
+                    throw new Error(`Function ${token.value} closing bracket missing`);
+                }
+
+                const handler = FORMULA_FUNCTIONS[token.value];
+                if (!handler) {
+                    throw new Error(`Unsupported function ${token.value}`);
+                }
+
+                return handler(...args);
+            }
+
+            throw new Error(`Unexpected token ${token.value}`);
+        }
+
+        const result = parseExpression();
+        if (!cursor.isComplete()) {
+            throw new Error("Formula expression invalid है।");
+        }
+        return result;
+    }
+
+    async function loadTenantFormulas() {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/formulas/active`);
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || "Failed to load formulas");
+            }
+
+            formulaState.formulas = Array.isArray(result.data) ? result.data : [];
+        } catch (error) {
+            formulaState.formulas = [];
+            console.error("Error loading formulas:", error);
+        }
+    }
+
+    function buildLegacyFieldIndex() {
+        const fieldIndex = new Map();
+
+        document.querySelectorAll(".value-input[data-param-id]").forEach((input) => {
+            const names = [
+                input.dataset.paramName,
+                input.dataset.id,
+                input.closest("tr")?.children?.[1]?.textContent,
+            ];
+
+            names.forEach((name) => {
+                const normalizedName = normalizeFieldIdentity(name);
+                if (normalizedName && !fieldIndex.has(normalizedName)) {
+                    fieldIndex.set(normalizedName, input);
+                }
+            });
+        });
+
+        return fieldIndex;
+    }
+
+    function findLegacyInput(fieldIndex, names = []) {
+        for (const name of names) {
+            const normalizedName = normalizeFieldIdentity(name);
+            const matchedInput = fieldIndex.get(normalizedName);
+            if (matchedInput) {
+                return matchedInput;
             }
         }
         return null;
+    }
+
+    function buildLegacyFallbackFormulas(savedFormulas) {
+        const fieldIndex = buildLegacyFieldIndex();
+        const savedTargetIds = new Set(
+            (savedFormulas || []).map((formula) => String(formula.targetMasterKey || ""))
+        );
+        const fallbackFormulas = [];
+
+        LEGACY_FORMULA_CONFIGS.forEach((config) => {
+            const targetInput = findLegacyInput(fieldIndex, config.targetNames);
+            if (!targetInput?.dataset?.masterParamKey) {
+                return;
+            }
+
+            const targetMasterKey = String(targetInput.dataset.masterParamKey);
+            if (savedTargetIds.has(targetMasterKey)) {
+                return;
+            }
+
+            const dependencies = [];
+            let expression = config.expressionTemplate;
+            let canBuildFormula = true;
+
+            Object.entries(config.dependencies || {}).forEach(([tokenKey, dependencyNames]) => {
+                const dependencyInput = findLegacyInput(fieldIndex, dependencyNames);
+                if (!dependencyInput?.dataset?.masterParamKey) {
+                    canBuildFormula = false;
+                    return;
+                }
+
+                const dependencyMasterKey = String(dependencyInput.dataset.masterParamKey);
+                expression = expression.split(`{{${tokenKey}}}`).join(`{{${dependencyMasterKey}}}`);
+                dependencies.push({
+                    testId: dependencyInput.dataset.testId || null,
+                    parameterId: dependencyInput.dataset.paramId || null,
+                    parameterMasterKey: dependencyMasterKey,
+                    label: dependencyInput.dataset.paramName || dependencyInput.dataset.id || dependencyNames[0] || "",
+                });
+            });
+
+            if (!canBuildFormula) {
+                return;
+            }
+
+            fallbackFormulas.push({
+                _id: `legacy-${targetMasterKey}`,
+                targetTestId: targetInput.dataset.testId || null,
+                targetParameterId: targetInput.dataset.paramId || null,
+                targetMasterKey,
+                targetLabel: targetInput.dataset.paramName || targetInput.dataset.id || config.targetNames[0],
+                expression,
+                displayExpression: config.displayExpression,
+                dependencies,
+                precision: 2,
+                isActive: true,
+                allowManualOverride: false,
+            });
+        });
+
+        return fallbackFormulas;
+    }
+
+    function rebuildFormulaIndexes() {
+        formulaState.formulaByTargetMasterKey.clear();
+        formulaState.dependentsBySourceMasterKey.clear();
+        formulaState.inputByMasterKey.clear();
+
+        document.querySelectorAll(".value-input[data-param-id]").forEach((input) => {
+            if (input.dataset.masterParamKey) {
+                formulaState.inputByMasterKey.set(String(input.dataset.masterParamKey), input);
+            }
+        });
+
+        formulaState.formulas.forEach((formula) => {
+            const targetMasterKey = String(formula.targetMasterKey || "");
+            if (!targetMasterKey) return;
+
+            formulaState.formulaByTargetMasterKey.set(targetMasterKey, formula);
+
+            (formula.dependencies || []).forEach((dependency) => {
+                const dependencyMasterKey = String(dependency.parameterMasterKey || "");
+                if (!dependencyMasterKey) return;
+
+                if (!formulaState.dependentsBySourceMasterKey.has(dependencyMasterKey)) {
+                    formulaState.dependentsBySourceMasterKey.set(dependencyMasterKey, []);
+                }
+                formulaState.dependentsBySourceMasterKey.get(dependencyMasterKey).push(formula);
+            });
+        });
+    }
+
+    function setFormulaInputDisplayState(input, formula) {
+        if (!input) return;
+
+        input.dataset.formulaField = "true";
+        input.dataset.formulaTargetId = String(formula._id || "");
+        input.readOnly = !formula.allowManualOverride;
+        input.classList.toggle("formula-value-input", true);
+    }
+
+    function addIconsToMatchingRows() {
+        formulaState.formulas = [
+            ...(formulaState.formulas || []),
+            ...buildLegacyFallbackFormulas(formulaState.formulas || []),
+        ];
+        rebuildFormulaIndexes();
+        const rows = document.querySelectorAll(".table tbody tr[data-order]");
+
+        rows.forEach((row) => {
+            const valueColumn = row.querySelector(".formulaIcon");
+            const input = row.querySelector(".value-input[data-param-id]");
+            if (!valueColumn || !input) return;
+
+            const formula = formulaState.formulaByTargetMasterKey.get(String(input.dataset.masterParamKey || ""));
+            if (!formula) {
+                return;
+            }
+
+            setFormulaInputDisplayState(input, formula);
+
+            if (valueColumn.querySelector(".icon")) return;
+
+            const title = row.children[1]?.textContent?.trim() || formula.targetLabel || "Formula";
+            const icon = document.createElement("div");
+            icon.type = "div";
+            icon.classList.add("icon", "formula-icon-button", "formula-tooltip-container");
+            icon.tabIndex = -1;
+            icon.setAttribute("aria-label", `Formula for ${title}`);
+            icon.innerHTML = `<i class="fa-solid fa-calculator" aria-hidden="true"></i>`;
+
+            const tooltip = document.createElement("div");
+            tooltip.classList.add("tooltip-box");
+
+            const tooltipLabel = document.createElement("div");
+            tooltipLabel.className = "tooltip-box__label";
+            tooltipLabel.textContent = "Formula";
+
+            const tooltipFormula = document.createElement("code");
+            tooltipFormula.className = "tooltip-box__formula";
+            tooltipFormula.textContent = formula.displayExpression || formula.expression || "";
+
+            tooltip.appendChild(tooltipLabel);
+            tooltip.appendChild(tooltipFormula);
+            icon.appendChild(tooltip);
+            valueColumn.appendChild(icon);
+        });
+    }
+
+    function getNumericValueFromInput(input) {
+        if (!input) {
+            return { hasValue: false, value: 0 };
+        }
+
+        const rawValue = String(input.value || "").trim();
+        if (rawValue === "") {
+            return { hasValue: false, value: 0 };
+        }
+
+        const numericValue = Number.parseFloat(rawValue);
+        if (!Number.isFinite(numericValue)) {
+            return { hasValue: false, value: 0 };
+        }
+
+        return { hasValue: true, value: numericValue };
+    }
+
+    function applyComputedFormulaValue(input, formula, value) {
+        if (!input) return;
+
+        const precision = Number.isFinite(Number(formula.precision)) ? Number(formula.precision) : 2;
+        input.value = Number(value).toFixed(precision);
+        processInput(input);
+    }
+
+    function clearComputedFormulaValue(input) {
+        if (!input) return;
+        input.value = "";
+        processInput(input);
+    }
+
+    function recalculateSingleFormula(formula) {
+        const targetMasterKey = String(formula.targetMasterKey || "");
+        const targetInput = formulaState.inputByMasterKey.get(targetMasterKey);
+        if (!targetInput) {
+            return false;
+        }
+
+        const dependencyValues = {};
+        let hasAnyDependencyValue = false;
+        let hasMissingDependency = false;
+
+        (formula.dependencies || []).forEach((dependency) => {
+            const dependencyMasterKey = String(dependency.parameterMasterKey || "");
+            const dependencyInput = formulaState.inputByMasterKey.get(dependencyMasterKey);
+            const { hasValue, value } = getNumericValueFromInput(dependencyInput);
+            dependencyValues[dependencyMasterKey] = value;
+            hasAnyDependencyValue = hasAnyDependencyValue || hasValue;
+            hasMissingDependency = hasMissingDependency || !hasValue;
+        });
+
+        if (!hasAnyDependencyValue || hasMissingDependency) {
+            clearComputedFormulaValue(targetInput);
+            return false;
+        }
+
+        try {
+            const computedValue = parseFormulaExpression(formula.expression, (parameterId) => {
+                return dependencyValues[String(parameterId)] || 0;
+            });
+
+            applyComputedFormulaValue(targetInput, formula, computedValue);
+            return true;
+        } catch (error) {
+            console.error(`Error evaluating formula for ${formula.targetLabel}:`, error);
+            clearComputedFormulaValue(targetInput);
+            return false;
+        }
+    }
+
+    function recalculateFormulaCascadeFromParam(paramId) {
+        const queue = [String(paramId || "")];
+        const visitedTargets = new Set();
+
+        while (queue.length) {
+            const sourceMasterKey = queue.shift();
+            const dependentFormulas = formulaState.dependentsBySourceMasterKey.get(sourceMasterKey) || [];
+
+            dependentFormulas.forEach((formula) => {
+                const targetMasterKey = String(formula.targetMasterKey || "");
+                if (!targetMasterKey || visitedTargets.has(targetMasterKey)) {
+                    return;
+                }
+
+                visitedTargets.add(targetMasterKey);
+                recalculateSingleFormula(formula);
+                queue.push(targetMasterKey);
+            });
+        }
+    }
+
+    function recalculateAllFormulas() {
+        formulaState.formulas.forEach((formula) => {
+            recalculateSingleFormula(formula);
+        });
     }
 
     function parseStoredCheckboxFlag(value) {
@@ -1363,6 +2101,7 @@ async function loadfunction() {
                         name="parameterName" 
                         data-test-id="${test._id}" 
                         data-param-id="${param._id || ""}" 
+                        data-master-param-key="${param.masterParameterKey || ""}"
                         data-param-name="${param.Para_name}" 
                         data-reference-type="${(param.ValueType || (param.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
                         data-Shortname="${test.Short_name}" 
@@ -1448,6 +2187,7 @@ async function loadfunction() {
                     class="value-input" 
                     data-test-id="${test._id}" 
                     data-param-id="${test.parameters?.[0]?._id || ""}" 
+                    data-master-param-key="${test.parameters?.[0]?.masterParameterKey || ""}"
                     data-param-name="${test.parameters?.[0]?.Para_name || test.Name}" 
                     data-reference-type="${(test.parameters?.[0]?.ValueType || (test.parameters?.[0]?.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
                     data-Shortname="${test.Short_name}" 
@@ -1702,7 +2442,6 @@ async function loadfunction() {
 
             // Check karo ki ye formula-based test hai ya nahi
             const isFormulaTest = input.dataset.formulaField === "true" ||
-                FORMULA_FIELD_DEFINITIONS[testId] ||
                 row.querySelector('.formulaIcon .icon');
 
             // Agar formula test hai to skip karo
@@ -1746,56 +2485,6 @@ async function loadfunction() {
         generateRandomResults();
     });
 
-    function addIconsToMatchingRows() {
-        const rows = document.querySelectorAll(".table tbody tr[data-order]");
-
-        rows.forEach((row) => {
-            const textColumn = row.children[1];
-            const valueColumn = row.querySelector(".formulaIcon");
-            const input = row.querySelector(".value-input");
-
-            if (textColumn && valueColumn) {
-                const text = textColumn.textContent.trim();
-                const formulaText = getFormulaDefinition(
-                    text ||
-                    input?.getAttribute("data-param-name") ||
-                    input?.getAttribute("data-id")
-                );
-
-                if (!formulaText) return;
-
-                if (input) {
-                    input.dataset.formulaField = "true";
-                }
-
-                if (valueColumn.querySelector(".icon")) return;
-
-                const icon = document.createElement("div");
-                icon.type = "div";
-                icon.classList.add("icon", "formula-icon-button", "formula-tooltip-container");
-                icon.tabIndex = -1;
-                icon.setAttribute("aria-label", `Formula for ${text}`);
-                icon.innerHTML = `<i class="fa-solid fa-calculator" aria-hidden="true"></i>`;
-
-                const tooltip = document.createElement("div");
-                tooltip.classList.add("tooltip-box");
-
-                const tooltipLabel = document.createElement("div");
-                tooltipLabel.className = "tooltip-box__label";
-                tooltipLabel.textContent = "Formula";
-
-                const tooltipFormula = document.createElement("code");
-                tooltipFormula.className = "tooltip-box__formula";
-                tooltipFormula.textContent = formulaText;
-
-                tooltip.appendChild(tooltipLabel);
-                tooltip.appendChild(tooltipFormula);
-                icon.appendChild(tooltip);
-                valueColumn.appendChild(icon);
-            }
-        });
-    }
-
     // Set up listeners for parameter formulas 
     function setupListeners() {
         if (valueInputListenersBound) return;
@@ -1825,38 +2514,17 @@ async function loadfunction() {
         valueInputListenersBound = true;
     }
 
-    const inputElementCache = new Map();
-    const getCachedInput = (selector) => {
-        const cached = inputElementCache.get(selector);
-        if (cached && cached.isConnected) return cached;
-        const next = document.querySelector(selector);
-        if (next) inputElementCache.set(selector, next);
-        return next;
-    };
-
-    const getInputByIdentity = (...names) => {
-        const uniqueNames = [...new Set(names.filter(Boolean))];
-        for (const name of uniqueNames) {
-            const exactMatch = getCachedInput(
-                `input[data-id="${name}"], input[data-param-name="${name}"]`
-            );
-            if (exactMatch) return exactMatch;
-
-            const compactName = String(name).replace(/\s+/g, "");
-            if (compactName !== name) {
-                const compactMatch = getCachedInput(
-                    `input[data-id="${compactName}"], input[data-param-name="${compactName}"]`
-                );
-                if (compactMatch) return compactMatch;
-            }
-        }
-        return null;
-    };
-
     function getDifferentialPercentageInputs() {
-        return Array.from(document.querySelectorAll(".value-input")).filter((input) =>
-            DIFFERENTIAL_PERCENTAGE_FIELD_SET.has((input.getAttribute("data-id") || "").trim())
-        );
+        return Array.from(document.querySelectorAll(".value-input")).filter((input) => {
+            const parameterName =
+                input.getAttribute("data-param-name") ||
+                input.getAttribute("data-id") ||
+                "";
+
+            return DIFFERENTIAL_PERCENTAGE_FIELD_SET.has(
+                normalizeFieldIdentity(parameterName)
+            );
+        });
     }
 
     function getDifferentialTotalCell() {
@@ -1948,284 +2616,10 @@ async function loadfunction() {
 
     // Handle input changes and update formula row
     function handleInputChange(resultInputs) {
-        // Use cached input lookup to avoid repeated full-document querySelector calls.
-        const getElement = (selector) => getCachedInput(selector);
-
-        const TotalLeucocytesCount = getElement('input[data-id="Total Leucocytes Count"]');
-        const NeutrophilsPercentage = getElement('input[data-id="Neutrophils Percentage"]');
-        const NeutrophilsAbsoluteCount = getElement('input[data-id="Neutrophils-Absolute Count"]');
-        const LymphocytePercentage = getElement('input[data-id="Lymphocyte Percentage"]');
-        const LymphocytesAbsoluteCount = getElement('input[data-id="Lymphocytes-Absolute Count"]');
-        const EosinophilAbsoluteCount = getElement('input[data-id="Eosinophil-Absolute Count"]');
-        const EosinophilsPercentage = getElement('input[data-id="Eosinophils Percentage"]');
-        const MonocyteAbsoluteCount = getElement('input[data-id="Monocyte- Absolute Count"]');
-        const MonocytesPercentage = getElement('input[data-id="Monocytes Percentage"]');
-        const BasophilsAbsoluteCount = getElement('input[data-id="Basophils-Absolute Count"]');
-        const BasophilsPercentage = getElement('input[data-id="Basophils Percentage"]');
-        const NeutrophilLymphocyteRatio = getElement('input[data-id="Neutrophil Lymphocyte Ratio"], input[data-id="683e964500d2c15788fb633a"]');
-        const MeanCorpuscularVolumeMCV = getInputByIdentity("Mean Corpuscular Volume (MCV)", "MCV");
-        const HematocritHCT = getInputByIdentity("Hematocrit (HCT)", "PACKED CELL VOLUME (PCV)", "PCV");
-        const TotalRedBloodCellCount = getInputByIdentity("Total Red Blood Cell Count", "RBC COUNT", "RBC");
-        const MeanCorpuscularHemoglobinMCH = getInputByIdentity("Mean Corpuscular Hemoglobin (MCH)", "MCH");
-        const Hemoglobin = getInputByIdentity("Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB");
-        const MeanCorpuscularHemoglobinConcentrationMCHC = getInputByIdentity("Mean Corpuscular Hemoglobin Concentration (MCHC)", "MCHC");
-        const VLDLCholesterol = getElement('input[data-id="VLDL Cholesterol"]');
-        const Triglycerides = getElement('input[data-id="Triglycerides"]');
-        const LDLCholesterol = getElement('input[data-id="LDL Cholesterol"]');
-        const TotalCholesterol = getElement('input[data-id="Total Cholesterol"]');
-        const HDLCholesterol = getElement('input[data-id="HDL Cholesterol"]');
-        const LDLHDL = getElement('input[data-id="LDL / HDL Ratio"]');
-        const TotalCholesterolHDL = getElement('input[data-id="Total Cholesterol / HDL"]');
-        const TGHDL = getElement('input[data-id="TG / HDL"]');
-        const NonHDLcholesterol = getElement('input[data-id="Non-HDL cholesterol"]');
-        const SerumBilirubinIndirect = getElement('input[data-id="Serum Bilirubin (Indirect)"]');
-        const SerumBilirubinTotal = getElement('input[data-id="Serum Bilirubin (Total)"]');
-        const SerumBilirubinDirect = getElement('input[data-id="Serum Bilirubin (Direct)"]');
-        const Globulin = getElement('input[data-id="Globulin"]');
-        const SerumProtein = getElement('input[data-id="Serum Protein"]');
-        const SerumAlbumin = getElement('input[data-id="Serum Albumin"]');
-        const AGRatio = getElement('input[data-id="A/G Ratio"]');
-        const SgotSgptRatioFormula = getElement('input[data-id="Sgot/Sgpt Ratio Formula"], input[data-id="SGOT/SGPT RATIO"]');
-        const SGPTALT = getElement('input[data-id="SGPT (ALT)"]');
-        const SGOTAST = getElement('input[data-id="SGOT (AST)"]');
-        const BUN = getElement('input[data-id="BUN"]');
-        const SerumUrea = getElement('input[data-id="Serum Urea"]');
-        const UreaCreatinineRatio = getElement('input[data-id="Urea / Creatinine Ratio"]');
-        const SerumCreatinine = getElement('input[data-id="Serum Creatinine"]');
-        const BUNCreatinineRatio = getElement('input[data-id="BUN / Creatinine Ratio"]');
-        const TransferrinSaturation = getElement('input[data-id="Transferrin Saturation"]');
-        const Iron = getElement('input[data-id="Iron"]');
-        const TotalIronBindingCapacity = getElement('input[data-id="Total Iron Binding Capacity"]');
-        const Estimatedaverageglucose = getElement('input[data-id="Estimated average glucose"], input[data-id="Estimatedaverageglucose"]');
-        const GLYCATEDHAEMOGLOBINHbA1c = getElement('input[data-id="GLYCATED HAEMOGLOBIN(HbA1c)"]');
-
-        // Helper function to safely get value
-        const getValue = (element) => {
-            if (!element) return 0;
-            return parseFloat(element.value) || 0;
-        };
-
-        // Helper function to safely set value
-        const setValue = (element, value) => {
-            if (!element) return;
-            element.value = value.toFixed(2);
-            processInput(element);
-        };
-
-        // Check if resultInputs is a formula field
-        const formulaFields = [
-            VLDLCholesterol, BUNCreatinineRatio, UreaCreatinineRatio, BUN, SgotSgptRatioFormula,
-            AGRatio, Globulin, SerumBilirubinIndirect, NonHDLcholesterol, TGHDL, TotalCholesterolHDL,
-            LDLHDL, LDLCholesterol, MeanCorpuscularHemoglobinConcentrationMCHC,
-            MeanCorpuscularHemoglobinMCH, MeanCorpuscularVolumeMCV, NeutrophilLymphocyteRatio,
-            NeutrophilsAbsoluteCount, LymphocytesAbsoluteCount, EosinophilAbsoluteCount,
-            TransferrinSaturation, Estimatedaverageglucose,
-            MonocyteAbsoluteCount, BasophilsAbsoluteCount
-        ].filter(el => el !== null); // Filter out null values
-
-        if (formulaFields.includes(resultInputs)) {
-            // BUN / Creatinine Ratio
-            if (SerumCreatinine && BUN && BUNCreatinineRatio) {
-                const bunValue = getValue(BUN);
-                const creatinineValue = getValue(SerumCreatinine);
-                if (creatinineValue !== 0) {
-                    setValue(BUNCreatinineRatio, bunValue / creatinineValue);
-                }
-            }
-
-            // LDL Cholesterol
-            if (LDLCholesterol && TotalCholesterol && VLDLCholesterol && HDLCholesterol) {
-                const totalChol = getValue(TotalCholesterol);
-                const hdlChol = getValue(HDLCholesterol);
-                const vldlChol = getValue(VLDLCholesterol);
-                setValue(LDLCholesterol, totalChol - hdlChol - vldlChol);
-            }
-            return;
-        }
-
-        // Estimated Average Glucose
-        if (Estimatedaverageglucose && GLYCATEDHAEMOGLOBINHbA1c) {
-            const hba1c = getValue(GLYCATEDHAEMOGLOBINHbA1c);
-            if (hba1c !== 0) {
-                setValue(Estimatedaverageglucose, (28.7 * hba1c) - 46.7);
-            }
-        }
-
-        // BUN from Urea
-        if (BUN && SerumUrea) {
-            const urea = getValue(SerumUrea);
-            setValue(BUN, urea * 0.467);
-        }
-
         syncDifferentialPercentageValidation();
-
-        // Urea / Creatinine Ratio
-        if (SerumUrea && SerumCreatinine && UreaCreatinineRatio) {
-            const urea = getValue(SerumUrea);
-            const creatinine = getValue(SerumCreatinine);
-            if (creatinine !== 0) {
-                setValue(UreaCreatinineRatio, urea / creatinine);
-            }
-        }
-
-        // Transferrin Saturation
-        if (TransferrinSaturation && Iron && TotalIronBindingCapacity) {
-            const iron = getValue(Iron);
-            const tibc = getValue(TotalIronBindingCapacity);
-            if (tibc !== 0) {
-                setValue(TransferrinSaturation, (iron * 100) / tibc);
-            }
-        }
-
-        // SGOT/SGPT Ratio
-        if (SGPTALT && SGOTAST && SgotSgptRatioFormula) {
-            const sgpt = getValue(SGPTALT);
-            const sgot = getValue(SGOTAST);
-            if (sgot !== 0) {
-                setValue(SgotSgptRatioFormula, sgpt / sgot);
-            }
-        }
-
-        // A/G Ratio
-        if (Globulin && AGRatio && SerumAlbumin) {
-            const albumin = getValue(SerumAlbumin);
-            const globulin = getValue(Globulin);
-            if (globulin !== 0) {
-                setValue(AGRatio, albumin / globulin);
-            }
-        }
-
-        // Globulin
-        if (Globulin && SerumProtein && SerumAlbumin) {
-            const protein = getValue(SerumProtein);
-            const albumin = getValue(SerumAlbumin);
-            setValue(Globulin, protein - albumin);
-        }
-
-        // Serum Bilirubin (Indirect)
-        if (SerumBilirubinDirect && SerumBilirubinTotal && SerumBilirubinIndirect) {
-            const total = getValue(SerumBilirubinTotal);
-            const direct = getValue(SerumBilirubinDirect);
-            setValue(SerumBilirubinIndirect, total - direct);
-        }
-
-        // Non-HDL Cholesterol
-        if (NonHDLcholesterol && TotalCholesterol && HDLCholesterol) {
-            const total = getValue(TotalCholesterol);
-            const hdl = getValue(HDLCholesterol);
-            setValue(NonHDLcholesterol, total - hdl);
-        }
-
-        // TG / HDL Ratio
-        if (TGHDL && Triglycerides && HDLCholesterol) {
-            const tg = getValue(Triglycerides);
-            const hdl = getValue(HDLCholesterol);
-            if (hdl !== 0) {
-                setValue(TGHDL, tg / hdl);
-            }
-        }
-
-        // Total Cholesterol / HDL Ratio
-        if (TotalCholesterolHDL && TotalCholesterol && HDLCholesterol) {
-            const total = getValue(TotalCholesterol);
-            const hdl = getValue(HDLCholesterol);
-            if (hdl !== 0) {
-                setValue(TotalCholesterolHDL, total / hdl);
-            }
-        }
-
-        // LDL / HDL Ratio
-        if (LDLCholesterol && LDLHDL && HDLCholesterol) {
-            const ldl = getValue(LDLCholesterol);
-            const hdl = getValue(HDLCholesterol);
-            if (hdl !== 0) {
-                setValue(LDLHDL, ldl / hdl);
-            }
-        }
-
-        // LDL Cholesterol (recalculate if needed)
-        if (LDLCholesterol && TotalCholesterol && VLDLCholesterol && HDLCholesterol) {
-            const total = getValue(TotalCholesterol);
-            const hdl = getValue(HDLCholesterol);
-            const vldl = getValue(VLDLCholesterol);
-            setValue(LDLCholesterol, total - hdl - vldl);
-        }
-
-        // VLDL Cholesterol
-        if (VLDLCholesterol && Triglycerides) {
-            const tg = getValue(Triglycerides);
-            setValue(VLDLCholesterol, tg / 5);
-        }
-
-        // MCHC
-        if (MeanCorpuscularHemoglobinConcentrationMCHC && Hemoglobin && HematocritHCT) {
-            const hb = getValue(Hemoglobin);
-            const hct = getValue(HematocritHCT);
-            if (hct !== 0) {
-                setValue(MeanCorpuscularHemoglobinConcentrationMCHC, (hb * 100) / hct);
-            }
-        }
-
-        // MCH
-        if (MeanCorpuscularHemoglobinMCH && Hemoglobin && TotalRedBloodCellCount) {
-            const hb = getValue(Hemoglobin);
-            const rbc = getValue(TotalRedBloodCellCount);
-            if (rbc !== 0) {
-                setValue(MeanCorpuscularHemoglobinMCH, (hb * 10) / rbc);
-            }
-        }
-
-        // MCV
-        if (MeanCorpuscularVolumeMCV && HematocritHCT && TotalRedBloodCellCount) {
-            const hct = getValue(HematocritHCT);
-            const rbc = getValue(TotalRedBloodCellCount);
-            if (rbc !== 0) {
-                setValue(MeanCorpuscularVolumeMCV, (hct * 10) / rbc);
-            }
-        }
-
-        // Neutrophil Lymphocyte Ratio
-        if (NeutrophilLymphocyteRatio && NeutrophilsAbsoluteCount && LymphocytesAbsoluteCount) {
-            const neutrophils = getValue(NeutrophilsAbsoluteCount);
-            const lymphocytes = getValue(LymphocytesAbsoluteCount);
-            if (lymphocytes !== 0) {
-                setValue(NeutrophilLymphocyteRatio, neutrophils / lymphocytes);
-            }
-        }
-
-        // Basophils Absolute Count
-        if (BasophilsPercentage && BasophilsAbsoluteCount && TotalLeucocytesCount) {
-            const percentage = getValue(BasophilsPercentage);
-            const wbc = getValue(TotalLeucocytesCount);
-            setValue(BasophilsAbsoluteCount, (percentage / 100) * wbc);
-        }
-
-        // Monocytes Absolute Count
-        if (MonocytesPercentage && MonocyteAbsoluteCount && TotalLeucocytesCount) {
-            const percentage = getValue(MonocytesPercentage);
-            const wbc = getValue(TotalLeucocytesCount);
-            setValue(MonocyteAbsoluteCount, (percentage / 100) * wbc);
-        }
-
-        // Eosinophils Absolute Count
-        if (EosinophilsPercentage && EosinophilAbsoluteCount && TotalLeucocytesCount) {
-            const percentage = getValue(EosinophilsPercentage);
-            const wbc = getValue(TotalLeucocytesCount);
-            setValue(EosinophilAbsoluteCount, (percentage / 100) * wbc);
-        }
-
-        // Lymphocytes Absolute Count
-        if (LymphocytesAbsoluteCount && LymphocytePercentage && TotalLeucocytesCount) {
-            const percentage = getValue(LymphocytePercentage);
-            const wbc = getValue(TotalLeucocytesCount);
-            setValue(LymphocytesAbsoluteCount, (percentage / 100) * wbc);
-        }
-
-        // Neutrophils Absolute Count
-        if (NeutrophilsAbsoluteCount && NeutrophilsPercentage && TotalLeucocytesCount) {
-            const percentage = getValue(NeutrophilsPercentage);
-            const wbc = getValue(TotalLeucocytesCount);
-            setValue(NeutrophilsAbsoluteCount, (percentage / 100) * wbc);
+        const changedMasterKey = String(resultInputs?.dataset?.masterParamKey || "");
+        if (changedMasterKey) {
+            recalculateFormulaCascadeFromParam(changedMasterKey);
         }
     }
     window.__labReportHandleInputChange = handleInputChange;
@@ -2390,11 +2784,12 @@ async function loadfunction() {
         }
 
         await groupTablesByCategory();
-
-        addIconsToMatchingRows();
     }
 
     await renderData();
+    await loadTenantFormulas();
+    addIconsToMatchingRows();
+    recalculateAllFormulas();
     setupListeners();
     addInputListeners();
     syncDifferentialPercentageValidation();
@@ -2460,6 +2855,7 @@ async function loadfunction() {
             }
 
             syncDifferentialPercentageValidation();
+            recalculateAllFormulas();
         } catch (error) {
             console.error("Error fetching entered results:", error);
         }
@@ -3069,6 +3465,7 @@ async function loadfunction() {
     async function checkFields(savebtn) {
         const AllFields = document.querySelectorAll("#tables-container .section table tbody tr:not(.exclude)");
         const AllFieldsArray = [];
+        let hasAnyEnteredValue = false;
 
         if (savebtn && !syncDifferentialPercentageValidation({ focusInvalid: true, showMessage: true })) {
             return false;
@@ -3078,18 +3475,8 @@ async function loadfunction() {
             const pb = field.cells[0].querySelector('input[type="checkbox"]')?.checked;
             const input = field.querySelector('.value-input');
             const editorContainer = field.querySelector("[id^='editorContent']");
-            const isFormulaField = input?.dataset.formulaField === "true";
 
-            if (input && input.value.trim() === "" && savebtn && !isFormulaField) {
-                smoothScrollTo(field);
-                input.focus({ preventScroll: true });
-                if (typeof input.select === "function") {
-                    input.select();
-                }
-                showStatusMessage("Please fill all required result fields before final save.", "warn");
-                return false; // Stop after the first empty field
-            }
-            else if (editorContainer) {
+            if (editorContainer) {
                 const editorId = editorContainer.id;
                 const uniqueTestId = editorId.replace('editorContent-', ''); // ✅ Extract uniqueTestId
 
@@ -3099,6 +3486,7 @@ async function loadfunction() {
                 // Debug
 
                 if (editorContent) {
+                    hasAnyEnteredValue = true;
                     isdocumented = true;
                     const data = {
                         currentvalue: editorContent,
@@ -3111,6 +3499,9 @@ async function loadfunction() {
             } else if (input) {
                 const data_id = input.getAttribute('data-id');
                 const value = input.value.trim();
+                if (value !== "") {
+                    hasAnyEnteredValue = true;
+                }
                 const referenceType = (input.dataset.referenceType || "numeric").toLowerCase();
                 const lowerValue = parseFloat(input.getAttribute('data-lower'));
                 const upperValue = parseFloat(input.getAttribute('data-upper'));
@@ -3141,6 +3532,16 @@ async function loadfunction() {
                 }
                 AllFieldsArray.push(data);
             }
+        }
+
+        if (savebtn && !hasAnyEnteredValue) {
+            showStatusMessage("सभी result fields खाली हैं। Final save करने से पहले कम से कम एक value भरें।", "warn");
+            const firstInput = document.querySelector("#tables-container .value-input");
+            if (firstInput) {
+                smoothScrollTo(firstInput.closest("tr") || firstInput);
+                firstInput.focus({ preventScroll: true });
+            }
+            return false;
         }
 
         if (AllFieldsArray.length >= 0) {

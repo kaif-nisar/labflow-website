@@ -1,0 +1,529 @@
+<style>
+    .formula-page {
+        /* padding: 18px; */
+        color: #17324d;
+    }
+
+    /* .formula-hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+        margin-bottom: 20px;
+    } */
+
+    .formula-card {
+        background: #ffffff;
+        border: 1px solid #d9e6f2;
+        border-radius: 16px;
+        box-shadow: 0 12px 28px rgba(19, 56, 95, 0.08);
+        padding: 18px;
+        margin-bottom: 15px;
+    }
+
+    .formula-card h2,
+    .formula-card h3 {
+        margin: 0 0 12px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #10365f;
+    }
+
+    .formula-muted {
+        color: #5e748d;
+        font-size: 0.92rem;
+        line-height: 1.5;
+    }
+
+    .formula-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .formula-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .formula-field label {
+        font-size: 0.86rem;
+        font-weight: 700;
+        color: #33506d;
+    }
+
+    .formula-field input,
+    .formula-field select,
+    .formula-field textarea {
+        width: 100%;
+        border: 1px solid #c9d9ea;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+        outline: none;
+        background: #fff;
+    }
+
+    .formula-field textarea {
+        min-height: 88px;
+        resize: vertical;
+    }
+
+    .formula-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .formula-toolbar button,
+    .formula-action-row button,
+    .formula-source-list button,
+    .formula-preview button {
+        border: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+
+    .formula-toolbar button {
+        background: #eaf3ff;
+        color: #10365f;
+    }
+
+    .formula-builder-layout {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 18px;
+        margin-bottom: 20px;
+    }
+
+    .formula-source-list {
+        max-height: 650px;
+        overflow: auto;
+        display: grid;
+        gap: 10px;
+    }
+
+    .formula-source-item {
+        border: 1px solid #dbe7f4;
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        background: #fafcff;
+    }
+
+    .formula-source-item strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #10365f;
+    }
+
+    .formula-source-item span {
+        display: block;
+        font-size: 0.84rem;
+        color: #647a91;
+    }
+
+    .formula-source-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .formula-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+
+    .formula-badge.type-numeric {
+        background: #e7f5ec;
+        color: #15683a;
+    }
+
+    .formula-badge.type-text {
+        background: #fff4db;
+        color: #915d00;
+    }
+
+    .formula-badge.type-unit {
+        background: #edf4ff;
+        color: #1d4f8f;
+    }
+
+    .formula-source-item button,
+    .formula-preview button {
+        background: #10365f;
+        color: #fff;
+    }
+
+    .formula-token-preview {
+        min-height: 116px;
+        border: 1px dashed #aac3df;
+        border-radius: 12px;
+        padding: 14px;
+        background: #f7fbff;
+        white-space: pre-wrap;
+        line-height: 1.7;
+    }
+
+    .formula-token-chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .formula-token-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #eef5fc;
+        border: 1px solid #caddf2;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 0.86rem;
+        color: #10365f;
+    }
+
+    .formula-token-chip button {
+        border: none;
+        background: transparent;
+        color: #7d2030;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .formula-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+    }
+
+    .formula-action-row button.primary {
+        background: #0f8c4f;
+        color: #fff;
+    }
+
+    .formula-action-row button.secondary {
+        background: #10365f;
+        color: #fff;
+    }
+
+    .formula-action-row button.danger {
+        background: #bf2f45;
+        color: #fff;
+    }
+
+    .formula-preview-grid {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .formula-preview-row {
+        display: grid;
+        grid-template-columns: 1fr 140px;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid #dbe8f5;
+        border-radius: 12px;
+        background: #fbfdff;
+    }
+
+    .formula-preview-row label {
+        font-weight: 700;
+        color: #10365f;
+    }
+
+    .formula-preview-row input {
+        width: 100%;
+        border: 1px solid #bfd3e7;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.92rem;
+        background: #fff;
+    }
+
+    .formula-preview-empty {
+        padding: 14px;
+        border: 1px dashed #c9dced;
+        border-radius: 12px;
+        background: #f8fbff;
+    }
+
+    .formula-summary-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .formula-summary-item {
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #f7fbff;
+        border: 1px solid #dbe7f4;
+    }
+
+    .formula-summary-item strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #10365f;
+    }
+
+    .formula-preview-result {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #eef8f0;
+        color: #166338;
+        font-weight: 700;
+    }
+
+    .formula-preview-result.is-error {
+        background: #fdecec;
+        color: #972626;
+    }
+
+    .formula-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+    }
+
+    .formula-table th,
+    .formula-table td {
+        border-bottom: 1px solid #e2ebf4;
+        text-align: left;
+        padding: 10px 8px;
+        vertical-align: top;
+        font-size: 0.9rem;
+    }
+
+    .formula-table th {
+        color: #53708f;
+        font-weight: 700;
+        background: #f7fbff;
+    }
+
+    .formula-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .formula-status.active {
+        background: #e8f8ee;
+        color: #15683a;
+    }
+
+    .formula-status.inactive {
+        background: #f4f6f8;
+        color: #5d6a78;
+    }
+
+    .formula-table button {
+        border: none;
+        background: transparent;
+        color: #10365f;
+        cursor: pointer;
+        font-weight: 700;
+        padding: 0;
+        margin-right: 10px;
+    }
+
+    #formula-insert-constant {
+        border: none;
+        border-radius: 12px;
+        padding: 11px 14px;
+        background: linear-gradient(135deg, #154c83, #0f8c4f);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 10px 20px rgba(16, 54, 95, 0.16);
+    }
+
+    @media (max-width: 920px) {
+        /* .formula-hero, */
+        .formula-builder-layout,
+        .formula-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .formula-preview-row {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="formula-page">
+    <!-- <div class="formula-hero">
+        <section class="formula-card">
+            <h2>Formula Builder</h2>
+            <p class="formula-muted">
+                यहाँ tenant अपने result formulas बना सकता है। Formula target field पर save होगा, parameter ids से चलेगा,
+                preview देगा, validation करेगा, और बाद में Enter Result page पर अपने-आप apply होगा।
+            </p>
+        </section>
+        <section class="formula-card">
+            <h3>Builder Rules</h3>
+            <p class="formula-muted">
+                Arithmetic operators, brackets और helper functions जैसे `round`, `min`, `max`, `abs`, `ceil`,
+                `floor`, `pow` supported हैं। Target field को source dependency में use नहीं किया जा सकता।
+            </p>
+        </section>
+        <section class="formula-card">
+            <h3>Quick Summary</h3>
+            <div class="formula-summary-list">
+                <div class="formula-summary-item">
+                    <strong>1. Target Select</strong>
+                    जिस field का result auto-calculate करना है, वही target test और target field चुनें।
+                </div>
+                <div class="formula-summary-item">
+                    <strong>2. Build Formula</strong>
+                    Source field insert करें, operators/functions जोड़ें, constant डालें, फिर preview चलाएँ।
+                </div>
+                <div class="formula-summary-item">
+                    <strong>3. Save And Apply</strong>
+                    Saved formula Enter Result page पर उसी tenant के लिए auto-apply होगा।
+                </div>
+            </div>
+        </section>
+    </div> -->
+
+    <section class="formula-card">
+        <div class="formula-grid">
+            <div class="formula-field">
+                <label for="formula-target-test">Target Test</label>
+                <select id="formula-target-test"></select>
+            </div>
+            <div class="formula-field">
+                <label for="formula-target-parameter">Target Field</label>
+                <select id="formula-target-parameter"></select>
+            </div>
+            <div class="formula-field">
+                <label for="formula-precision">Decimal Precision</label>
+                <input id="formula-precision" type="number" min="0" max="6" value="2">
+            </div>
+            <div class="formula-field">
+                <label for="formula-active-status">Status</label>
+                <select id="formula-active-status">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                </select>
+            </div>
+            <div class="formula-field">
+                <label for="formula-manual-override">Manual Override</label>
+                <select id="formula-manual-override">
+                    <option value="false">No</option>
+                    <option value="true" selected>Yes</option>
+                </select>
+            </div>
+            <div class="formula-field">
+                <label for="formula-search">Source Field Search</label>
+                <input id="formula-search" type="text" placeholder="Test या field name search करें">
+            </div>
+        </div>
+    </section>
+
+    <section class="formula-builder-layout">
+        <div class="formula-card">
+            <h3>Source Fields</h3>
+            <div id="formula-source-list" class="formula-source-list"></div>
+        </div>
+
+        <div class="formula-card">
+            <h3>Build Formula</h3>
+            <div class="formula-field">
+                <label for="formula-display-expression">Display Formula</label>
+                <textarea id="formula-display-expression" readonly placeholder="आपके selected tokens यहाँ दिखेंगे"></textarea>
+            </div>
+            <div class="formula-field">
+                <label>Machine Formula</label>
+                <div id="formula-token-preview" class="formula-token-preview"></div>
+            </div>
+            <div id="formula-token-chip-list" class="formula-token-chip-list"></div>
+            <div class="formula-toolbar">
+                <button type="button" data-token="+">+</button>
+                <button type="button" data-token="-">-</button>
+                <button type="button" data-token="*">*</button>
+                <button type="button" data-token="/">/</button>
+                <button type="button" data-token="(">(</button>
+                <button type="button" data-token=")">)</button>
+                <button type="button" data-token=",">,</button>
+                <button type="button" data-function="round">round()</button>
+                <button type="button" data-function="min">min()</button>
+                <button type="button" data-function="max">max()</button>
+                <button type="button" data-function="abs">abs()</button>
+                <button type="button" data-function="ceil">ceil()</button>
+                <button type="button" data-function="floor">floor()</button>
+                <button type="button" data-function="pow">pow()</button>
+            </div>
+            <div class="formula-grid" style="margin-top: 14px;">
+                <div class="formula-field">
+                    <label for="formula-constant">Constant Value</label>
+                    <input id="formula-constant" type="number" step="0.01" placeholder="e.g. 5, 0.467">
+                </div>
+                <div class="formula-field" style="justify-content: end;">
+                    <label>&nbsp;</label>
+                    <button id="formula-insert-constant" type="button" class="secondary">Insert Constant</button>
+                </div>
+            </div>
+            <div class="formula-field" style="margin-top: 14px;">
+                <label for="formula-notes">Notes</label>
+                <textarea id="formula-notes" placeholder="Optional notes for future edits"></textarea>
+            </div>
+            <div class="formula-action-row">
+                <button id="formula-remove-last-btn" type="button" class="secondary">Remove Last</button>
+                <button id="formula-preview-btn" type="button" class="secondary">Preview</button>
+                <button id="formula-save-btn" type="button" class="primary">Save Formula</button>
+                <button id="formula-reset-btn" type="button" class="secondary">Reset</button>
+                <button id="formula-delete-btn" type="button" class="danger" style="display:none;">Delete Formula</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="formula-card">
+        <h3>Preview</h3>
+        <p class="formula-muted">Dependencies के sample values डालकर result देखें। यही evaluation runtime के लिए भी use होगा।</p>
+        <div id="formula-preview-grid" class="formula-preview-grid"></div>
+        <div id="formula-preview-result" class="formula-preview-result">Preview अभी run नहीं हुआ है।</div>
+    </section>
+
+    <section class="formula-card" style="margin-top: 20px;">
+        <h3>Saved Formulas</h3>
+        <table class="formula-table">
+            <thead>
+                <tr>
+                    <th>Target</th>
+                    <th>Formula</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="formula-table-body">
+                <tr>
+                    <td colspan="5">Loading formulas...</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+</div>

@@ -13,9 +13,272 @@ import { Tenant } from "../models/tenant.model.js";
 import { User } from "../models/user.model.js";
 import { SuperAdmin } from "../models/superAdmin.model.js";
 import { getNextBookingCodeForScope } from "../utils/bookingCode.js";
+import { Formula } from "../models/formula.model.js";
 
 
 const parseBooleanInput = (value) => value === true || value === "true" || value === 1 || value === "1";
+const toIdString = (value) => {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "object" && value._id) return String(value._id);
+    return String(value);
+};
+
+const createMasterParameterKey = () => `param_${new mongoose.Types.ObjectId().toString()}`;
+
+const buildParameterLabel = (testName, parameterName) => {
+    const safeTestName = String(testName || "Test").trim();
+    const safeParameterName = String(parameterName || safeTestName || "Parameter").trim();
+
+    if (!safeTestName) return safeParameterName;
+    if (safeTestName.toLowerCase() === safeParameterName.toLowerCase()) {
+        return safeParameterName;
+    }
+
+    return `${safeParameterName} (${safeTestName})`;
+};
+
+function normalizeParameterPayload(parameters = [], existingParameters = []) {
+    const existingById = new Map();
+    const existingByMasterKey = new Map();
+    const existingByOriginalParameterId = new Map();
+    const existingByNameOrder = new Map();
+
+    for (const parameter of Array.isArray(existingParameters) ? existingParameters : []) {
+        const parameterId = toIdString(parameter?._id);
+        const masterParameterKey = String(parameter?.masterParameterKey || "").trim();
+        const originalParameterId = toIdString(parameter?.originalParameterId);
+        const nameOrderKey = `${String(parameter?.Para_name || "").trim().toLowerCase()}::${String(parameter?.order || "")}`;
+
+        if (parameterId) existingById.set(parameterId, parameter);
+        if (masterParameterKey) existingByMasterKey.set(masterParameterKey, parameter);
+        if (originalParameterId) existingByOriginalParameterId.set(originalParameterId, parameter);
+        if (nameOrderKey) existingByNameOrder.set(nameOrderKey, parameter);
+    }
+
+    return (Array.isArray(parameters) ? parameters : []).map((parameter) => {
+        const incomingParameterId = toIdString(parameter?.parameterId || parameter?._id);
+        const incomingMasterKey = String(parameter?.masterParameterKey || "").trim();
+        const incomingOriginalParameterId = toIdString(parameter?.originalParameterId);
+        const nameOrderKey = `${String(parameter?.Para_name || "").trim().toLowerCase()}::${String(parameter?.order || "")}`;
+
+        const matchedExistingParameter =
+            existingById.get(incomingParameterId) ||
+            existingByMasterKey.get(incomingMasterKey) ||
+            existingByOriginalParameterId.get(incomingOriginalParameterId) ||
+            existingByNameOrder.get(nameOrderKey) ||
+            null;
+
+        const masterParameterKey =
+            incomingMasterKey ||
+            String(matchedExistingParameter?.masterParameterKey || "").trim() ||
+            createMasterParameterKey();
+
+        const originalParameterId =
+            incomingOriginalParameterId ||
+            toIdString(matchedExistingParameter?.originalParameterId) ||
+            null;
+
+        return {
+            ...parameter,
+            masterParameterKey,
+            originalParameterId,
+        };
+    });
+}
+
+async function ensureTestDocumentsHaveMasterKeys(testRecords) {
+    const records = Array.isArray(testRecords) ? testRecords : [testRecords];
+
+    for (const testRecord of records) {
+        if (!testRecord?.parameters?.length) {
+            continue;
+        }
+
+        let hasChanges = false;
+
+        for (const parameter of testRecord.parameters) {
+            const masterParameterKey = String(parameter?.masterParameterKey || "").trim();
+            if (masterParameterKey) {
+                continue;
+            }
+
+            parameter.masterParameterKey = createMasterParameterKey();
+            hasChanges = true;
+        }
+
+        if (hasChanges && typeof testRecord.save === "function") {
+            testRecord.markModified("parameters");
+            await testRecord.save();
+        }
+    }
+
+    return testRecords;
+}
+
+function resolveFormulaScopeId(user) {
+    if (!user) return null;
+    if (user.tenantId?._id) return user.tenantId._id;
+    if (user.role === "staff" && user.parentUser) return user.parentUser;
+    return user._id || null;
+}
+
+async function copyScopedFormulasToTenant({
+    session,
+    sourceScopeId,
+    targetTenantId,
+    createdBy,
+    relevantMasterKeys = [],
+    sourceParameterEntries = [],
+}) {
+    const normalizedMasterKeys = [...new Set((relevantMasterKeys || []).filter(Boolean).map(String))];
+    const normalizedSourceEntries = Array.isArray(sourceParameterEntries) ? sourceParameterEntries : [];
+    const sourceParameterIds = normalizedSourceEntries
+        .map((entry) => toIdString(entry?.parameterId))
+        .filter(Boolean);
+
+    if (!sourceScopeId || !targetTenantId || (!normalizedMasterKeys.length && !sourceParameterIds.length)) {
+        return 0;
+    }
+
+    const sourceFormulas = await Formula.find({
+        tenantId: sourceScopeId,
+        $or: [
+            { targetMasterKey: { $in: normalizedMasterKeys } },
+            { targetParameterId: { $in: sourceParameterIds } },
+        ],
+    }).session(session).lean();
+
+    if (!sourceFormulas.length) {
+        return 0;
+    }
+
+    const sourceParameterMapById = new Map();
+    for (const entry of normalizedSourceEntries) {
+        const parameterId = toIdString(entry?.parameterId);
+        if (!parameterId) {
+            continue;
+        }
+
+        sourceParameterMapById.set(parameterId, {
+            masterParameterKey: String(entry?.masterParameterKey || "").trim(),
+            label: String(entry?.label || "").trim(),
+        });
+    }
+
+    const targetTests = await testSchema.find({
+        tenantId: targetTenantId,
+        "parameters.masterParameterKey": { $in: normalizedMasterKeys },
+    })
+        .select("_id Name parameters")
+        .session(session)
+        .lean();
+
+    const targetParameterMap = new Map();
+    for (const test of targetTests) {
+        for (const parameter of Array.isArray(test.parameters) ? test.parameters : []) {
+            const masterKey = String(parameter?.masterParameterKey || "").trim();
+            if (!masterKey) continue;
+            targetParameterMap.set(masterKey, {
+                testId: test._id,
+                parameterId: parameter._id,
+                label: buildParameterLabel(test.Name, parameter.Para_name || test.Name || "Parameter"),
+            });
+        }
+    }
+
+    let copiedCount = 0;
+
+    for (const formula of sourceFormulas) {
+        const fallbackTargetMasterKey =
+            String(formula.targetMasterKey || "").trim() ||
+            String(sourceParameterMapById.get(toIdString(formula.targetParameterId))?.masterParameterKey || "").trim();
+        const targetEntry = targetParameterMap.get(fallbackTargetMasterKey);
+        if (!targetEntry) {
+            continue;
+        }
+
+        const dependencies = [];
+        let isFormulaResolvable = true;
+        let normalizedExpression = String(formula.expression || "");
+
+        for (const dependency of formula.dependencies || []) {
+            const dependencyMasterKey =
+                String(dependency.parameterMasterKey || "").trim() ||
+                String(sourceParameterMapById.get(toIdString(dependency.parameterId))?.masterParameterKey || "").trim();
+            const dependencyEntry = targetParameterMap.get(dependencyMasterKey);
+            if (!dependencyEntry) {
+                isFormulaResolvable = false;
+                break;
+            }
+
+            dependencies.push({
+                testId: dependencyEntry.testId,
+                parameterId: dependencyEntry.parameterId,
+                parameterMasterKey: dependencyMasterKey,
+                label: dependencyEntry.label,
+            });
+
+            const legacyDependencyParameterId = toIdString(dependency.parameterId);
+            if (legacyDependencyParameterId) {
+                normalizedExpression = normalizedExpression.replaceAll(
+                    `{{${legacyDependencyParameterId}}}`,
+                    `{{${dependencyMasterKey}}}`
+                );
+            }
+        }
+
+        if (!isFormulaResolvable) {
+            continue;
+        }
+
+        const legacyTargetParameterId = toIdString(formula.targetParameterId);
+        if (legacyTargetParameterId && fallbackTargetMasterKey) {
+            normalizedExpression = normalizedExpression.replaceAll(
+                `{{${legacyTargetParameterId}}}`,
+                `{{${fallbackTargetMasterKey}}}`
+            );
+        }
+
+        await Formula.findOneAndUpdate(
+            {
+                tenantId: targetTenantId,
+                targetMasterKey: fallbackTargetMasterKey,
+            },
+            {
+                $set: {
+                    tenantId: targetTenantId,
+                    targetTestId: targetEntry.testId,
+                    targetParameterId: targetEntry.parameterId,
+                    targetMasterKey: fallbackTargetMasterKey,
+                    targetLabel: targetEntry.label,
+                    expression: normalizedExpression,
+                    displayExpression: formula.displayExpression || formula.expression,
+                    dependencies,
+                    precision: formula.precision ?? 2,
+                    notes: formula.notes || "",
+                    isActive: formula.isActive !== false,
+                    allowManualOverride: Boolean(formula.allowManualOverride),
+                    validationStatus: formula.validationStatus || "valid",
+                    lastValidatedAt: formula.lastValidatedAt || new Date(),
+                    updatedBy: createdBy,
+                },
+                $setOnInsert: {
+                    createdBy,
+                },
+            },
+            {
+                new: true,
+                upsert: true,
+                session,
+            }
+        );
+
+        copiedCount += 1;
+    }
+
+    return copiedCount;
+}
 
 
 // superAdmin creating Test
@@ -84,13 +347,14 @@ const addingTest = asyncHandler(async (req, res) => {
         createdBy: userId,
         createdByRole: "superAdmin"
     });
+    const normalizedParameters = normalizeParameterPayload(parameters);
 
     const testCreated = await testSchema.create({
         Name,
         Short_name,
         category: category || "",
         Price,
-        parameters: parameters || null,
+        parameters: normalizedParameters || null,
         sampleType,
         method: method || "",
         instrument: instrument || "",
@@ -208,13 +472,14 @@ const addingTesttenant = asyncHandler(async (req, res) => {
 
     const nextOrder = lastPanel ? lastPanel.order + 1 : 1;
     const nextBookingCode = await getNextBookingCodeForScope({ tenantId });
+    const normalizedParameters = normalizeParameterPayload(parameters);
 
     const testCreated = await testSchema.create({
         Name,
         Short_name,
         category: category || "",
         Price,
-        parameters: parameters || null,
+        parameters: normalizedParameters || null,
         sampleType,
         method: method || "",
         instrument: instrument || "",
@@ -631,6 +896,7 @@ const editTest = asyncHandler(async (req, res) => {
     if (!currentTest) {
         return res.status(401).json({ message: "something went wrong, Test not found", status: "error" });
     }
+    const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
@@ -641,7 +907,7 @@ const editTest = asyncHandler(async (req, res) => {
             Short_name,
             category: category || "",
             Price,
-            parameters: parameters || null,
+            parameters: normalizedParameters || null,
             sampleType,
             method: method || "",
             tat: tat || "",
@@ -725,6 +991,7 @@ const editTesttenant = asyncHandler(async (req, res) => {
     if (!currentTest) {
         return res.status(401).json({ message: "something went wrong, Test not found", status: "error" });
     }
+    const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
@@ -734,7 +1001,7 @@ const editTesttenant = asyncHandler(async (req, res) => {
             Short_name,
             category: category || "",
             Price,
-            parameters: parameters || null,
+            parameters: normalizedParameters || null,
             sampleType,
             method: method || "",
             tat: tat || "",
@@ -794,6 +1061,7 @@ const allTest = asyncHandler(async (req, res) => {
     }
 
     const allrecievedTest = await testSchema.find(query);
+    await ensureTestDocumentsHaveMasterKeys(allrecievedTest);
 
     if (!allrecievedTest) {
         throw new ApiError(400, "Something went wrong while fetching details")
@@ -946,6 +1214,7 @@ const getOneTest = asyncHandler(async (req, res) => {
     if (!oneTest) {
         throw new ApiError(400, "Something went wrong while fetching details")
     }
+    await ensureTestDocumentsHaveMasterKeys(oneTest);
     res.set("Cache-Control", "no-store");
     return res.json(new ApiResponse(201, oneTest, { success: true }))
 })
@@ -1341,6 +1610,8 @@ const findTestcontroller = asyncHandler(async (req, res) => {
         throw new ApiError(400, "test not found")
     }
 
+    await ensureTestDocumentsHaveMasterKeys(tests);
+
     return res.json(tests)
 
 })
@@ -1349,6 +1620,16 @@ const updateTestcontroller = asyncHandler(async (req, res) => {
 
     const { name, shortName } = req.params;
     const { Name, Short_name, category, Price, sampleType, method, instrument, interpretation, parameters, NormalValue } = req.body;
+    const currentTest = await testSchema.findOne({
+        $or: [
+            { Name: name },
+            { Short_name: shortName }
+        ]
+    });
+
+    const normalizedParameters = Array.isArray(parameters)
+        ? normalizeParameterPayload(parameters, currentTest?.parameters || [])
+        : parameters;
 
     const updatedtests = await testSchema.findOneAndUpdate(
         {
@@ -1363,7 +1644,7 @@ const updateTestcontroller = asyncHandler(async (req, res) => {
                 Short_name: Short_name,
                 category: category || "",
                 Price,
-                parameters: parameters || "",
+                parameters: normalizedParameters || "",
                 sampleType,
                 method: method || "",
                 instrument: instrument || "",
@@ -1510,6 +1791,7 @@ const tenantTest = asyncHandler(async (req, res) => {
         const tests = await testSchema.find({
             tenantId: tenantId,
         });
+        await ensureTestDocumentsHaveMasterKeys(tests);
 
         return res.status(200).json({
             status: 200,
@@ -1561,8 +1843,10 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
             packages: 0,
             categories: 0,
             units: 0,
-            sampleTypes: 0
+            sampleTypes: 0,
+            formulas: 0,
         };
+        const sourceFormulaScopeId = resolveFormulaScopeId(req.user);
 
         // === STEP 4: CATEGORIES ===
         if (categoryIds && categoryIds.length > 0) {
@@ -1809,12 +2093,19 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     }
                     // Differentiate between SuperAdmin base-tests and admin-created tests
                     if (test.createdByRole === 'superAdmin') {
+                        const copiedParameters = normalizeParameterPayload(
+                            (rest.parameters || []).map((parameter) => ({
+                                ...parameter,
+                                originalParameterId: toIdString(parameter.originalParameterId) || toIdString(parameter._id) || null,
+                            }))
+                        );
                         // SuperAdmin base test -> create a tenant-scoped copy marked as purchased
                         copiedTests.push({
                             ...rest,
                             _id: new mongoose.Types.ObjectId(),
                             createdBy,
                             category: newCategory,
+                            parameters: copiedParameters,
                             tenantId: franchiseeId,
                             assignedPrices: [], // reset assignedPrices
                             isBaseTest: false,
@@ -1823,12 +2114,19 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                             updatedAt: new Date()
                         });
                     } else if (test.createdByRole === 'admin') {
+                        const copiedParameters = normalizeParameterPayload(
+                            (rest.parameters || []).map((parameter) => ({
+                                ...parameter,
+                                originalParameterId: toIdString(parameter.originalParameterId) || toIdString(parameter._id) || null,
+                            }))
+                        );
                         // Admin-created test -> create as baseTest for tenant but keep originalTestId linkage
                         copiedTests.push({
                             ...rest,
                             _id: new mongoose.Types.ObjectId(),
                             createdBy,
                             tenantId: franchiseeId,
+                            parameters: copiedParameters,
                             isBaseTest: true,
                             assignedPrices: [], // reset assignedPrices
                             purchasePrice: [],
@@ -1861,6 +2159,25 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                         )
                     );
                 }
+
+                const relevantMasterKeys = copiedTests.flatMap((test) =>
+                    (test.parameters || []).map((parameter) => String(parameter?.masterParameterKey || "").trim())
+                );
+                const sourceParameterEntries = newTests.flatMap((test) =>
+                    (test.parameters || []).map((parameter) => ({
+                        parameterId: parameter?._id,
+                        masterParameterKey: parameter?.masterParameterKey,
+                        label: buildParameterLabel(test.Name, parameter?.Para_name || test.Name || "Parameter"),
+                    }))
+                );
+                assignedCounts.formulas = await copyScopedFormulasToTenant({
+                    session,
+                    sourceScopeId: sourceFormulaScopeId,
+                    targetTenantId: franchiseeId,
+                    createdBy,
+                    relevantMasterKeys,
+                    sourceParameterEntries,
+                });
             }
         }
 

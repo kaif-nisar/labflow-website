@@ -149,6 +149,15 @@ import {
 import { barcodegeneratecontroller } from "../controllers/barcode.controller.js";
 import { generateTrfSlipController } from "../controllers/trf.controller.js";
 import {
+  deleteFormula,
+  getFormulaCatalog,
+  listActiveFormulas,
+  listFormulas,
+  previewFormula,
+  saveFormula,
+  updateFormula,
+} from "../controllers/formula.controller.js";
+import {
   addLabController,
   allLabController,
   updateLabController,
@@ -964,6 +973,13 @@ router.route("/isreportready").post(bookingreportgenOrnot);
 router.route("/test-database").post(verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageTest"), allTest);
 
 router.route("/test-database-tenant").post(verifyJWT, tenantTest);
+router.route("/formulas").get(verifyJWT, checkStaffPermission("canManageTest"), listFormulas);
+router.route("/formulas/active").get(verifyJWT, listActiveFormulas);
+router.route("/formulas/catalog").get(verifyJWT, checkStaffPermission("canManageTest"), getFormulaCatalog);
+router.route("/formulas/preview").post(verifyJWT, checkStaffPermission("canManageTest"), previewFormula);
+router.route("/formulas").post(verifyJWT, checkStaffPermission("canManageTest"), saveFormula);
+router.route("/formulas/:id").put(verifyJWT, checkStaffPermission("canManageTest"), updateFormula);
+router.route("/formulas/:id").delete(verifyJWT, checkStaffPermission("canManageTest"), deleteFormula);
 // // report by bookingId
 // router.route("/thirty-days-bookings").post(getthirtydayspreviousBookingsController);
 

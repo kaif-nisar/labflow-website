@@ -11,6 +11,16 @@ const defaultresultSchema = new Schema({
 });
 
 const parameterSchema = new Schema({
+  originalParameterId: {
+    type: Schema.Types.ObjectId,
+    default: null,
+  },
+  masterParameterKey: {
+    type: String,
+    required: true,
+    trim: true,
+    index: true,
+  },
   forRandom: {
     type: Boolean,
     default: false

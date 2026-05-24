@@ -172,6 +172,9 @@ function addParameter() {
     const table = document.getElementById('parameters-table2').getElementsByTagName('tbody')[0];
     const newRow = table.insertRow();
     orderId++;
+    newRow.dataset.parameterId = "";
+    newRow.dataset.masterParameterKey = "";
+    newRow.dataset.originalParameterId = "";
     
     newRow.innerHTML = `
         <td><span class="remove-link" id="remove-link">🗑️</span></td>
@@ -391,6 +394,9 @@ document.getElementById('submitbBtn').addEventListener('click', async function (
     const parameterRows = document.querySelectorAll('#parameters-table2 tbody tr');
     parameterRows.forEach(row => {
         const parameterData = {
+            parameterId: row.dataset.parameterId || "",
+            masterParameterKey: row.dataset.masterParameterKey || "",
+            originalParameterId: row.dataset.originalParameterId || "",
             order: row.cells[1].querySelector('input').value,
             Para_name: row.cells[2].querySelector('input').value,
             unit: row.cells[3].querySelector('select').value,
