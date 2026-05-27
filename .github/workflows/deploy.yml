@@ -20,6 +20,12 @@ jobs:
 
           script: |
             cd /home/opc/labflowlis
+
+            git reset --hard
+            git clean -fd
+
             git pull origin main
+
             npm install
-            pm2 restart labflowlis
+
+            pm2 restart labflowlis --update-env
