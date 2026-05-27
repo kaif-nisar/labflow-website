@@ -40,6 +40,7 @@ module.exports = {
         // URLs
         PUBLIC_SITE_URL: "https://labflowlis.com",
         SITE_URL: "https://labflowlis.com",
+        CANONICAL_REDIRECT_ENABLED: "false",
 
         // CORS
         CORS_ORIGIN: "https://labflowlis.com"

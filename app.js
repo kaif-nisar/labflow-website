@@ -31,6 +31,7 @@ const LEGACY_HOSTS = new Set([
     "lab.coqher.in",
     "www.lab.coqher.in"
 ]);
+const CANONICAL_REDIRECT_ENABLED = String(process.env.CANONICAL_REDIRECT_ENABLED ?? "true").toLowerCase() === "true";
 const TRUST_PROXY_HOPS = Number.parseInt(process.env.TRUST_PROXY_HOPS || "1", 10);
 const resolvedTrustProxy = Number.isFinite(TRUST_PROXY_HOPS) && TRUST_PROXY_HOPS >= 0
     ? TRUST_PROXY_HOPS
@@ -221,13 +222,18 @@ app.use((req, res, next) => {
         return next();
     }
 
+    // Allow ACME HTTP challenge requests to pass through for SSL issuance/renewal.
+    if (req.path.startsWith("/.well-known/acme-challenge/")) {
+        return next();
+    }
+
     const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
     const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim().toLowerCase();
     const rawHost = forwardedHost || String(req.get("host") || "").trim().toLowerCase();
     const host = rawHost.split(":")[0];
     const protocol = forwardedProto || (req.secure ? "https" : "http");
 
-    if (!host) {
+    if (!host || !CANONICAL_REDIRECT_ENABLED) {
         return next();
     }
 
