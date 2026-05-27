@@ -30,7 +30,7 @@ const CTA_LINKS = {
 };
 
 const PRIMARY_NAV = [
-    { href: "/pathology-software", label: "kaif Software" },
+    { href: "/pathology-software", label: "my software" },
     { href: "/features", label: "Features" },
     { href: "/pricing", label: "Pricing" },
     { href: "/demo", label: "Book Demo" },
