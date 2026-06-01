@@ -3,9 +3,7 @@
 <head>
 
     <title>Form Page</title>
-    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css"
-        integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <style>
         .conta {
             padding: 50px 20px;
@@ -316,7 +314,7 @@
             /* Hidden by default */
             position: fixed;
             /* Stay in place */
-            z-index: 1000;
+            z-index: 300; /* Sit on top */
             /* Sit on top */
             left: 0;
             top: 0;
@@ -421,12 +419,74 @@
             padding: 20px;
         }
 
-        .alert {
+        .page-alert {
             position: fixed;
             width: 75%;
             top: 80px;
             right: 2%;
             z-index: 1050;
+        }
+
+        .modal-alert {
+            position: static;
+            width: auto;
+            margin: 0 0 1rem;
+        }
+
+        .sample-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 105;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .sample-modal-overlay.show {
+            display: flex;
+        }
+
+        .sample-modal {
+            width: min(520px, 100%);
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+            position: relative;
+            z-index: 3;
+            pointer-events: auto;
+            opacity: 1;
+            transform: none;
+        }
+
+        .sample-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .sample-modal-body {
+            padding: 1rem 1.25rem 0.5rem;
+        }
+
+        .sample-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem 1.25rem;
+        }
+
+        .sample-modal-close {
+            border: 0;
+            background: transparent;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            color: #6b7280;
         }
 
         .editor-container {
@@ -478,13 +538,19 @@
             border: 1px solid #ced4da;
             border-radius: 4px;
         }
+        .modal-backdrop {
+            z-index: -1;
+        }
+        /* .modal {
+            z-index: 300000000002 !important;
+        } */
     </style>
     <link rel="stylesheet" href="/vendor/ckeditor5/ckeditor5.css">
 </head>
 
 <body>
     <div class="conta" id="conta">
-        <div class="alert" role="alert"></div>
+        <div class="page-alert alert" role="alert"></div>
         <div class="form-group">
             <label for="name">Name</label>
             <input type="text" id="name" name="name">
@@ -646,32 +712,26 @@
             <div class="form-group">
                 <div class="sampletypebuttondiv">
                     <label for="method">Sample Type</label>
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal"
-                        data-whatever="@mdo">+ Add</button>
+                    <button type="button" class="btn btn-primary" id="openSampleModal">+ Add</button>
                 </div>
-                <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog"
-                    aria-labelledby="exampleModalLabel" aria-hidden="true">
-                    <div class="modal-dialog" role="document">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="exampleModalLabel">Add Sample Type</h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                            </div>
-                            <div class="alert" id="alert" role="alert"></div>
-                            <div class="modal-body">
-                                <form>
-                                    <div class="form-group">
-                                        <label for="recipient-name" class="col-form-label">Name:</label>
-                                        <input type="text" class="form-control" id="sample-name">
-                                    </div>
-                                </form>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                                <button type="button" id="sampleaddbtn" class="btn btn-primary">Save</button>
-                            </div>
+                <div class="sample-modal-overlay" id="exampleModal" aria-hidden="true">
+                    <div class="sample-modal" role="dialog" aria-modal="true" aria-labelledby="exampleModalLabel">
+                        <div class="sample-modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">Add Sample Type</h5>
+                            <button type="button" class="sample-modal-close" id="closeSampleModal" aria-label="Close">&times;</button>
+                        </div>
+                        <div class="alert modal-alert" id="alert" role="alert"></div>
+                        <div class="sample-modal-body">
+                            <form>
+                                <div class="form-group">
+                                    <label for="recipient-name" class="col-form-label">Name:</label>
+                                    <input type="text" class="form-control" id="sample-name">
+                                </div>
+                            </form>
+                        </div>
+                        <div class="sample-modal-footer">
+                            <button type="button" class="btn btn-secondary" id="closeSampleModalFooter">Close</button>
+                            <button type="button" id="sampleaddbtn" class="btn btn-primary">Save</button>
                         </div>
                     </div>
                 </div>
