@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LabFlow Admin</title>
     <link rel="stylesheet" href="/css/tailwind-offline.css">
-<link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/vendor/bootstrap4/css/bootstrap.min.css">
     <script src="/vendor/chart.js/chart.umd.min.js"></script>
@@ -20,16 +20,23 @@
     <link rel="stylesheet" href="admin.css">
     <link rel="stylesheet" href="/vendor/ckeditor5/ckeditor5.css">
     <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
-    
+
     <!-- ⚠️ IMPORTANT: Libraries ko script se PEHLE load karo -->
     <script src="/vendor/jspdf/jspdf.umd.min.js"></script>
     <script src="/vendor/jspdf-autotable/jspdf.plugin.autotable.min.js"></script>
     <!-- Include SheetJS for Excel export -->
-  <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
-  <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
+    <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
+    <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
     <style>
         .navbar {
             padding: 0rem 10px;
+        }
+
+        .modal-backdrop {
+            z-index: -1;
+        }
+        .modal-dialog {
+            margin-top: 20vh;
         }
     </style>
 </head>
@@ -72,8 +79,7 @@
         <div id="mobileMessage"
             class="fixed inset-0 z-1000050 w-full h-full border-gray-300 flex items-center justify-center bg-white bg-opacity-95 backdrop-blur-sm p-4 hidden md:hidden">
             <div class="bg-white border border-gray-300 shadow-lg rounded-lg max-w-md w-full p-6 text-center">
-                <img src="/images/logoLabFlow.svg" alt="LabFlow logo"
-                    class="w-16 h-16 mx-auto mb-4 opacity-80">
+                <img src="/images/logoLabFlow.svg" alt="LabFlow logo" class="w-16 h-16 mx-auto mb-4 opacity-80">
                 <h2 class="text-xl font-semibold text-gray-800 mb-2">Desktop Version Only</h2>
                 <p class="text-gray-600 mb-3">
                     Please visit this website on a <strong>laptop or desktop</strong> for the best experience.
@@ -433,7 +439,8 @@
                     </a>
                 </li>
                 <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="formulaBuilder" data-page-title="Formula Builder">
+                    <a class="hove dash nav-item" id="hove" data-page="formulaBuilder"
+                        data-page-title="Formula Builder">
 
                         <div class="contar">
                             <span class="dash_icon icon_v">

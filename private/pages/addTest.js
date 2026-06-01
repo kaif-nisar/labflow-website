@@ -304,7 +304,8 @@ function addParameter() {
     fetchandpopulatesamples();
 
     document.getElementById("sampleaddbtn").addEventListener("click", async () => {
-        const sampeName = document.getElementById("sample-name").value;
+        const sampleNameInput = document.getElementById("sample-name");
+        const sampeName = sampleNameInput.value.trim();
         const samplebyuser = JSON.parse(localStorage.getItem("superAdminData"));
         const alert = document.getElementById("alert");
 
@@ -320,11 +321,13 @@ function addParameter() {
             const data = await response.json();
 
             if (response.ok) {
-                fetchandpopulatesamples();
+                await fetchandpopulatesamples();
                 alert.innerHTML = `${data.message}<button data-dismiss="alert" class="alert-dismissible close">✖</button>`;
                 alert.classList.remove("alert-danger", "fade");
                 alert.classList.add("alert-success");
                 alert.classList.add("show");
+                sampleNameInput.value = "";
+                setTimeout(() => closeSampleTypeModal(), 350);
             } else {
                 alert.innerHTML = `${data.message}<button data-dismiss="alert" class="alert-dismissible close">✖</button>`;
                 alert.classList.remove("alert-success", "fade");

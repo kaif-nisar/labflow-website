@@ -1,8 +1,12 @@
+const getTestPageLoader = () => document.getElementById("page-loader") || document.querySelector(".loader");
+
 loadTest();
 
 async function loadTest() {
-    const loader = document.querySelector(".loader");
-    loader.style.display = "block";
+    const loader = getTestPageLoader();
+    if (loader) {
+        loader.style.display = "flex";
+    }
     try {
         // Retrieve the access token from cookies
 
@@ -28,7 +32,9 @@ async function loadTest() {
     catch (error) {
         console.error("Error in loadTest:", error); // Log the error message
     } finally {
-        loader.style.display = "none";
+        if (loader) {
+            loader.style.display = "none";
+        }
 
     }
 }
@@ -142,7 +148,7 @@ function addDragAndDropListeners() {
 
 function scrollWhileDragging(event) {
     const scrollSpeed = 10; // Adjust scroll speed
-    const tableContainer = document.getElementById("tablecontainer");
+    const tableContainer = document.getElementById("tableContainer");
     if (!tableContainer) return;
 
     const containerRect = tableContainer.getBoundingClientRect();
@@ -178,8 +184,10 @@ async function saveOrderToServer(updatedOrder) {
     // Select table and container elements
     const tableContainer = document.getElementById("tableContainer"); // Assume this is the container holding the table
     const table = document.getElementById("categoriesTable");
-    const loader = document.querySelector(".loader");
-    loader.style.display = "flex";
+    const loader = getTestPageLoader();
+    if (loader) {
+        loader.style.display = "flex";
+    }
 
     // Hide the table container
     tableContainer.style.display = "none";
@@ -205,8 +213,12 @@ async function saveOrderToServer(updatedOrder) {
         alert("Failed to save the order. Please try again.");
     } finally {
         // Show the table container and hide the loading animation
-        tableContainer.style.display = "block";
-        loader.style.display = "none";
+        if (tableContainer) {
+            tableContainer.style.display = "block";
+        }
+        if (loader) {
+            loader.style.display = "none";
+        }
     }
 }
 
