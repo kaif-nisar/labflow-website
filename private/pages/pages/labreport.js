@@ -1006,22 +1006,41 @@ async function loadfunction() {
         const fallbackHours = timeMatch ? Number(timeMatch[1]) : 0;
         const fallbackMinutes = timeMatch ? Number(timeMatch[2]) : 0;
 
+        // IST offset in ms: UTC + 5:30
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
         const isoDateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})T/);
         if (isoDateMatch && timeMatch) {
             const [, year, month, day] = isoDateMatch;
-            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+            // Create date in UTC by applying IST offset, so getUTC* extracts IST components
+            const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes) - IST_OFFSET_MS;
+            return new Date(utcMs);
         }
 
         const ymdMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (ymdMatch) {
             const [, year, month, day] = ymdMatch;
-            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+            // Create date at IST midnight (UTC: 18:30 previous day)
+            const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes) - IST_OFFSET_MS;
+            return new Date(utcMs);
         }
 
         const dmyMatch = rawValue.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
         if (dmyMatch) {
             const [, day, month, year] = dmyMatch;
-            return new Date(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes);
+            const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day), fallbackHours, fallbackMinutes) - IST_OFFSET_MS;
+            return new Date(utcMs);
+        }
+
+        // For full ISO strings (e.g., from server with 'Z'), JavaScript handles correctly.
+        // But to be safe, force IST interpretation for strings without timezone
+        if (!rawValue.endsWith('Z') && !rawValue.includes('+')) {
+            const parsed = new Date(rawValue);
+            if (!Number.isNaN(parsed.getTime())) {
+                // If it has time component, treat as IST
+                const utcMs = parsed.getTime() - IST_OFFSET_MS;
+                return new Date(utcMs);
+            }
         }
 
         const parsedDate = new Date(rawValue);
@@ -1033,11 +1052,20 @@ async function loadfunction() {
         const date = parseDateInput(dateInput, fallbackTime);
         if (!date) return "";
 
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
+        // Convert to IST (UTC + 5:30) before extracting date/time components
+        // parseDateInput already stored dates in UTC representing IST,
+        // but for ISO strings with 'Z' the date is in true UTC.
+        // We normalize everything to IST here by adding the offset from true UTC.
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+        const istTimestamp = date.getTime() + IST_OFFSET_MS;
+        const istDate = new Date(istTimestamp);
+
+        // Use getUTCFullYear/getUTCMonth/etc after offsetting for IST
+        const year = istDate.getUTCFullYear();
+        const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(istDate.getUTCDate()).padStart(2, '0');
+        const hours = String(istDate.getUTCHours()).padStart(2, '0');
+        const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
 
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
@@ -2956,12 +2984,19 @@ async function loadfunction() {
         }
     }
 
+    let reportedOnManuallyEdited = false;
+
+    function getCurrentReportedOnValue() {
+        return formatDateTimeLocal(new Date());
+    }
+
     // for seeting default time in input fields
     function defaultdateandtime() {
-        const reportedAt = new Date();
-        reportedAt.setMinutes(reportedAt.getMinutes() + 30);
+        const reportedOnInput = document.getElementById('reportedOn');
+        if (!reportedOnInput) return;
 
-        document.getElementById('reportedOn').value = formatDateTimeLocal(reportedAt);
+        reportedOnInput.value = getCurrentReportedOnValue();
+        reportedOnManuallyEdited = false;
     }
 
     // for populating patient information
@@ -3006,6 +3041,17 @@ async function loadfunction() {
 `;
 
         document.querySelector(".report-details").appendChild(patientdetails);
+
+        const reportedOnInput = document.getElementById('reportedOn');
+        if (reportedOnInput) {
+            reportedOnInput.addEventListener('input', () => {
+                reportedOnManuallyEdited = true;
+            });
+            reportedOnInput.addEventListener('change', () => {
+                reportedOnManuallyEdited = true;
+            });
+        }
+
         defaultdateandtime();
     }
 
@@ -3625,6 +3671,10 @@ async function loadfunction() {
     document.getElementById("finalBtn").addEventListener("click", async (event) => {
         event.preventDefault(); // Prevent default form submission
         event.target.disabled = true;
+        const reportedOnInput = document.getElementById('reportedOn');
+        if (reportedOnInput && (!reportedOnManuallyEdited || !reportedOnInput.value)) {
+            reportedOnInput.value = getCurrentReportedOnValue();
+        }
         const returned = await checkFields(true);
         if (!returned) {
             event.target.disabled = false;
