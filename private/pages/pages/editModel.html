@@ -109,6 +109,72 @@
     .format input {
       margin: 5px;
     }
+
+    .license-card {
+      margin-top: 1.5rem;
+      padding: 1.2rem;
+      border-radius: 14px;
+      border: 1px solid #f0c36d;
+      background: linear-gradient(180deg, #fff8e6 0%, #fffdf7 100%);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    }
+
+    .license-card h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1.1rem;
+      color: #8a4b00;
+    }
+
+    .license-card p {
+      margin: 0 0 1rem;
+      color: #6c5a2e;
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+
+    .license-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 700;
+      color: #3b2a05;
+    }
+
+    .switch-row input[type="checkbox"] {
+      width: 1.15rem;
+      height: 1.15rem;
+      accent-color: #c2410c;
+    }
+
+    .license-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .purge-btn {
+      background: #b42318;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.85rem 1.15rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .purge-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(180, 35, 24, 0.22);
+    }
   </style>
 </head>
 
@@ -210,6 +276,32 @@
         <span>Show Test Database</span>
       </label>
     </div>
+
+    <section class="license-card" aria-labelledby="licenseCardTitle">
+      <h3 id="licenseCardTitle">Access &amp; Licensing Control</h3>
+      <p>Control how many active devices this tenant can use at the same time. Lowering the limit trims the oldest active sessions first.</p>
+
+      <div class="license-grid">
+        <label class="switch-row" for="deviceRestriction">
+          <input type="checkbox" id="deviceRestriction" name="deviceRestriction" checked />
+          <span>Enforce Device Lockout</span>
+        </label>
+
+        <div class="form-group">
+          <label for="maxAllowedDevices">Maximum Allowed Login Devices</label>
+          <select id="maxAllowedDevices" name="maxAllowedDevices">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="license-actions">
+        <button type="button" class="purge-btn" id="purgeSessionsBtn">Purge All Sessions</button>
+      </div>
+    </section>
 
     <h2 style="margin-top: 2rem;">Subscription Info</h2>
 

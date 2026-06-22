@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { createHash } from "node:crypto";
 
 import { SuperAdmin } from "../src/models/superAdmin.model.js";
 import { User } from "../src/models/user.model.js";
@@ -7,6 +8,7 @@ import { ApiError } from "../src/utils/apiError.js";
 
 const ACCESS_TOKEN_COOKIE = "accessToken";
 const REFRESH_TOKEN_COOKIE = "refreshToken";
+const DEVICE_SESSION_HEADER = "x-session-token";
 
 const USER_SAFE_SELECT = "-password -refreshToken";
 const SUPER_ADMIN_SAFE_SELECT = "-password -refreshToken";
@@ -131,6 +133,7 @@ const extractBearerToken = (authorizationHeader = "") => {
 const getAccessTokenFromRequest = (req) => {
   return (
     req.cookies?.[ACCESS_TOKEN_COOKIE] ||
+    req.header(DEVICE_SESSION_HEADER) ||
     extractBearerToken(req.header("Authorization"))
   );
 };
@@ -150,6 +153,287 @@ const getUserPortalRole = (user) => {
 
   return user?.role || null;
 };
+
+const normalizeDeviceLimit = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+
+  return Math.min(4, Math.max(1, parsed));
+};
+
+const hashDeviceSessionToken = (token) => {
+  return createHash("sha256").update(String(token || "")).digest("hex");
+};
+
+const getDeviceSessionTokenFromRequest = (req) => {
+  return (
+    req.header(DEVICE_SESSION_HEADER) ||
+    req.cookies?.[ACCESS_TOKEN_COOKIE] ||
+    extractBearerToken(req.header("Authorization")) ||
+    ""
+  );
+};
+
+const getDeviceFingerprintFromRequest = (req) => {
+  return String(
+    req.header("x-device-fingerprint") ||
+      req.body?.deviceFingerprint ||
+      req.query?.deviceFingerprint ||
+      ""
+  ).trim();
+};
+
+const getClientIpAddress = (req) => {
+  const forwardedFor = req.headers?.["x-forwarded-for"];
+  if (forwardedFor) {
+    return String(forwardedFor).split(",")[0].trim();
+  }
+
+  return String(req.ip || req.socket?.remoteAddress || "").trim();
+};
+
+const getActiveDeviceSessions = (user) => {
+  return Array.isArray(user?.active_sessions) ? user.active_sessions : [];
+};
+
+const getDeviceSessionMatch = (user, sessionToken) => {
+  const sessionHash = hashDeviceSessionToken(sessionToken);
+  return getActiveDeviceSessions(user).find(
+    (entry) => String(entry?.session_token || "") === sessionHash
+  );
+};
+
+const buildDeviceSessionRecord = ({
+  accessToken,
+  deviceFingerprint,
+  ipAddress,
+  userAgent,
+  expiresAt,
+}) => {
+  return {
+    session_token: hashDeviceSessionToken(accessToken),
+    device_fingerprint: String(deviceFingerprint || "").trim(),
+    last_activity_at: new Date(),
+    ip_address: String(ipAddress || "").trim(),
+    user_agent: String(userAgent || "").trim(),
+    expires_at: expiresAt ? new Date(expiresAt) : null,
+  };
+};
+
+const updateActiveDeviceSessionActivity = async (userId, sessionToken, req) => {
+  const sessionHash = hashDeviceSessionToken(sessionToken);
+  const deviceFingerprint = getDeviceFingerprintFromRequest(req);
+  const ipAddress = getClientIpAddress(req);
+
+  await User.updateOne(
+    { _id: userId, "active_sessions.session_token": sessionHash },
+    {
+      $set: {
+        "active_sessions.$.last_activity_at": new Date(),
+        "active_sessions.$.ip_address": ipAddress,
+        ...(deviceFingerprint
+          ? { "active_sessions.$.device_fingerprint": deviceFingerprint }
+          : {}),
+      },
+    }
+  );
+};
+
+const pruneExpiredDeviceSessions = async (user) => {
+  const sessions = getActiveDeviceSessions(user);
+  const now = Date.now();
+  const filtered = sessions.filter((session) => {
+    if (!session?.expires_at) {
+      return true;
+    }
+
+    const expiresAt = new Date(session.expires_at).getTime();
+    return Number.isFinite(expiresAt) ? expiresAt > now : true;
+  });
+
+  if (filtered.length === sessions.length) {
+    return user;
+  }
+
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { active_sessions: filtered } }
+  );
+  user.active_sessions = filtered;
+  return user;
+};
+
+const validateUserDeviceSession = async (req, user) => {
+  if (!user) {
+    throw buildUnauthorizedError("Unauthorized request", "ACCESS_TOKEN_REQUIRED");
+  }
+
+  if (user.is_device_restriction_enabled === false) {
+    return {
+      restricted: false,
+      matchedSession: null,
+    };
+  }
+
+  const sessionToken = getDeviceSessionTokenFromRequest(req);
+  if (!sessionToken) {
+    throw buildUnauthorizedError(
+      "Access token is required",
+      "ACCESS_TOKEN_REQUIRED"
+    );
+  }
+
+  await pruneExpiredDeviceSessions(user);
+
+  const matchedSession = getDeviceSessionMatch(user, sessionToken);
+  if (!matchedSession) {
+    const error = buildUnauthorizedError(
+      "This session has been revoked. Please sign in again.",
+      "DEVICE_SESSION_INVALIDATED"
+    );
+    error.clearAuth = true;
+    throw error;
+  }
+
+  await updateActiveDeviceSessionActivity(user._id, sessionToken, req);
+
+  return {
+    restricted: true,
+    matchedSession,
+  };
+};
+
+export const prepareUserDeviceSession = async (
+  user,
+  { accessToken, deviceFingerprint, ipAddress, userAgent, expiresAt, setFields = {} }
+) => {
+  const limit = normalizeDeviceLimit(user?.max_allowed_devices);
+  const sessions = getActiveDeviceSessions(user);
+
+  if (user?.is_device_restriction_enabled !== false && sessions.length >= limit) {
+    throw buildForbiddenError(
+      "Device limit exceeded",
+      "DEVICE_LIMIT_EXCEEDED"
+    );
+  }
+
+  const sessionRecord = buildDeviceSessionRecord({
+    accessToken,
+    deviceFingerprint,
+    ipAddress,
+    userAgent,
+    expiresAt,
+  });
+
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        lastLogin: new Date(),
+        ...setFields,
+      },
+      $push: {
+        active_sessions: sessionRecord,
+      },
+    }
+  );
+
+  return sessionRecord;
+};
+
+export const replaceUserDeviceSessionToken = async (
+  userId,
+  previousAccessToken,
+  nextAccessToken,
+  { deviceFingerprint, ipAddress, userAgent, expiresAt } = {}
+) => {
+  if (!previousAccessToken) {
+    return null;
+  }
+
+  const previousHash = hashDeviceSessionToken(previousAccessToken);
+  const nextRecord = buildDeviceSessionRecord({
+    accessToken: nextAccessToken,
+    deviceFingerprint,
+    ipAddress,
+    userAgent,
+    expiresAt,
+  });
+
+  const result = await User.updateOne(
+    { _id: userId, "active_sessions.session_token": previousHash },
+    {
+      $set: {
+        "active_sessions.$.session_token": nextRecord.session_token,
+        "active_sessions.$.device_fingerprint": nextRecord.device_fingerprint,
+        "active_sessions.$.last_activity_at": nextRecord.last_activity_at,
+        "active_sessions.$.ip_address": nextRecord.ip_address,
+        "active_sessions.$.user_agent": nextRecord.user_agent,
+        "active_sessions.$.expires_at": nextRecord.expires_at,
+      },
+    }
+  );
+
+  return result;
+};
+
+export const removeUserDeviceSession = async (userId, accessToken) => {
+  if (!accessToken) {
+    return null;
+  }
+
+  return User.updateOne(
+    { _id: userId },
+    {
+      $pull: {
+        active_sessions: {
+          session_token: hashDeviceSessionToken(accessToken),
+        },
+      },
+    }
+  );
+};
+
+export const purgeUserDeviceSessions = async (userId) => {
+  return User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        active_sessions: [],
+      },
+    }
+  );
+};
+
+export const trimUserDeviceSessionsToLimit = async (userId, limit) => {
+  const user = await User.findById(userId).select("active_sessions");
+  if (!user) {
+    return null;
+  }
+
+  const normalizedLimit = normalizeDeviceLimit(limit);
+  const sortedSessions = [...getActiveDeviceSessions(user)].sort((left, right) => {
+    const leftTime = new Date(left?.last_activity_at || 0).getTime();
+    const rightTime = new Date(right?.last_activity_at || 0).getTime();
+    return rightTime - leftTime;
+  });
+
+  const trimmedSessions = sortedSessions.slice(0, normalizedLimit);
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        active_sessions: trimmedSessions,
+      },
+    }
+  );
+
+  return trimmedSessions;
+};
+
+export const getSessionTokenHash = (sessionToken) => hashDeviceSessionToken(sessionToken);
 
 export const getAuthCookieOptions = () => {
   return {
@@ -271,6 +555,36 @@ const resolveAccessSession = async (accessToken, type, strict) => {
 
         const user = await loadUserSession(decodedToken?._id);
         if (user) {
+          const deviceSessionResult = await validateUserDeviceSession(
+            {
+              header: (key) => (key === DEVICE_SESSION_HEADER ? accessToken : ""),
+              cookies: { [ACCESS_TOKEN_COOKIE]: accessToken },
+              body: {},
+              query: {},
+              headers: {},
+              ip: "",
+              socket: {},
+            },
+            user
+          ).catch((error) => {
+            if (error?.code === "DEVICE_SESSION_INVALIDATED") {
+              return { revoked: true };
+            }
+            return null;
+          });
+
+          if (deviceSessionResult?.revoked) {
+            return {
+              kind: "user",
+              principal: user,
+              user,
+              portalRole: getUserPortalRole(user),
+              redirectTo: buildPortalRedirectPath("user", user),
+              tokens: null,
+              revoked: true,
+            };
+          }
+
           return {
             kind: "user",
             principal: user,
@@ -415,6 +729,9 @@ export const resolvePortalSession = async (
   );
 
   if (accessSession) {
+    if (accessSession.revoked) {
+      return null;
+    }
     return accessSession;
   }
 
@@ -509,6 +826,8 @@ export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
 const verifyJWT = asyncHandler(async (req, res, next) => {
   const user = await requireUserAccess(req);
   const gate = getTenantSubscriptionGate(user.tenantId);
+
+  await validateUserDeviceSession(req, user);
 
   if (shouldBlockWriteOnExpiry(req, gate)) {
     const error = buildForbiddenError(

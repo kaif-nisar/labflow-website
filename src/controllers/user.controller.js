@@ -3,9 +3,16 @@ import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Ledger } from "../models/ledger.model.js";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import { unitdb } from "../models/category.model.js";
 import { User } from "../models/user.model.js";
 import { Tenant } from "../models/tenant.model.js";
+import {
+  prepareUserDeviceSession,
+  removeUserDeviceSession,
+  replaceUserDeviceSessionToken,
+  getSessionTokenHash,
+} from "../../middlewares/auth.middleware.js";
 
 const isChildHierarchyRole = (role, parentRole) => {
   const childRoles = ["superFranchisee", "franchisee", "subFranchisee"];
@@ -180,19 +187,40 @@ const loginUser = asyncHandler(async (req, res) => {
       accountDeactivated: true,
     });
   }
-  let parent;
   if (!user.parentUser && user.createdBy) {
     user.parentUser = user.createdBy;
   }
-  // Update last login
-  user.lastLogin = new Date();
-  await user.save({ validateBeforeSave: false });
 
-  // Generate access and refresh tokens
-  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
-    user._id,
-    user.role
-  );
+  // Generate access and refresh tokens and register the device session before granting access.
+  const accessToken = user.generateAccessToken();
+  const refreshToken = user.generateRefreshToken();
+  const decodedAccessToken = jwt.decode(accessToken);
+  const accessTokenExpiresAt = decodedAccessToken?.exp
+    ? new Date(decodedAccessToken.exp * 1000)
+    : null;
+  const deviceFingerprint = String(
+    req.body?.deviceFingerprint ||
+      req.header("x-device-fingerprint") ||
+      ""
+  ).trim();
+  const ipAddress = String(
+    (req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() ||
+      req.ip ||
+      req.socket?.remoteAddress ||
+      ""
+  ).trim();
+  const userAgent = String(req.headers?.["user-agent"] || "").trim();
+
+  await prepareUserDeviceSession(user, {
+    accessToken,
+    deviceFingerprint,
+    ipAddress,
+    userAgent,
+    expiresAt: accessTokenExpiresAt,
+    setFields: {
+      refreshToken,
+    },
+  });
 
   // Create user data for frontend
   const userData = {
@@ -268,6 +296,16 @@ const loginUser = asyncHandler(async (req, res) => {
 
 //user logout functnality
 const logOutUser = asyncHandler(async (req, res) => {
+  const accessToken =
+    req.cookies?.accessToken ||
+    req.header("x-session-token") ||
+    req.body?.accessToken ||
+    "";
+
+  if (accessToken) {
+    await removeUserDeviceSession(req.user._id, accessToken);
+  }
+
   await User.findByIdAndUpdate(
     req.user._id,
     {
@@ -312,7 +350,9 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 // GENRATER ACCESS TOKEN AGAIN BASE ON REFRESH TOKEN FOR LOGIN LAST EVENT
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incommingRefreshToken =
-    req.cookie.refreshToken || req.body.refreshToken;
+    req.cookies?.refreshToken ||
+    req.body?.refreshToken ||
+    req.header("x-refresh-token");
 
   if (!incommingRefreshToken) {
     throw new ApiError(402, "unathorized access");
@@ -329,12 +369,83 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       throw new ApiError(402, "invalid refresh Token");
     }
 
+    const currentAccessToken =
+      req.cookies?.accessToken ||
+      req.header("x-session-token") ||
+      req.header("Authorization")?.replace(/^Bearer\s+/i, "") ||
+      "";
+
+    if (user.is_device_restriction_enabled !== false) {
+      if (!currentAccessToken) {
+        throw new ApiError(401, "This session has been revoked. Please login again.");
+      }
+
+      const currentSessionHash = getSessionTokenHash(currentAccessToken);
+      const hasActiveSession = Array.isArray(user.active_sessions)
+        && user.active_sessions.some(
+          (session) => String(session?.session_token || "") === currentSessionHash
+        );
+
+      if (!hasActiveSession) {
+        throw new ApiError(401, "This session has been revoked. Please login again.");
+      }
+    }
+
+    const accessToken = user.generateAccessToken();
+    const newRefreshToken = user.generateRefreshToken();
+    const decodedAccessToken = jwt.decode(accessToken);
+    const accessTokenExpiresAt = decodedAccessToken?.exp
+      ? new Date(decodedAccessToken.exp * 1000)
+      : null;
+    const deviceFingerprint = String(
+      req.body?.deviceFingerprint ||
+        req.header("x-device-fingerprint") ||
+        ""
+    ).trim();
+    const ipAddress = String(
+      (req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() ||
+        req.ip ||
+        req.socket?.remoteAddress ||
+        ""
+    ).trim();
+    const userAgent = String(req.headers?.["user-agent"] || "").trim();
+
+    if (currentAccessToken) {
+      const sessionUpdate = await replaceUserDeviceSessionToken(
+        user._id,
+        currentAccessToken,
+        accessToken,
+        {
+          deviceFingerprint,
+          ipAddress,
+          userAgent,
+          expiresAt: accessTokenExpiresAt,
+        }
+      );
+
+      if (user.is_device_restriction_enabled !== false && !sessionUpdate?.modifiedCount) {
+        throw new ApiError(401, "This session has been revoked. Please login again.");
+      }
+    } else {
+      await prepareUserDeviceSession(user, {
+        accessToken,
+        deviceFingerprint,
+        ipAddress,
+        userAgent,
+        expiresAt: accessTokenExpiresAt,
+        setFields: {
+          refreshToken: newRefreshToken,
+        },
+      });
+    }
+
+    user.refreshToken = newRefreshToken;
+    await user.save({ validateBeforeSave: false });
+
     const options = {
       httpOnly: true,
       secure: true,
     };
-    const { accessToken, newRefreshToken } =
-      await generateAccessAndRefreshToken(user._id);
 
     return res
       .status(200)

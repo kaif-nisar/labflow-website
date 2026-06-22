@@ -621,8 +621,14 @@ app.use('*', (req, res) => {
 app.use((error, req, res, next) => {
     console.error('💥 Global Error Handler:', error);
 
+    if (error?.clearAuth) {
+        clearAuthCookies(res);
+    }
+
+    const statusCode = error?.statusCode || error?.status || 500;
     const errorResponse = {
-        error: 'Something went wrong!'
+        error: error?.code || error?.error || 'Something went wrong!',
+        message: error?.message || 'Something went wrong!'
     };
 
     if (process.env.NODE_ENV !== 'production') {
@@ -630,7 +636,7 @@ app.use((error, req, res, next) => {
         errorResponse.stack = error.stack;
     }
 
-    res.status(error.status || 500).json(errorResponse);
+    res.status(statusCode).json(errorResponse);
 });
 
 // ========================

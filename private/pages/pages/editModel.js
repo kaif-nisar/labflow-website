@@ -1,4 +1,10 @@
 (async function () {
+  const normalizeBoolean = (value, fallback = false) => {
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return fallback;
+  };
+
   // Get modelId from URL
   const urlParams = new URLSearchParams(window.location.search);
   const tenantId = urlParams.get('modelId'); // yahi aapke user ki id hai
@@ -41,6 +47,8 @@
     document.getElementById('status').value = data.adminDetails.userId.isActive ? 'true' : 'false';
     document.getElementById('printsetting').checked = data.adminDetails.userId.showprintsetting;
     document.getElementById('testdatabase').checked = data.adminDetails.userId.showtestdatabase;
+    document.getElementById('deviceRestriction').checked = normalizeBoolean(data.adminDetails.userId.is_device_restriction_enabled, true);
+    document.getElementById('maxAllowedDevices').value = String(data.adminDetails.userId.max_allowed_devices || 1);
     if (data.adminDetails.userId.pdfFormat === "reportFormat3") {
       document.getElementById('format1').checked = true;
     } else if (data.adminDetails.userId.pdfFormat === "reportFormat1") {
@@ -58,45 +66,65 @@
   } catch (err) {
     alert('Failed to load user details');
   }
-  document.getElementById("adminEditForm").addEventListener("submit", async function (e) {
-    e.preventDefault();
 
-    const formData = new FormData(this);
+  const buildPayload = () => {
+    const formData = new FormData(document.getElementById("adminEditForm"));
     const data = Object.fromEntries(formData.entries());
 
-    data.pdfFormat = document.querySelector('input[name="format"]:checked').value;
+    data.pdfFormat = document.querySelector('input[name="format"]:checked')?.value || "reportFormat1";
     data.showprintsetting = document.getElementById('printsetting').checked;
     data.showtestdatabase = document.getElementById('testdatabase').checked;
+    data.is_device_restriction_enabled = document.getElementById('deviceRestriction').checked;
+    data.max_allowed_devices = Number(document.getElementById('maxAllowedDevices').value || 1);
 
-    console.log("data:", data);
-
-    // Convert string "true"/"false" to boolean
     data.isActive = data.status === "true";
     delete data.status;
 
-    // Optional: Attach `tenantId`, `_id`, or `refreshToken` if needed
+    return {
+      ...data,
+      paymentAmount: Number(document.getElementById('paymentAmount').value || 0),
+      paymentMethod: document.getElementById('paymentMethod').value || 'manual',
+      manualActivate: document.getElementById('manualActivate').checked,
+      planType: document.getElementById('planType').value,
+      price: Number(document.getElementById('price').value || 0),
+      paymentStatus: document.getElementById('paymentStatus').value,
+    };
+  };
 
+  const submitUpdate = async ({ purgeAllSessions = false } = {}) => {
     try {
       const response = await fetch(`/api/v1/user/update-model/${tenantId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          paymentAmount: Number(document.getElementById('paymentAmount').value || 0),
-          paymentMethod: document.getElementById('paymentMethod').value || 'manual',
-          manualActivate: document.getElementById('manualActivate').checked,
-          planType: document.getElementById('planType').value,
-          price: Number(document.getElementById('price').value || 0),
-          paymentStatus: document.getElementById('paymentStatus').value
+          ...buildPayload(),
+          purgeAllSessions,
         }),
       });
 
       const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || "Update failed");
+      }
+
       alert(result.message || "Updated successfully!");
+      return true;
     } catch (err) {
       console.error("Update failed", err);
-      alert("Update failed. Check console.");
+      alert(err.message || "Update failed. Check console.");
+      return false;
     }
+  };
+
+  document.getElementById("adminEditForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    await submitUpdate({ purgeAllSessions: false });
+  });
+
+  document.getElementById("purgeSessionsBtn").addEventListener("click", async () => {
+    const confirmed = confirm("Purge all active sessions for this tenant? Everyone will be logged out.");
+    if (!confirmed) return;
+    await submitUpdate({ purgeAllSessions: true });
   });
 })();
 

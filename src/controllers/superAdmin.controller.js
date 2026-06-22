@@ -6,6 +6,10 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { Ledger } from "../models/ledger.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import {
+  purgeUserDeviceSessions,
+  trimUserDeviceSessionsToLimit,
+} from "../../middlewares/auth.middleware.js";
 
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
@@ -658,6 +662,20 @@ const updateAdminById = async (req, res) => {
       showRandomBtn: req.body.showRandomBtn,
     };
 
+    const currentDeviceLimit = Number.isFinite(Number(adminUser.max_allowed_devices))
+      ? Math.min(4, Math.max(1, Number(adminUser.max_allowed_devices)))
+      : 1;
+    const requestedDeviceLimit = Number.isFinite(Number(req.body.max_allowed_devices ?? req.body.maxAllowedDevices))
+      ? Math.min(4, Math.max(1, Number(req.body.max_allowed_devices ?? req.body.maxAllowedDevices)))
+      : currentDeviceLimit;
+    const requestedDeviceRestriction = req.body.is_device_restriction_enabled;
+    const shouldEnableDeviceRestriction = requestedDeviceRestriction === undefined
+      ? adminUser.is_device_restriction_enabled !== false
+      : requestedDeviceRestriction === true || requestedDeviceRestriction === "true";
+
+    userUpdate.is_device_restriction_enabled = shouldEnableDeviceRestriction;
+    userUpdate.max_allowed_devices = requestedDeviceLimit;
+
     const normalizedPlanType = normalizePlanType(
       req.body.planType || tenant.subscriptionPlan?.planType || adminUser.subscription?.plan
     );
@@ -697,6 +715,12 @@ const updateAdminById = async (req, res) => {
 
     // 3. Apply updates to User
     await User.findByIdAndUpdate(userId, userUpdate, { new: true });
+
+    if (req.body.purgeAllSessions === true || req.body.purgeAllSessions === "true") {
+      await purgeUserDeviceSessions(userId);
+    } else if (shouldEnableDeviceRestriction && requestedDeviceLimit < currentDeviceLimit) {
+      await trimUserDeviceSessionsToLimit(userId, requestedDeviceLimit);
+    }
 
     const findUser = await User.findById(userId);
     // 4. Handle manual activation / payment

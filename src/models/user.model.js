@@ -2,6 +2,42 @@ import mongoose, { Schema } from "mongoose";
 import { Tenant } from "./tenant.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
+
+const activeSessionSchema = new Schema(
+  {
+    session_token: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    device_fingerprint: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    last_activity_at: {
+      type: Date,
+      default: Date.now,
+    },
+    ip_address: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    user_agent: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    expires_at: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+  },
+  { _id: false }
+);
 
 const userSchema = new Schema(
   {
@@ -72,6 +108,20 @@ const userSchema = new Schema(
     },
     refreshToken: {
       type: String,
+    },
+    is_device_restriction_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    max_allowed_devices: {
+      type: Number,
+      default: 1,
+      min: 1,
+      max: 4,
+    },
+    active_sessions: {
+      type: [activeSessionSchema],
+      default: [],
     },
     upiScreenshots: [
       {
@@ -478,6 +528,7 @@ userSchema.methods.generateAccessToken = function () {
     },
     process.env.SUPER_ADMIN_ACCESS_TOKEN_SECRET,
     {
+      jwtid: randomUUID(),
       expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
     }
   );
