@@ -12,6 +12,7 @@ import {
   removeUserDeviceSession,
   replaceUserDeviceSessionToken,
   getSessionTokenHash,
+  resolveLocationDataFromRequest,
 } from "../../middlewares/auth.middleware.js";
 
 const isChildHierarchyRole = (role, parentRole) => {
@@ -203,6 +204,7 @@ const loginUser = asyncHandler(async (req, res) => {
       req.header("x-device-fingerprint") ||
       ""
   ).trim();
+  const locationData = resolveLocationDataFromRequest(req);
   const ipAddress = String(
     (req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() ||
       req.ip ||
@@ -217,9 +219,19 @@ const loginUser = asyncHandler(async (req, res) => {
     ipAddress,
     userAgent,
     expiresAt: accessTokenExpiresAt,
+    location: locationData,
     setFields: {
       refreshToken,
     },
+  });
+
+  await user.logActivity("login", {
+    deviceFingerprint,
+    ipAddress,
+    userAgent,
+    location: locationData,
+    sessionHash: getSessionTokenHash(accessToken),
+    loginAt: new Date(),
   });
 
   // Create user data for frontend
@@ -303,6 +315,13 @@ const logOutUser = asyncHandler(async (req, res) => {
     "";
 
   if (accessToken) {
+    await req.user.logActivity("logout", {
+      sessionHash: getSessionTokenHash(accessToken),
+      ipAddress:
+        String((req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || req.socket?.remoteAddress || "").trim(),
+      userAgent: String(req.headers?.["user-agent"] || "").trim(),
+      logoutAt: new Date(),
+    });
     await removeUserDeviceSession(req.user._id, accessToken);
   }
 
@@ -402,6 +421,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         req.header("x-device-fingerprint") ||
         ""
     ).trim();
+    const locationData = resolveLocationDataFromRequest(req);
     const ipAddress = String(
       (req.headers?.["x-forwarded-for"] || "").split(",")[0].trim() ||
         req.ip ||
@@ -420,6 +440,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
           ipAddress,
           userAgent,
           expiresAt: accessTokenExpiresAt,
+          location: locationData,
         }
       );
 
@@ -433,6 +454,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         ipAddress,
         userAgent,
         expiresAt: accessTokenExpiresAt,
+        location: locationData,
         setFields: {
           refreshToken: newRefreshToken,
         },

@@ -245,6 +245,34 @@
     filter: brightness(0.96);
   }
 
+  .status-panel {
+    background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+    border: 1px solid #cfe0ff;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    color: #0f172a;
+    display: grid;
+    gap: 6px;
+  }
+
+  .status-panel strong {
+    color: #1d4ed8;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
   @media (max-width: 920px) {
     #adminEditForm .edit-grid {
       grid-template-columns: 1fr;
@@ -333,6 +361,41 @@
             <input type="checkbox" id="manualActivate" name="manualActivate" />
             Mark tenant as manually activated (received cash)
           </label>
+        </div>
+      </section>
+
+      <section class="edit-section">
+        <h3>Device Access Control</h3>
+        <div class="form-group">
+          <label for="deviceRestriction">Device Restriction</label>
+          <select id="deviceRestriction" name="deviceRestriction">
+            <option value="true" selected>Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="maxAllowedDevices">Max Allowed Devices</label>
+          <select id="maxAllowedDevices" name="maxAllowedDevices">
+            <option value="1">1 Device</option>
+            <option value="2">2 Devices</option>
+            <option value="3">3 Devices</option>
+            <option value="4">4 Devices</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="activeSessionsCount">Active Sessions</label>
+          <input type="text" id="activeSessionsCount" name="activeSessionsCount" readonly>
+        </div>
+        <div class="status-panel">
+          <span class="status-chip">Security Policy</span>
+          <div id="devicePolicySummary">Loading policy summary...</div>
+        </div>
+      </section>
+
+      <section class="edit-section full">
+        <h3>Expiry Preview</h3>
+        <div class="status-panel" id="expiryPreview">
+          <div>Planned expiry will appear here after you change duration or grace inputs.</div>
         </div>
       </section>
 

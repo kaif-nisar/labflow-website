@@ -30,6 +30,15 @@ const activeSessionSchema = new Schema(
       default: "",
       trim: true,
     },
+    location: {
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
+      city: { type: String, default: "", trim: true },
+      state: { type: String, default: "", trim: true },
+      country: { type: String, default: "", trim: true },
+      label: { type: String, default: "", trim: true },
+      source: { type: String, default: "", trim: true },
+    },
     expires_at: {
       type: Date,
       default: null,
@@ -452,6 +461,7 @@ const userSchema = new Schema(
             "test_create",
             "subscription_renewal",
             "subscription_expiry", // ✅ Add this line
+            "logout",
             "referral_commission",
             "withdrawal_request",
             'booking_created',

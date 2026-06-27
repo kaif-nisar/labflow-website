@@ -194,6 +194,77 @@ const getClientIpAddress = (req) => {
   return String(req.ip || req.socket?.remoteAddress || "").trim();
 };
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeLocationData = (locationData = {}) => {
+  const latitude = toFiniteNumber(
+    locationData.latitude ??
+      locationData.lat ??
+      locationData.coords?.latitude ??
+      locationData.coords?.lat
+  );
+  const longitude = toFiniteNumber(
+    locationData.longitude ??
+      locationData.lng ??
+      locationData.lon ??
+      locationData.coords?.longitude ??
+      locationData.coords?.lng ??
+      locationData.coords?.lon
+  );
+  const city = String(locationData.city || locationData.town || locationData.village || "").trim();
+  const state = String(locationData.state || locationData.region || "").trim();
+  const country = String(locationData.country || locationData.countryName || "").trim();
+  const label = String(
+    locationData.label ||
+      locationData.locationLabel ||
+      [city, state, country].filter(Boolean).join(", ")
+  ).trim();
+  const source = String(locationData.source || locationData.provider || "").trim();
+
+  const hasLocation =
+    latitude !== null ||
+    longitude !== null ||
+    Boolean(city || state || country || label || source);
+
+  if (!hasLocation) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+    city,
+    state,
+    country,
+    label,
+    source,
+  };
+};
+
+const getLocationDataFromRequest = (req) => {
+  const locationPayload =
+    req.body?.locationData ||
+    req.body?.location ||
+    req.query?.locationData ||
+    {};
+
+  const headerLocation = normalizeLocationData({
+    latitude: req.header("x-location-latitude") || req.header("x-latitude"),
+    longitude: req.header("x-location-longitude") || req.header("x-longitude"),
+    city: req.header("x-location-city"),
+    state: req.header("x-location-state"),
+    country: req.header("x-location-country"),
+    label: req.header("x-location-label"),
+    source: req.header("x-location-source"),
+  });
+
+  const bodyLocation = normalizeLocationData(locationPayload);
+  return bodyLocation || headerLocation;
+};
+
 const getActiveDeviceSessions = (user) => {
   return Array.isArray(user?.active_sessions) ? user.active_sessions : [];
 };
@@ -211,6 +282,7 @@ const buildDeviceSessionRecord = ({
   ipAddress,
   userAgent,
   expiresAt,
+  location,
 }) => {
   return {
     session_token: hashDeviceSessionToken(accessToken),
@@ -218,6 +290,7 @@ const buildDeviceSessionRecord = ({
     last_activity_at: new Date(),
     ip_address: String(ipAddress || "").trim(),
     user_agent: String(userAgent || "").trim(),
+    ...(location ? { location } : {}),
     expires_at: expiresAt ? new Date(expiresAt) : null,
   };
 };
@@ -226,6 +299,7 @@ const updateActiveDeviceSessionActivity = async (userId, sessionToken, req) => {
   const sessionHash = hashDeviceSessionToken(sessionToken);
   const deviceFingerprint = getDeviceFingerprintFromRequest(req);
   const ipAddress = getClientIpAddress(req);
+  const location = getLocationDataFromRequest(req);
 
   await User.updateOne(
     { _id: userId, "active_sessions.session_token": sessionHash },
@@ -236,6 +310,7 @@ const updateActiveDeviceSessionActivity = async (userId, sessionToken, req) => {
         ...(deviceFingerprint
           ? { "active_sessions.$.device_fingerprint": deviceFingerprint }
           : {}),
+        ...(location ? { "active_sessions.$.location": location } : {}),
       },
     }
   );
@@ -307,12 +382,13 @@ const validateUserDeviceSession = async (req, user) => {
 
 export const prepareUserDeviceSession = async (
   user,
-  { accessToken, deviceFingerprint, ipAddress, userAgent, expiresAt, setFields = {} }
+  { accessToken, deviceFingerprint, ipAddress, userAgent, expiresAt, location, setFields = {} }
 ) => {
   const limit = normalizeDeviceLimit(user?.max_allowed_devices);
-  const sessions = getActiveDeviceSessions(user);
+  const prunedUser = await pruneExpiredDeviceSessions(user);
+  const sessions = getActiveDeviceSessions(prunedUser);
 
-  if (user?.is_device_restriction_enabled !== false && sessions.length >= limit) {
+  if (prunedUser?.is_device_restriction_enabled !== false && sessions.length >= limit) {
     throw buildForbiddenError(
       "Device limit exceeded",
       "DEVICE_LIMIT_EXCEEDED"
@@ -325,10 +401,11 @@ export const prepareUserDeviceSession = async (
     ipAddress,
     userAgent,
     expiresAt,
+    location,
   });
 
   await User.updateOne(
-    { _id: user._id },
+    { _id: prunedUser._id },
     {
       $set: {
         lastLogin: new Date(),
@@ -347,7 +424,7 @@ export const replaceUserDeviceSessionToken = async (
   userId,
   previousAccessToken,
   nextAccessToken,
-  { deviceFingerprint, ipAddress, userAgent, expiresAt } = {}
+  { deviceFingerprint, ipAddress, userAgent, expiresAt, location } = {}
 ) => {
   if (!previousAccessToken) {
     return null;
@@ -360,6 +437,7 @@ export const replaceUserDeviceSessionToken = async (
     ipAddress,
     userAgent,
     expiresAt,
+    location,
   });
 
   const result = await User.updateOne(
@@ -371,6 +449,7 @@ export const replaceUserDeviceSessionToken = async (
         "active_sessions.$.last_activity_at": nextRecord.last_activity_at,
         "active_sessions.$.ip_address": nextRecord.ip_address,
         "active_sessions.$.user_agent": nextRecord.user_agent,
+        ...(location ? { "active_sessions.$.location": nextRecord.location } : {}),
         "active_sessions.$.expires_at": nextRecord.expires_at,
       },
     }
@@ -434,6 +513,7 @@ export const trimUserDeviceSessionsToLimit = async (userId, limit) => {
 };
 
 export const getSessionTokenHash = (sessionToken) => hashDeviceSessionToken(sessionToken);
+export const resolveLocationDataFromRequest = (req) => getLocationDataFromRequest(req);
 
 export const getAuthCookieOptions = () => {
   return {

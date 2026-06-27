@@ -18,6 +18,7 @@ import {
   getAllTenants,
   updateAdminById,
   getTenantById,
+  getUserMonitoringDashboard,
   // updateTenantStatus,
   // deleteTenant,
   // createAdminForTenant,
@@ -345,6 +346,7 @@ router.put("/update-model/:tenantId", verifySuperAdmin, authorizeRoles(["superAd
 // router.get("/tenants/:tenantId/stats", verifySuperAdmin, setTenantContext, getTenantStatistics);
 // router.get("/dashboard", verifySuperAdmin, getDashboardStats);
 router.get("/get-all-models", verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageUsers"), getAllModels);
+router.get("/user-monitoring", verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageUsers"), getUserMonitoringDashboard);
 router.post("/assign-models", verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageTest"), assignModelsToFranchisee);
 router.get("/staff", verifySuperAdmin, allStaff);
 router.get("/staff/activities", verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageUsers"), staffActivity);

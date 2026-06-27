@@ -59,6 +59,248 @@ const buildGracePeriod = (graceInput, baseEndDate) => {
   };
 };
 
+const formatLocationLabel = (location = {}) => {
+  const label = String(location?.label || "").trim();
+  if (label) return label;
+
+  const parts = [location?.city, location?.state, location?.country]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  return parts.length ? parts.join(", ") : "Unknown location";
+};
+
+const normalizeActivityDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getSessionKeyFromActivity = (activity = {}) => {
+  return String(
+    activity?.details?.sessionHash ||
+      activity?.details?.sessionTokenHash ||
+      activity?.details?.session_token ||
+      activity?.details?.sessionId ||
+      activity?.details?.deviceFingerprint ||
+      activity?.reference?.id ||
+      `${activity?.activityType || "activity"}-${activity?.timestamp || ""}`
+  ).trim();
+};
+
+const getSessionLocation = (session = {}, activity = null) => {
+  const location = session?.location || activity?.details?.location || {};
+  return {
+    latitude: Number.isFinite(Number(location?.latitude)) ? Number(location.latitude) : null,
+    longitude: Number.isFinite(Number(location?.longitude)) ? Number(location.longitude) : null,
+    city: String(location?.city || "").trim(),
+    state: String(location?.state || "").trim(),
+    country: String(location?.country || "").trim(),
+    label: formatLocationLabel(location),
+    source: String(location?.source || "").trim(),
+  };
+};
+
+const isSessionCurrentlyActive = (session = {}) => {
+  const expiresAt = normalizeActivityDate(session?.expires_at);
+  if (expiresAt && expiresAt.getTime() <= Date.now()) {
+    return false;
+  }
+
+  const lastActivityAt = normalizeActivityDate(session?.last_activity_at);
+  if (!lastActivityAt) {
+    return Boolean(session?.session_token);
+  }
+
+  return Date.now() - lastActivityAt.getTime() <= 15 * 60 * 1000;
+};
+
+const buildDailySeries = (activities = [], days = 30) => {
+  const bucket = new Map();
+  for (let index = days - 1; index >= 0; index -= 1) {
+    const date = new Date();
+    date.setDate(date.getDate() - index);
+    const key = date.toISOString().slice(0, 10);
+    bucket.set(key, { label: key, value: 0 });
+  }
+
+  activities.forEach((activity) => {
+    const date = normalizeActivityDate(activity?.timestamp);
+    if (!date) return;
+    const key = date.toISOString().slice(0, 10);
+    if (bucket.has(key)) {
+      bucket.get(key).value += 1;
+    }
+  });
+
+  return Array.from(bucket.values());
+};
+
+const buildHourlySeries = (activities = []) => {
+  const bucket = Array.from({ length: 24 }, (_, hour) => ({ hour, value: 0 }));
+
+  activities.forEach((activity) => {
+    const date = normalizeActivityDate(activity?.timestamp);
+    if (!date) return;
+    bucket[date.getHours()].value += 1;
+  });
+
+  return bucket;
+};
+
+const buildSessionTimeline = (activities = [], activeSessions = []) => {
+  const opened = new Map();
+  const timeline = [];
+  const sorted = [...activities]
+    .filter((activity) => activity?.activityType === "login" || activity?.activityType === "logout")
+    .sort((left, right) => new Date(left.timestamp) - new Date(right.timestamp));
+
+  sorted.forEach((activity) => {
+    const key = getSessionKeyFromActivity(activity);
+    const timestamp = normalizeActivityDate(activity?.timestamp);
+    if (!timestamp || !key) return;
+
+    if (activity.activityType === "login") {
+      opened.set(key, activity);
+      return;
+    }
+
+    if (activity.activityType === "logout") {
+      const loginActivity = opened.get(key);
+      const loginTime = normalizeActivityDate(loginActivity?.timestamp);
+      const logoutTime = timestamp;
+      timeline.push({
+        sessionHash: key,
+        status: "closed",
+        loginAt: loginTime,
+        logoutAt: logoutTime,
+        durationMinutes: loginTime ? Math.max(0, Math.round((logoutTime - loginTime) / 60000)) : 0,
+        deviceFingerprint: loginActivity?.details?.deviceFingerprint || activity?.details?.deviceFingerprint || "",
+        location: getSessionLocation(
+          activeSessions.find((session) => String(session?.session_token || "") === key),
+          loginActivity || activity
+        ),
+      });
+      opened.delete(key);
+    }
+  });
+
+  opened.forEach((loginActivity, key) => {
+    const loginTime = normalizeActivityDate(loginActivity?.timestamp);
+    const matchedSession = activeSessions.find((session) => String(session?.session_token || "") === key);
+    const endTime = normalizeActivityDate(matchedSession?.last_activity_at) || new Date();
+    timeline.push({
+      sessionHash: key,
+      status: "open",
+      loginAt: loginTime,
+      logoutAt: null,
+      durationMinutes: loginTime ? Math.max(0, Math.round((endTime - loginTime) / 60000)) : 0,
+      deviceFingerprint: loginActivity?.details?.deviceFingerprint || "",
+      location: getSessionLocation(matchedSession, loginActivity),
+    });
+  });
+
+  return timeline.sort((left, right) => new Date(right.loginAt || 0) - new Date(left.loginAt || 0));
+};
+
+const buildMonitoringSummary = (user) => {
+  const activities = Array.isArray(user?.activities) ? user.activities : [];
+  const activeSessions = Array.isArray(user?.active_sessions) ? user.active_sessions : [];
+  const now = Date.now();
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+  const loginHistory = activities.filter((activity) => activity.activityType === "login");
+  const logoutHistory = activities.filter((activity) => activity.activityType === "logout");
+  const hourlySeries = buildHourlySeries(activities);
+  const dailySeries = buildDailySeries(activities, 30);
+  const weeklyActivity = activities.filter((activity) => {
+    const date = normalizeActivityDate(activity?.timestamp);
+    return date && date.getTime() >= weekAgo;
+  }).length;
+  const monthlyActivity = activities.filter((activity) => {
+    const date = normalizeActivityDate(activity?.timestamp);
+    return date && date.getTime() >= monthAgo;
+  }).length;
+  const todayActivity = activities.filter((activity) => {
+    const date = normalizeActivityDate(activity?.timestamp);
+    return date && date.toDateString() === new Date().toDateString();
+  }).length;
+  const activeHours = hourlySeries.reduce((max, item) => item.value > max.value ? item : max, hourlySeries[0] || { hour: 0, value: 0 });
+  const inactiveHours = hourlySeries.filter((item) => item.value === 0).length;
+  const sessionTimeline = buildSessionTimeline(activities, activeSessions);
+  const totalActiveTimeMinutes = sessionTimeline.reduce((total, session) => total + Number(session.durationMinutes || 0), 0);
+  const latestSession = activeSessions
+    .slice()
+    .sort((left, right) => new Date(right?.last_activity_at || 0) - new Date(left?.last_activity_at || 0))[0] || null;
+
+  return {
+    activityCounts: {
+      total: activities.length,
+      today: todayActivity,
+      weekly: weeklyActivity,
+      monthly: monthlyActivity,
+      login: loginHistory.length,
+      logout: logoutHistory.length,
+    },
+    activityTrends: {
+      hourlySeries,
+      dailySeries,
+      peakHour: activeHours?.hour ?? 0,
+      inactiveHours,
+    },
+    sessionMetrics: {
+      activeSessionsCount: activeSessions.length,
+      totalActiveTimeMinutes,
+      latestSession: latestSession
+        ? {
+            sessionHash: latestSession.session_token,
+            lastActivityAt: latestSession.last_activity_at,
+            expiresAt: latestSession.expires_at,
+            isActive: isSessionCurrentlyActive(latestSession),
+            location: getSessionLocation(latestSession),
+          }
+        : null,
+    },
+    sessionTimeline,
+  };
+};
+
+const buildMonitoringUserRecord = (user) => {
+  const activeSessions = Array.isArray(user?.active_sessions) ? user.active_sessions : [];
+  const activities = Array.isArray(user?.activities) ? user.activities : [];
+  const sortedSessions = activeSessions
+    .slice()
+    .sort((left, right) => new Date(right?.last_activity_at || 0) - new Date(left?.last_activity_at || 0));
+  const latestSession = sortedSessions[0] || null;
+  const location = latestSession ? getSessionLocation(latestSession) : null;
+  const metrics = buildMonitoringSummary(user);
+
+  return {
+    _id: user._id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    parentRole: user.parentRole,
+    isActive: user.isActive,
+    lastLogin: user.lastLogin,
+    tenant: user.tenantId || null,
+    bookingWallet: user.bookingWallet || 0,
+    maxAllowedDevices: Number.isFinite(Number(user.max_allowed_devices)) ? Math.min(4, Math.max(1, Number(user.max_allowed_devices))) : 1,
+    deviceRestrictionEnabled: user.is_device_restriction_enabled !== false,
+    activeSessionCount: activeSessions.length,
+    lastSessionAt: latestSession?.last_activity_at || null,
+    latestLocation: location,
+    latestDeviceFingerprint: latestSession?.device_fingerprint || "",
+    latestIpAddress: latestSession?.ip_address || "",
+    latestUserAgent: latestSession?.user_agent || "",
+    latestExpiresAt: latestSession?.expires_at || null,
+    recentActivities: activities.slice().sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp)).slice(0, 25),
+    ...metrics,
+  };
+};
+
 // SuperAdmin Auth Controllers
 export const registerSuperAdmin = asyncHandler(async (req, res) => {
   const { username, email, password, fullName, phone } = req.body;
@@ -557,6 +799,118 @@ const getTenantById = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, tenant, "Tenant fetched successfully"));
+});
+
+const getUserMonitoringDashboard = asyncHandler(async (req, res) => {
+  const page = Math.max(1, toPositiveInt(req.query.page || 1, 1));
+  const limit = Math.min(100, Math.max(1, toPositiveInt(req.query.limit || 20, 20)));
+  const search = String(req.query.search || "").trim();
+  const roleFilter = String(req.query.role || "all").trim();
+  const statusFilter = String(req.query.status || "all").trim();
+  const requestedUserId = String(req.query.userId || "").trim();
+
+  const query = {
+    role: { $ne: "superAdmin" },
+  };
+
+  if (roleFilter && roleFilter !== "all") {
+    query.role = roleFilter;
+  }
+
+  if (statusFilter === "active") {
+    query.isActive = true;
+  } else if (statusFilter === "inactive") {
+    query.isActive = false;
+  }
+
+  if (search) {
+    query.$or = [
+      { fullName: { $regex: search, $options: "i" } },
+      { username: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+      { state: { $regex: search, $options: "i" } },
+      { city: { $regex: search, $options: "i" } },
+      { district: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  const total = await User.countDocuments(query);
+  const users = await User.find(query)
+    .select(
+      "fullName username email role parentRole isActive lastLogin bookingWallet max_allowed_devices is_device_restriction_enabled active_sessions activities tenantId createdAt updatedAt"
+    )
+    .populate({
+      path: "tenantId",
+      select: "name modelType code status subscriptionPlan analytics",
+    })
+    .sort({ lastLogin: -1, updatedAt: -1, createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  const mappedUsers = users.map((user) => buildMonitoringUserRecord(user));
+  const allUsers = await User.find(query)
+    .select(
+      "fullName username email role parentRole isActive lastLogin bookingWallet max_allowed_devices is_device_restriction_enabled active_sessions activities tenantId createdAt updatedAt"
+    )
+    .populate({
+      path: "tenantId",
+      select: "name modelType code status subscriptionPlan analytics",
+    })
+    .sort({ lastLogin: -1, updatedAt: -1, createdAt: -1 });
+
+  const summary = allUsers.reduce(
+    (acc, user) => {
+      const record = buildMonitoringUserRecord(user);
+      acc.totalUsers += 1;
+      if (record.isActive) acc.activeUsers += 1;
+      if (record.activeSessionCount > 0) acc.onlineUsers += 1;
+      acc.totalSessions += record.activeSessionCount;
+      acc.totalActivityEvents += record.activityCounts.total;
+      acc.totalDeviceLimit += record.maxAllowedDevices;
+      if (record.latestLocation?.latitude !== null || record.latestLocation?.longitude !== null) {
+        acc.usersWithCoordinates += 1;
+      }
+      return acc;
+    },
+    {
+      totalUsers: 0,
+      activeUsers: 0,
+      onlineUsers: 0,
+      totalSessions: 0,
+      totalActivityEvents: 0,
+      totalDeviceLimit: 0,
+      usersWithCoordinates: 0,
+    }
+  );
+
+  const selectedUserDoc =
+    (requestedUserId
+      ? allUsers.find((user) => String(user._id) === requestedUserId)
+      : allUsers[0]) || null;
+  const selectedUser = selectedUserDoc ? buildMonitoringUserRecord(selectedUserDoc) : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        summary: {
+          ...summary,
+          averageDeviceLimit: summary.totalUsers
+            ? Number((summary.totalDeviceLimit / summary.totalUsers).toFixed(2))
+            : 0,
+          pagination: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        },
+        users: mappedUsers,
+        selectedUser,
+      },
+      "User monitoring data fetched successfully"
+    )
+  );
 });
 
 // Update tenant subscription
@@ -1102,6 +1456,7 @@ export {
   // l
   getAllTenants,
   getTenantById,
+  getUserMonitoringDashboard,
   updateTenantSubscription,
   deactivateTenant,
   addSuperStaff,
