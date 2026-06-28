@@ -734,8 +734,8 @@ function toggleAccordion(button) {
     document.getElementById('footer').addEventListener('input', () => validateField(document.getElementById('footer'), 0, 6));
     document.getElementById('margin-right').addEventListener('input', () => validateField(document.getElementById('margin-right'), 0, 4));
     document.getElementById('margin-left').addEventListener('input', () => validateField(document.getElementById('margin-left'), 0, 4));
-    document.getElementById('padding-left').addEventListener('input', () => validateField(document.getElementById('padding-left'), 0, 10));
-    document.getElementById('padding-right').addEventListener('input', () => validateField(document.getElementById('padding-right'), 0, 10));
+    document.getElementById('padding-left').addEventListener('input', () => validateField(document.getElementById('padding-left'), 0, 20));
+    document.getElementById('padding-right').addEventListener('input', () => validateField(document.getElementById('padding-right'), 0, 20));
     // Initial call to disable the button on page load
     updateButtonState();
 
