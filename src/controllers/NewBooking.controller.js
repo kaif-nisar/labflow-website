@@ -9,6 +9,7 @@ import { addPannel } from "../models/AddPannel.model.js";
 import { Package } from "../models/addPackage.model.js";
 import { Ledger } from "../models/ledger.model.js";
 import { acceptedBarcode } from "../models/samples.model.js";
+import { reports } from "../models/reportData.model.js";
 import mongoose from "mongoose";
 import { Conversation } from "../models/message.model.js";
 import { bookedTestsresult } from "../models/Testvalues.model.js";
@@ -30,6 +31,15 @@ const canManageBookingsAcrossTenant = (req) => (
 );
 
 const normalizeOptionalEmail = (value) => String(value || "").trim().toLowerCase();
+
+const resolveBookingStatusFromReport = (reportDoc = {}) => {
+    const status = String(reportDoc?.status || "").trim();
+    if (status.toLowerCase().includes("partial")) {
+        return "Partially Completed";
+    }
+
+    return "completed";
+};
 
 const buildDoctorSnapshot = (doctor = {}, fallback = {}) => {
     const displayName = String(
@@ -2606,11 +2616,15 @@ const rejectBookingcontroller = async (req, res) => {
 
 const CompleteBookingcontroller = async (req, res) => {
     const { bookingid } = req.body;
+    const reportDoc = await reports.findOne({ bookingId: bookingid })
+        .select("status completionMeta")
+        .lean();
+    const resolvedStatus = resolveBookingStatusFromReport(reportDoc);
 
     const updatedStatus = await newBooking.findOneAndUpdate(
         { bookingId: bookingid },
         {
-            status: "completed",
+            status: resolvedStatus,
             isreportready: true
         },
         { new: true }

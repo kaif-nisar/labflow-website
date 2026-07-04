@@ -156,6 +156,9 @@
 
     // ─── 2. PARALLEL INITIAL FETCHES ─────────────────────────────────────────
     const report = await fetchreport();
+    if (!report || !report._id) {
+        throw new Error('Report data could not be loaded for this booking.');
+    }
     const bookingTestMetaPromise = fetchBookingTestMeta(report?.bookingId);
 
     value1 = report._id;
@@ -1199,9 +1202,21 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ value1 })
             }, { silent: isBootPhase });
-            if (!response.ok) throw new Error("something went wrong");
+            if (!response.ok) {
+                let message = "something went wrong";
+                try {
+                    const payload = await response.json();
+                    message = payload?.message || payload?.error || message;
+                } catch {
+                    // Ignore parse errors and use the fallback message.
+                }
+                throw new Error(message);
+            }
             return await response.json();
-        } catch (error) { console.log(error); }
+        } catch (error) {
+            console.log(error);
+            throw error;
+        }
     }
 
     async function fetchBookingTestMeta(bookingId) {
@@ -1467,6 +1482,8 @@
             const section = document.createElement("div");
             section.className = "section";
             if (data.categorizedPDF && index > 0) section.classList.add("page-break");
+            const categoryName = String(categoryData?.category || "").trim();
+            const categoryTitle = String(categoryData?.title || "").trim();
 
             const headings = document.createElement("div");
             headings.classList.add("headings");
@@ -1477,20 +1494,20 @@
 
             const categoryHeading = document.createElement("h3");
             categoryHeading.classList.add("category-heading");
-            categoryHeading.textContent = categoryData.category;
+            categoryHeading.textContent = categoryName;
             categoryHeading.appendChild(deleteH2Button);
             headings.appendChild(categoryHeading);
 
             let titleHeading = null;
-            if (categoryData.category !== categoryData.title) {
+            if (categoryName !== categoryTitle) {
                 const deleteH3Button = document.createElement("span");
                 deleteH3Button.innerHTML = `<i class="fa-sharp fa-solid fa-xmark" title="Delete Panel"></i>`;
                 deleteH3Button.className = "delete-btn";
 
-                if (!categoryData.title.includes('Unknown Title')) {
+                if (!categoryTitle.includes('Unknown Title')) {
                     titleHeading = document.createElement("h4");
                     titleHeading.classList.add("table-heading");
-                    titleHeading.textContent = categoryData.title;
+                    titleHeading.textContent = categoryTitle;
                     titleHeading.appendChild(deleteH3Button);
                     headings.appendChild(titleHeading);
                 }
@@ -1560,10 +1577,13 @@
                     } else {
                         const testNameMeta = getTestNameCellMeta(test.testName);
                         const testNameCell = testNameMeta.cell;
-                        const isMultiParameterHeading = hasRenderableText(test.testName)
-                            && !hasRenderableText(test.value)
-                            && !hasRenderableText(test.unit)
-                            && !hasRenderableText(test.reference);
+                        const isMultiParameterHeading = Boolean(test.isMultiParameterHeading)
+                            || (
+                                hasRenderableText(test.testName)
+                                && !hasRenderableText(test.value)
+                                && !hasRenderableText(test.unit)
+                                && !hasRenderableText(test.reference)
+                            );
                         const isParameterRow = testNameMeta.isParameterRow;
 
                         if (isMultiParameterHeading) {
@@ -1911,10 +1931,10 @@
     });
 
     function hidecontent() {
-        if (user.showprintsetting === false) {
+        if (user?.showprintsetting === false) {
             document.getElementById('printsettingbutton').style.display = "none";
         }
-        if (user.tenantId.modelType === "1layer") {
+        if (user?.tenantId?.modelType === "1layer") {
             const style = document.getElementById("stying");
             style.textContent += `
             .format1-rightcover{height:75px;}

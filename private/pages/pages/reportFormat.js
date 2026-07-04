@@ -858,6 +858,7 @@
 
     // await convertAllImagesToBase64();
     await signoffdivfunction();
+    reportActionHelpers.bindPageLevelEnterShortcut?.({ buttonId: "signOff" });
     downloadpdffunction();
 
     async function signoffdivfunction() {

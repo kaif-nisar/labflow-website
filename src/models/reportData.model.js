@@ -23,6 +23,10 @@ const tabledataSchema = new Schema({
         type: Boolean,
         default: false
     },
+    isMultiParameterHeading: {
+        type: Boolean,
+        default: false
+    },
     pagebreak:{
         type: Boolean,
         default: false
@@ -215,6 +219,10 @@ const reportData = new Schema({
     status: {
         type: String,
         default: 'On Hold'
+    },
+    completionMeta: {
+        type: Schema.Types.Mixed,
+        default: () => ({})
     },
     reg_id: {
         type: String

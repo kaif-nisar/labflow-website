@@ -219,6 +219,39 @@
         statusElement.style.display = message ? "block" : "none";
     }
 
+    function isEditableKeyboardTarget(target) {
+        if (!(target instanceof HTMLElement)) return false;
+        if (target.matches("input, textarea, select, [contenteditable='true']")) return true;
+        return Boolean(target.closest(".ck, .ck-editor, .text-dropdown"));
+    }
+
+    function bindPageLevelEnterShortcut({ buttonId = "signOff" } = {}) {
+        if (typeof document === "undefined") {
+            return () => {};
+        }
+
+        const handler = (event) => {
+            if (event.key !== "Enter") return;
+            if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            if (!target || isEditableKeyboardTarget(target) || target.closest("button, a, [role='button']")) {
+                return;
+            }
+
+            const button = document.getElementById(buttonId);
+            if (!button || button.disabled || button.offsetParent === null) {
+                return;
+            }
+
+            event.preventDefault();
+            button.click();
+        };
+
+        document.addEventListener("keydown", handler, true);
+        return () => document.removeEventListener("keydown", handler, true);
+    }
+
     function sanitizeFileSegment(value, fallback) {
         const cleaned = String(value || "")
             .replace(/[^\w\u0900-\u097F -]/g, "")
@@ -877,6 +910,8 @@
         normalizeCounters,
         normalizeActionHistory,
         setStatus,
+        isEditableKeyboardTarget,
+        bindPageLevelEnterShortcut,
         buildAttachmentFileName,
         resolveDoctorEmail,
         buildShareSummary,

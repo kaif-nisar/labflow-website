@@ -1368,6 +1368,52 @@ async function loadfunction() {
         return false;
     }
 
+    function isBlankOrDotOnlyValue(value) {
+        const normalized = String(value ?? "").trim();
+        return normalized === "" || /^[.\s]+$/.test(normalized);
+    }
+
+    function getVisibleManualValueInputs() {
+        return Array.from(document.querySelectorAll(".value-input")).filter((input) => {
+            if (!(input instanceof HTMLElement)) return false;
+            if (!isManualNavigationField(input)) return false;
+
+            const style = window.getComputedStyle(input);
+            return style.display !== "none" && style.visibility !== "hidden";
+        });
+    }
+
+    function focusValueInputOrFinalButton(currentField, direction = 1) {
+        const navigationFields = getVisibleManualValueInputs();
+        const currentIndex = navigationFields.indexOf(currentField);
+        if (currentIndex === -1) return false;
+
+        if (direction < 0) {
+            for (let prevIndex = currentIndex - 1; prevIndex >= 0; prevIndex -= 1) {
+                const previousField = navigationFields[prevIndex];
+                if (previousField?.disabled || previousField?.readOnly) continue;
+                focusFieldWithCenteredScroll(previousField);
+                return true;
+            }
+            return false;
+        }
+
+        for (let nextIndex = currentIndex + 1; nextIndex < navigationFields.length; nextIndex += 1) {
+            const nextField = navigationFields[nextIndex];
+            if (nextField?.disabled || nextField?.readOnly) continue;
+            focusFieldWithCenteredScroll(nextField);
+            return true;
+        }
+
+        const finalButton = document.getElementById("finalBtn");
+        if (finalButton && !finalButton.disabled) {
+            focusFieldWithCenteredScroll(finalButton);
+            return true;
+        }
+
+        return false;
+    }
+
     // const urlParams = new URLSearchParams(window.location.search);
     const booking = JSON.parse(localStorage.getItem("booking"));
     // for getting individual parameter lower and upper value
@@ -1617,7 +1663,29 @@ async function loadfunction() {
             if (!isEnterKey && !isTabKey) return;
             if ((isEnterKey && event.shiftKey) || event.ctrlKey || event.altKey || event.metaKey) return;
             if (textDropdownState.activeDropdown) return;
-            if (!isKeyboardNavigationField(event.target)) return;
+
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            const valueInput = target?.closest?.(".value-input");
+            if (valueInput) {
+                const direction = isTabKey && event.shiftKey ? -1 : 1;
+                const moved = focusValueInputOrFinalButton(valueInput, direction);
+                if (isEnterKey || moved) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                return;
+            }
+
+            if (!isKeyboardNavigationField(event.target)) {
+                if (isEnterKey) {
+                    const finalButton = document.getElementById("finalBtn");
+                    if (finalButton && !finalButton.disabled) {
+                        event.preventDefault();
+                        finalButton.click();
+                    }
+                }
+                return;
+            }
 
             const direction = isTabKey && event.shiftKey ? -1 : 1;
             const moved = focusNextManualField(event.target, direction);
@@ -3742,10 +3810,16 @@ async function loadfunction() {
         return "";
     }
 
-    // Fixed extractTableData function - All rows ka pagebreak track
+    // Fixed extractTableData function - blank/dot-only value-input rows are skipped from final save.
     function extractTableData() {
         const tables = document.querySelectorAll("#tables-container .section table");
         const allTableData = [];
+        const completionMeta = {
+            totalRows: 0,
+            savedRows: 0,
+            skippedRows: 0,
+            hasIncompleteValues: false,
+        };
 
         tables.forEach((table) => {
             const category = table.closest(".grouped-section").querySelector("h2")?.textContent || "Unknown Category";
@@ -3758,15 +3832,14 @@ async function loadfunction() {
             let tableAdvice = null;
             let tableInterpretation = null;
 
-            let lastTestObject = null;
-
             rows.forEach((row) => {
-                // ✅ Har row ke liye pagebreak check karo
                 const pagebreak = row?.cells[0]?.querySelector('input[type="checkbox"]')?.checked || false;
 
                 const testName = row.querySelector(".test-name")?.outerHTML || null;
-                const inputEl = row.querySelector(".unit input");
-                const valueInput = inputEl?.value || null;
+                const inputEl = row.querySelector(".value-input");
+                const rawValue = inputEl?.value ?? "";
+                const trimmedValue = String(rawValue).trim();
+                const valueInput = isBlankOrDotOnlyValue(rawValue) ? null : trimmedValue;
                 const unit = row.querySelector(".unit + td")?.textContent?.trim() || null;
                 const reference = row.querySelector(".reference")?.textContent?.trim() || null;
                 const referenceType = (inputEl?.dataset.referenceType || "numeric").toLowerCase();
@@ -3774,12 +3847,19 @@ async function loadfunction() {
                 const upperValue = parseFloat(inputEl?.getAttribute('data-upper'));
                 let isAbnormal = inputEl?.dataset.isAbnormal === "true";
                 let isBold = false;
+                const rowOrder = row.getAttribute("data-order");
+                const testNameCell = row.querySelector(".test-name");
+                const isFirstParameterRowInGroup =
+                    Boolean(inputEl) &&
+                    testNameCell?.id === "parameters" &&
+                    row.previousElementSibling?.getAttribute("data-order") === rowOrder &&
+                    !row.previousElementSibling?.querySelector(".value-input");
 
                 if (referenceType === "text") {
                     isBold = isAbnormal;
                 } else {
-                    const numericValue = parseFloat(valueInput);
-                    const positive = (valueInput || "").toLowerCase() === "positive";
+                    const numericValue = parseFloat(trimmedValue);
+                    const positive = trimmedValue.toLowerCase() === "positive";
                     if (positive) {
                         isBold = true;
                         isAbnormal = true;
@@ -3789,7 +3869,6 @@ async function loadfunction() {
                     }
                 }
 
-                // Check for CKEditor in the row
                 const editorContainer = row.querySelector("[id^='editorContent']");
                 let editorContent = null;
                 let isDocumented = false;
@@ -3803,83 +3882,96 @@ async function loadfunction() {
                     }
                 }
 
-                // ✅ Main test row
-                if (testName || valueInput || unit || reference || editorContent) {
+                const isMultiParameterHeadingRow =
+                    !inputEl &&
+                    Boolean(testName) &&
+                    !editorContent &&
+                    !unit &&
+                    !reference &&
+                    row.querySelector(".test-name")?.textContent?.trim();
 
-                    const testObject = {
-                        pagebreak: pagebreak,
+                const hasValueField = Boolean(inputEl);
+                const shouldSkipBlankValueRow = hasValueField && !editorContent && isBlankOrDotOnlyValue(rawValue) && !isFirstParameterRowInGroup;
+
+                if (hasValueField) {
+                    completionMeta.totalRows += 1;
+                    if (shouldSkipBlankValueRow) {
+                        completionMeta.skippedRows += 1;
+                        completionMeta.hasIncompleteValues = true;
+                    } else {
+                        completionMeta.savedRows += 1;
+                    }
+                }
+
+                if (shouldSkipBlankValueRow) {
+                    return;
+                }
+
+                if (testName || valueInput || unit || reference || editorContent) {
+                    tableData.push({
+                        pagebreak,
                         testName: editorContent || testName,
                         value: valueInput,
+                        hasValueField: Boolean(inputEl),
+                        isMultiParameterHeading: Boolean(isMultiParameterHeadingRow),
                         unit,
                         reference,
                         referenceType,
                         isAbnormal,
                         isBold,
                         isDocumented,
-                    };
+                    });
+                    return;
+                }
 
-                    tableData.push(testObject);
-                    lastTestObject = testObject;
-                } else {
-                    // ✅ Detail/Remark/Notes rows - Ab yahan bhi separate objects banayenge
-                    const colspanCell = row.querySelector("[colspan='3'], [colspan='4'], [colspan='5']");
-                    if (colspanCell) {
-                        // Individual test remark
-                        if (colspanCell.querySelector("#remarkoftest")) {
-                            const value = colspanCell.querySelector("#remarkoftest").value;
+                const colspanCell = row.querySelector("[colspan='3'], [colspan='4'], [colspan='5']");
+                if (!colspanCell) {
+                    return;
+                }
 
-                            // ✅ Remark ko separate object banao with pagebreak
-                            const remarkObject = {
-                                pagebreak: pagebreak,
-                                testName: null,
-                                value: null,
-                                unit: null,
-                                reference: null,
-                                isDocumented: false,
-                                remark: value  // ✅ Remark property add
-                            };
+                if (colspanCell.querySelector("#remarkoftest")) {
+                    const value = colspanCell.querySelector("#remarkoftest").value;
+                    tableData.push({
+                        pagebreak,
+                        testName: null,
+                        value: null,
+                        unit: null,
+                        reference: null,
+                        isDocumented: false,
+                        remark: value,
+                    });
+                    return;
+                }
 
-                            tableData.push(remarkObject);
-                            lastTestObject = remarkObject; // Update lastTestObject
-                        }
-                        // Table-level remarks/advice/notes
-                        else if (colspanCell.querySelector("textarea")) {
-                            const value = colspanCell.querySelector("textarea").value;
-                            const labelText = colspanCell.previousElementSibling?.textContent?.toLowerCase() || "";
+                if (colspanCell.querySelector("textarea")) {
+                    const value = colspanCell.querySelector("textarea").value;
+                    const labelText = colspanCell.previousElementSibling?.textContent?.toLowerCase() || "";
 
-                            if (labelText.includes("remarks")) {
-                                tableRemarks = value;
-                            } else if (labelText.includes("advice")) {
-                                tableAdvice = value;
-                            } else if (labelText.includes("notes")) {
-                                tableNotes = value;
-                            }
-                        }
-                        // Test details
-                        else {
-                            const innerContent = colspanCell.querySelector(".test-details")?.innerHTML;
-                            if (innerContent) {
-                                // ✅ Details ko separate object banao with pagebreak
-                                const detailObject = {
-                                    pagebreak: pagebreak,
-                                    testName: null,
-                                    value: null,
-                                    unit: null,
-                                    reference: null,
-                                    isDocumented: false,
-                                    details: innerContent  // ✅ Details property add
-                                };
-
-                                tableData.push(detailObject);
-                                lastTestObject = detailObject; // Update lastTestObject
-                            }
-                        }
+                    if (labelText.includes("remarks")) {
+                        tableRemarks = value;
+                    } else if (labelText.includes("advice")) {
+                        tableAdvice = value;
+                    } else if (labelText.includes("notes")) {
+                        tableNotes = value;
                     }
+                    return;
+                }
+
+                const innerContent = colspanCell.querySelector(".test-details")?.innerHTML;
+                if (innerContent) {
+                    tableData.push({
+                        pagebreak,
+                        testName: null,
+                        value: null,
+                        unit: null,
+                        reference: null,
+                        isDocumented: false,
+                        details: innerContent,
+                    });
                 }
             });
 
-            // Check for Interpretation row
-            const interpretationRow = Array.from(table.querySelectorAll("tr")).find(row =>
+            const interpretationRow = Array.from(table.querySelectorAll("tr")).find((row) =>
                 row.querySelector(".interpretation-row")
             );
 
@@ -3903,7 +3995,11 @@ async function loadfunction() {
             }
         });
 
-        return allTableData;
+        return {
+            allTableData,
+            completionMeta,
+            completionStatus: completionMeta.hasIncompleteValues ? "Partially Completed" : "Completed",
+        };
     }
 
     // for saving data 
@@ -3920,6 +4016,13 @@ async function loadfunction() {
         const reportedOn = document.getElementById('reportedOn').value;
         const categorized = document.getElementById('check1').checked;
         const moredetails = document.getElementById('moredetails').value;
+        const completionMeta = extractedData.completionMeta;
+        const completionStatus = extractedData.completionStatus;
+        const resolvedPdfFormat = String(
+            user?.role === "staff"
+                ? user?.tenantId?.adminDetails?.userId?.pdfFormat
+                : user?.pdfFormat
+        ).trim() || "reportFormat1";
 
         try {
             const response = await fetch(`${BASE_URL}/api/v1/user/saveReportData`, {
@@ -3928,14 +4031,26 @@ async function loadfunction() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    reportData: extractedData, reg_id: booking.bookingId, booking,
+                    reportData: extractedData.allTableData,
+                    reg_id: booking.bookingId,
+                    booking,
                     collectedOn, receivedOn, reportedOn, categorized, moredetails,
-                    uniquetestArray: uniquetestArray2, isdocumented
+                    uniquetestArray: uniquetestArray2,
+                    isdocumented,
+                    reportCompletionMeta: completionMeta,
+                    reportCompletionStatus: completionStatus,
                 }),
             });
 
             if (!response.ok) {
-                showStatusMessage("Failed to save report data.", "error");
+                let message = "Failed to save report data.";
+                try {
+                    const payload = await response.json();
+                    message = payload?.message || payload?.error || message;
+                } catch {
+                    // Keep the fallback message when the server does not return JSON.
+                }
+                showStatusMessage(message, "error");
                 return false;
             }
 
@@ -3943,10 +4058,13 @@ async function loadfunction() {
                 const result = await response.json();
 
                 const barcodeId = result._id;
+                if (!barcodeId) {
+                    showStatusMessage("Report saved, but redirect could not continue because report ID was missing.", "error");
+                    return false;
+                }
                 showStatusMessage("Report saved successfully. Opening report page...", "success");
-                // return;
-                const url = `${BASE_URL}/${user.role === "staff" ? "admin" : "admin"}/admin.html?page=${user.role === "staff" ? user.tenantId.adminDetails.userId.pdfFormat : user.pdfFormat}&value1=${barcodeId}`;
-                window.location.href = url;
+                const url = `${BASE_URL}/admin/admin.html?page=${encodeURIComponent(resolvedPdfFormat)}&value1=${encodeURIComponent(barcodeId)}`;
+                window.location.assign(url);
                 return true;
             }
             showStatusMessage("Report saved successfully.", "success");
@@ -4029,16 +4147,6 @@ async function loadfunction() {
                 }
                 AllFieldsArray.push(data);
             }
-        }
-
-        if (savebtn && !hasAnyEnteredValue) {
-            showStatusMessage("सभी result fields खाली हैं। Final save करने से पहले कम से कम एक value भरें।", "warn");
-            const firstInput = document.querySelector("#tables-container .value-input");
-            if (firstInput) {
-                smoothScrollTo(firstInput.closest("tr") || firstInput);
-                firstInput.focus({ preventScroll: true });
-            }
-            return false;
         }
 
         if (AllFieldsArray.length >= 0) {

@@ -9,6 +9,11 @@ import { User } from "../models/user.model.js";
 import { Tenant } from "../models/tenant.model.js";
 import { getDoctorDisplayName } from "../utils/doctorPricing.js";
 import {
+    isBlankOrDotOnlyValue,
+    normalizeCompletionMeta,
+    resolveCompletionStatus,
+} from "../utils/reportCompletion.js";
+import {
     buildReportActionPayload,
     buildReportActionSummary,
     normalizeReportActionCounters,
@@ -43,6 +48,86 @@ const buildDoctorSnapshot = (doctor = {}, fallback = {}) => {
         firstName: String(doctor?.firstName || fallback.firstName || "").trim(),
         lastName: String(doctor?.lastName || fallback.lastName || "").trim(),
         source: doctor?._id ? "doctor-ref" : (fallback.source || "snapshot"),
+    };
+};
+
+const buildSavedReportData = (reportData = []) => {
+    const sanitizedTables = [];
+    let totalRows = 0;
+    let savedRows = 0;
+    let skippedRows = 0;
+
+    for (const table of Array.isArray(reportData) ? reportData : []) {
+        if (!table || typeof table !== "object") {
+            continue;
+        }
+
+        const sanitizedTests = [];
+
+        for (const test of Array.isArray(table.tests) ? table.tests : []) {
+            if (!test || typeof test !== "object") {
+                continue;
+            }
+
+            const hasDocumentedContent = Boolean(test.isDocumented || test.details || test.remark);
+            const value = test.value ?? test.currentvalue ?? "";
+            const hasTrackedValueField = test.hasValueField === true ||
+                test.hasValueField === "true" ||
+                Object.prototype.hasOwnProperty.call(test, "currentvalue");
+            const isBlankValue = isBlankOrDotOnlyValue(value);
+            const isStructuralHeadingRow = test.isMultiParameterHeading === true ||
+                test.isMultiParameterHeading === "true";
+
+            if (hasTrackedValueField) {
+                totalRows += 1;
+            }
+
+            if (!hasDocumentedContent && isBlankValue && !isStructuralHeadingRow) {
+                if (hasTrackedValueField) {
+                    skippedRows += 1;
+                }
+                continue;
+            }
+
+            if (hasTrackedValueField) {
+                savedRows += 1;
+            }
+
+            sanitizedTests.push({
+                ...test,
+                value: hasDocumentedContent ? (test.value ?? test.currentvalue ?? null) : value,
+                currentvalue: hasDocumentedContent ? (test.currentvalue ?? test.value ?? null) : value,
+            });
+        }
+
+        const notes = isBlankOrDotOnlyValue(table.notes) ? null : table.notes;
+        const remarks = isBlankOrDotOnlyValue(table.remarks) ? null : table.remarks;
+        const advice = isBlankOrDotOnlyValue(table.advice) ? null : table.advice;
+        const interpretation = isBlankOrDotOnlyValue(table.interpretation) ? null : table.interpretation;
+
+        if (sanitizedTests.length || notes || remarks || advice || interpretation) {
+            sanitizedTables.push({
+                ...table,
+                tests: sanitizedTests,
+                notes,
+                remarks,
+                advice,
+                interpretation,
+            });
+        }
+    }
+
+    const completionMeta = normalizeCompletionMeta({
+        totalRows,
+        savedRows,
+        skippedRows,
+        hasIncompleteValues: skippedRows > 0,
+    });
+
+    return {
+        sanitizedTables,
+        completionMeta,
+        completionStatus: completionMeta.hasIncompleteValues ? "Partially Completed" : "Completed",
     };
 };
 
@@ -193,6 +278,10 @@ const SaveReportController = asyncHandler(async (req, res) => {
         moredetails,
         uniquetestArray,
         isdocumented,
+        reportCompletionMeta,
+        completionMeta,
+        reportCompletionStatus,
+        completionStatus,
     } = req.body;
 
     const tenantId = req.user.tenantId._id;
@@ -201,13 +290,21 @@ const SaveReportController = asyncHandler(async (req, res) => {
         throw new ApiError(500, "please try again after sometime, and fill all test values");
     }
 
+    const savedReportData = buildSavedReportData(reportData);
+    const resolvedCompletionMeta = normalizeCompletionMeta(
+        reportCompletionMeta || completionMeta || savedReportData.completionMeta
+    );
+    const resolvedCompletionStatus = resolveCompletionStatus(
+        reportCompletionStatus || completionStatus || savedReportData.completionStatus,
+        resolvedCompletionMeta
+    );
+
     const savedREport = await reports.findOneAndUpdate(
         {
             bookingId: booking.bookingId,
             tenantId,
         },
         {
-            CategoryAndTest: reportData,
             reg_id,
             ...booking,
             collectedOn,
@@ -217,6 +314,9 @@ const SaveReportController = asyncHandler(async (req, res) => {
             MoreDetails: moredetails,
             uniquetestArray,
             isdocumented,
+            status: resolvedCompletionStatus,
+            completionMeta: resolvedCompletionMeta,
+            CategoryAndTest: savedReportData.sanitizedTables,
         },
         {
             upsert: true,
