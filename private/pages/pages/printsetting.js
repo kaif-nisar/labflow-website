@@ -295,23 +295,11 @@ function toggleAccordion(button) {
     }
 
     // ---- Signature helpers for live preview ---------------------------------
-    // Convert remote/relative URLs to base64 to ensure they render inside preview PDF.
-    async function toBase64IfNeeded(src) {
+    // Keep request payload lightweight: only send usable URLs, not embedded data blobs.
+    function normalizeImageSrc(src) {
         if (!src) return "";
-        if (src.startsWith("data:")) return src;
-        try {
-            const resp = await fetch(src);
-            if (!resp.ok) return "";
-            const blob = await resp.blob();
-            return await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => reject("");
-                reader.readAsDataURL(blob);
-            });
-        } catch {
-            return "";
-        }
+        const value = String(src).trim();
+        return value.startsWith("data:") ? "" : value;
     }
 
     async function collectSignatureData() {
@@ -323,9 +311,9 @@ function toggleAccordion(button) {
             showlab: document.getElementById('show-lab').checked,
             showdoctorfirst: document.getElementById('show-doctor1').checked,
             showdoctorsecond: document.getElementById('show-doctor2').checked,
-            fileInputLab: await toBase64IfNeeded(labSrc),
-            fileInputDoctorleft: await toBase64IfNeeded(leftSrc),
-            fileInputDoctorright: await toBase64IfNeeded(rightSrc),
+            fileInputLab: normalizeImageSrc(labSrc),
+            fileInputDoctorleft: normalizeImageSrc(leftSrc),
+            fileInputDoctorright: normalizeImageSrc(rightSrc),
             fileInputLabtext: document.getElementById('lab-info').value,
             fileInputDoctorlefttext: document.getElementById('firstdoctor-info').value,
             fileInputDoctorrighttext: document.getElementById('seconddoctor-info').value,
