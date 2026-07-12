@@ -49,6 +49,9 @@ function populateCategories(categories) {
         row.setAttribute("draggable", true);
         row.setAttribute("data-id", category.orderId);
 
+        const checkboxCell = document.createElement("td");
+        checkboxCell.innerHTML = `<input type="checkbox" class="row-checkbox" value="${category._id}" onchange="toggleBulkDeleteBtn()">`;
+
         const orderCell = document.createElement("td");
         orderCell.classList.add("order");
         orderCell.innerHTML = `<i class="fa-solid fa-up-down"></i>${category.orderId}`;
@@ -58,8 +61,16 @@ function populateCategories(categories) {
 
         const actionsCell = document.createElement("td");
         actionsCell.classList.add("actions");
-        actionsCell.innerHTML = `<a href="#" onclick="loadPage('editCategory', '${category._id}')">Edit</a>`;
+        actionsCell.style.display = 'flex';
+        actionsCell.style.gap = '15px';
+        actionsCell.style.alignItems = 'center';
+        actionsCell.style.border = 'none';
+        actionsCell.innerHTML = `
+            <a href="#" onclick="loadPage('editCategory', '${category._id}')" title="Edit Category" style="color: #007bff; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#0056b3'" onmouseout="this.style.color='#007bff'"><i class="fa-solid fa-pen-to-square"></i></a>
+            <a href="#" onclick="deleteCategory('${category._id}')" title="Delete Category" style="color: #dc3545; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#c82333'" onmouseout="this.style.color='#dc3545'"><i class="fa-solid fa-trash"></i></a>
+        `;
 
+        row.appendChild(checkboxCell);
         row.appendChild(orderCell);
         row.appendChild(categoryCell);
         row.appendChild(actionsCell);
@@ -211,3 +222,68 @@ async function filterTable(event) {
 
 // Initialize the script
 fetchAndPopulateCategories();
+
+function toggleSelectAll(selectAllCheckbox) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    toggleBulkDeleteBtn();
+}
+
+function toggleBulkDeleteBtn() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (checkboxes.length > 0) {
+        bulkDeleteBtn.style.display = 'inline-block';
+    } else {
+        bulkDeleteBtn.style.display = 'none';
+    }
+}
+
+async function deleteCategory(id) {
+    if (confirm('Are you sure you want to delete this category?')) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-categories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ categoryIds: [id] })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Category deleted successfully');
+                fetchAndPopulateCategories();
+            } else {
+                alert(data.message || 'Error deleting category');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete category');
+        }
+    }
+}
+
+async function bulkDeleteCategories() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const categoryIds = Array.from(checkboxes).map(cb => cb.value);
+    if (categoryIds.length === 0) return;
+    if (confirm(`Are you sure you want to delete ${categoryIds.length} categories?`)) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-categories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ categoryIds })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Categories deleted successfully');
+                document.getElementById('selectAllCheckbox').checked = false;
+                toggleBulkDeleteBtn();
+                fetchAndPopulateCategories();
+            } else {
+                alert(data.message || 'Error deleting categories');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete categories');
+        }
+    }
+}

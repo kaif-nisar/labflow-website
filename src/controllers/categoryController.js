@@ -2,6 +2,9 @@ import { Counter, categorydb } from "../models/category.model.js";
 import { SuperAdmin } from "../models/superAdmin.model.js";
 import { User } from "../models/user.model.js";
 import mongoose from "mongoose"
+import { asyncHandler } from "../utils/asyncHandler.js"
+import { ApiError } from "../utils/apiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 // superAdmin Function to add a new category 
 const addCategory = async (req, res) => {
@@ -365,6 +368,15 @@ const categoryById = async (req, res) => {
     }
 }
 
+const deleteCategoriesController = asyncHandler(async (req, res) => {
+    const { categoryIds } = req.body;
+    if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+        throw new ApiError(400, "categoryIds array is required");
+    }
+    const deletedCategories = await categorydb.deleteMany({ _id: { $in: categoryIds } });
+    return res.status(200).json(new ApiResponse(200, deletedCategories, "Categories deleted successfully"));
+});
+
 export {
 
     addCategory,
@@ -373,5 +385,6 @@ export {
     updatecategoryOrdersuper,
     categoryById,
     fetchCategoriesadmin,
-    addCategoryadmin
+    addCategoryadmin,
+    deleteCategoriesController
 }

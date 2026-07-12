@@ -2635,6 +2635,15 @@ const getAllAddOns = asyncHandler(async (req, res) => {
     }
 });
 
+const deleteTestsController = asyncHandler(async (req, res) => {
+    const { testIds } = req.body;
+    if (!testIds || !Array.isArray(testIds) || testIds.length === 0) {
+        throw new ApiError(400, "testIds array is required");
+    }
+    const deletedTests = await testSchema.deleteMany({ _id: { $in: testIds } });
+    return res.status(200).json(new ApiResponse(200, deletedTests, "Tests deleted successfully"));
+});
+
 export {
     addingTest,
     editTest,
@@ -2667,4 +2676,5 @@ export {
     editTesttenant,
     adminAssign,
     getAllAddOns,
+    deleteTestsController,
 }

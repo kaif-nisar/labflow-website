@@ -93,14 +93,16 @@ async function populatePannelsTable(pannels) {
         // const catdoc = await loadcategory(pannel.category);
 
         row.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" value="${pannel._id}" onchange="toggleBulkDeleteBtn()"></td>
             <td class="order"><i class="fa-solid fa-up-down"></i>${pannel.order}</td>
             <td>${pannel.name}</td>
             <td>${pannel.category.category}</td>
             <td>${pannel.price}</td>
             <td class="pannelTests">${pannel.tests}</td>
             <td>${pannel.sample_types}</td>
-            <td class="actions">
-                <a href="#" onclick="loadPage('editPanels', '${pannel._id}')">Edit</a>
+            <td class="actions" style="display: flex; gap: 15px; align-items: center; border: none;">
+                <a href="#" onclick="loadPage('editPanels', '${pannel._id}')" title="Edit Panel" style="color: #007bff; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#0056b3'" onmouseout="this.style.color='#007bff'"><i class="fa-solid fa-pen-to-square"></i></a>
+                <a href="#" onclick="deletePanel('${pannel._id}')" title="Delete Panel" style="color: #dc3545; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#c82333'" onmouseout="this.style.color='#dc3545'"><i class="fa-solid fa-trash"></i></a>
             </td>`;
 
         tbody.appendChild(row);
@@ -249,4 +251,69 @@ function filterTable() {
             noMatchrow.style.display = "";
         }
     });
+}
+
+function toggleSelectAll(selectAllCheckbox) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    toggleBulkDeleteBtn();
+}
+
+function toggleBulkDeleteBtn() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (checkboxes.length > 0) {
+        bulkDeleteBtn.style.display = 'inline-block';
+    } else {
+        bulkDeleteBtn.style.display = 'none';
+    }
+}
+
+async function deletePanel(id) {
+    if (confirm('Are you sure you want to delete this panel?')) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-panels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ panelIds: [id] })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Panel deleted successfully');
+                fetchingPannelsfromDatabase();
+            } else {
+                alert(data.message || 'Error deleting panel');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete panel');
+        }
+    }
+}
+
+async function bulkDeletePanels() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const panelIds = Array.from(checkboxes).map(cb => cb.value);
+    if (panelIds.length === 0) return;
+    if (confirm(`Are you sure you want to delete ${panelIds.length} panels?`)) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-panels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ panelIds })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Panels deleted successfully');
+                document.getElementById('selectAllCheckbox').checked = false;
+                toggleBulkDeleteBtn();
+                fetchingPannelsfromDatabase();
+            } else {
+                alert(data.message || 'Error deleting panels');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete panels');
+        }
+    }
 }

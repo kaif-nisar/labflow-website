@@ -170,9 +170,17 @@
             <i class="fas fa-search"></i>
             <span class="protip"><i class="fas fa-lightbulb"></i> ProTip! Drag and Drop row to reorder panels.</span>
         </div>
+
+        <div style="margin-bottom: 15px; display: flex; justify-content: flex-start;">
+            <button id="bulkDeleteBtn" style="background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#c82333'" onmouseout="this.style.backgroundColor='#dc3545'" onclick="bulkDeletePanels()">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+        </div>
+
         <table id="pannel-table">
             <thead>
                 <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
                     <th>ORDER</th>
                     <th>NAME</th>
                     <th>CATEGORY</th>

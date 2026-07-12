@@ -453,6 +453,15 @@ const tenantAllPackage = asyncHandler(async (req, res) => {
   }
 });
 
+const deletePackagesController = asyncHandler(async (req, res) => {
+    const { packageIds } = req.body;
+    if (!packageIds || !Array.isArray(packageIds) || packageIds.length === 0) {
+        throw new ApiError(400, "packageIds array is required");
+    }
+    const deletedPackages = await Package.deleteMany({ _id: { $in: packageIds } });
+    return res.status(200).json(new ApiResponse(200, deletedPackages, "Packages deleted successfully"));
+});
+
 export {
   addPackagecontroller,
   allPackagecontroller,
@@ -460,5 +469,6 @@ export {
   editPackageController,
   tenantAllPackage,
   addPackagecontrollerforadmin,
-  adminEditPackageController
+  adminEditPackageController,
+  deletePackagesController
 };

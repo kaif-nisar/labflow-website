@@ -382,8 +382,9 @@ app.use((req, res, next) => {
 // 4. Request Size Limiter
 app.use((req, res, next) => {
     const contentLength = parseInt(req.headers['content-length'] || '0');
+    const maxRequestSize = 100 * 1024 * 1024; // 100MB
 
-    if (contentLength > 10 * 1024 * 1024) { // 10MB limit
+    if (contentLength > maxRequestSize) {
         return res.status(413).json({
             error: 'Request too large'
         });

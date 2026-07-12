@@ -564,6 +564,15 @@ const tenantAllPanel = asyncHandler(async (req, res) => {
   }
 });
 
+const deletePanelsController = asyncHandler(async (req, res) => {
+    const { panelIds } = req.body;
+    if (!panelIds || !Array.isArray(panelIds) || panelIds.length === 0) {
+        throw new ApiError(400, "panelIds array is required");
+    }
+    const deletedPanels = await addPannel.deleteMany({ _id: { $in: panelIds } });
+    return res.status(200).json(new ApiResponse(200, deletedPanels, "Panels deleted successfully"));
+});
+
 export {
   addpannelcontroller,
   allPannelcontroller,
@@ -574,4 +583,5 @@ export {
   tenantAllPanel,
   addpannelcontrollerforadmin,
   adminEditPannelController,
+  deletePanelsController,
 };

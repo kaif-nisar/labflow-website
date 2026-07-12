@@ -14,15 +14,13 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
-
 // Check and deactivate expired subscriptions - runs daily at 12:01 AM
 export const scheduleSubscriptionCheck = () => {
   cron.schedule("1 0 * * *", async () => {
     try {
       console.log("Running subscription check...");
-      const expiredTenants = await Tenant.deactivateExpiredTenants();
+      const expiredCount = await Tenant.deactivateExpiredSubscriptions();
       console.log(`Deactivated ${expiredCount} expired subscriptions`);
-      console.log(`Deactivated ${expiredTenants} expired tenants`);
     } catch (error) {
       console.error("Error in subscription check:", error);
     }

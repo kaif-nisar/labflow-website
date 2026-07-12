@@ -34,7 +34,8 @@ import {
   updatePannelOrdersuper,
   tenantAllPanel,
   addpannelcontrollerforadmin,
-  adminEditPannelController
+  adminEditPannelController,
+  deletePanelsController
 } from "../controllers/addpannel.controller.js";
 import {
   addPackagecontroller,
@@ -43,7 +44,8 @@ import {
   editPackageController,
   tenantAllPackage,
   addPackagecontrollerforadmin,
-  adminEditPackageController
+  adminEditPackageController,
+  deletePackagesController
 } from "../controllers/Package.controller.js";
 import {
   getOneTest,
@@ -76,7 +78,8 @@ import {
   editTesttenant,
   updateTestOrdersuper,
   adminAssign,
-  getAllAddOns
+  getAllAddOns,
+  deleteTestsController
 } from "../controllers/addtest.controller.js";
 import {
   addCategory,
@@ -85,7 +88,8 @@ import {
   categoryById,
   fetchCategoriesadmin,
   addCategoryadmin,
-  updatecategoryOrdersuper
+  updatecategoryOrdersuper,
+  deleteCategoriesController
 } from "../controllers/categoryController.js";
 import {
   registerUser,
@@ -1233,5 +1237,11 @@ router.route("/add-booking-wallet-amount").post(verifyJWT, checkStaffPermission(
 router.route("/certificatepdfgenerator").post(verifyJWT,certificatepdfgenerator);
 
 router.route("/updateOrder/:id").put(verifyJWT, updateOrder);
+
+// Delete Routes for Tests, Panels, Packages, Categories
+router.route("/delete-tests").post(verifyJWT, checkStaffPermission("Edit Tests"), deleteTestsController);
+router.route("/delete-panels").post(verifyJWT, checkStaffPermission("Edit Tests"), deletePanelsController);
+router.route("/delete-packages").post(verifyJWT, checkStaffPermission("Edit Tests"), deletePackagesController);
+router.route("/delete-categories").post(verifyJWT, checkStaffPermission("Edit Tests"), deleteCategoriesController);
 
 export default router;

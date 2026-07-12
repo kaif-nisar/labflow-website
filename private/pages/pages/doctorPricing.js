@@ -32,6 +32,8 @@ const doctorPricingRefs = {
     groupItemSearchInput: document.getElementById('groupItemSearchInput'),
     groupResultsList: document.getElementById('groupResultsList'),
     groupSelectedItems: document.getElementById('groupSelectedItems'),
+    percentageInput: document.getElementById('percentageInput'),
+    applyPercentageBtn: document.getElementById('applyPercentageBtn'),
 };
 
 function getDoctorPricingIdFromUrl() {
@@ -175,6 +177,41 @@ function syncRateItemsFromInputs() {
             target.doctorPrice = input.value === '' ? null : Number(input.value);
         }
     });
+}
+
+function applyPercentageToAll() {
+    const rawValue = doctorPricingRefs.percentageInput?.value;
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+        setStatus(doctorPricingRefs.rateCardStatus, 'Please enter a percentage value.', true);
+        return;
+    }
+
+    const pct = Number(rawValue);
+    if (Number.isNaN(pct)) {
+        setStatus(doctorPricingRefs.rateCardStatus, 'Invalid percentage value. Sirf number ya negative number dalein.', true);
+        return;
+    }
+
+    if (doctorPricingState.selectedDoctorId === doctorPricingState.selfDoctorId) {
+        setStatus(doctorPricingRefs.rateCardStatus, 'Self doctor ke liye pricing change disabled hai.', true);
+        return;
+    }
+
+    syncRateItemsFromInputs();
+
+    let updatedCount = 0;
+    doctorPricingState.rateItems.forEach((item) => {
+        const base = Number(item.basePrice || 0);
+        if (base > 0) {
+            item.doctorPrice = Math.round((base + (base * pct / 100)) * 100) / 100;
+            updatedCount++;
+        }
+    });
+
+    renderRateCardTable();
+
+    const direction = pct >= 0 ? 'increased' : 'decreased';
+    setStatus(doctorPricingRefs.rateCardStatus, `${updatedCount} items ${direction} by ${Math.abs(pct)}%. Review karke Save karein.`);
 }
 
 async function saveRateCard() {
@@ -458,6 +495,15 @@ function attachDoctorPricingEvents() {
         try { await saveRateCard(); } catch (error) { setStatus(doctorPricingRefs.rateCardStatus, error.message, true); }
     });
     doctorPricingRefs.exportBtn.addEventListener('click', exportRateCard);
+    doctorPricingRefs.applyPercentageBtn.addEventListener('click', () => {
+        try { applyPercentageToAll(); } catch (error) { setStatus(doctorPricingRefs.rateCardStatus, error.message, true); }
+    });
+    doctorPricingRefs.percentageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            try { applyPercentageToAll(); } catch (error) { setStatus(doctorPricingRefs.rateCardStatus, error.message, true); }
+        }
+    });
     doctorPricingRefs.importInput.addEventListener('change', async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;

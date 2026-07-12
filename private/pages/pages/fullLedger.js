@@ -81,8 +81,8 @@ async function loadLedgerData() {
         // Render all entries
         renderLedgerEntries(data);
 
-        // Populate doctor & lab selects from transactions
-        populateDoctorLabFromTransactions(data.transactions || []);
+        // Populate doctor & lab selects
+        await populateDoctorLab(franchiseeId, data.transactions || []);
 
         // Update title
         const start = new Date(startDate).toLocaleDateString();
@@ -175,6 +175,8 @@ function renderLedgerEntries(data) {
                 <td>${doctorName}</td>
                 <td>${testNames}</td>
                 <td>${txn.barcodeId || ''}</td>
+                <td>${txn.discountamount || ''}</td>
+                <td>${txn.discountunit || ''}</td>
                 <td>${labName}</td>
                 <td>${txn.booking?.total || ''}</td>
                 <td>${closingBalance}</td>
@@ -185,8 +187,8 @@ function renderLedgerEntries(data) {
     });
 }
 
-// Populate doctor & lab selects from transactions
-function populateDoctorLabFromTransactions(transactions) {
+// Populate doctor & lab selects
+async function populateDoctorLab(franchiseeId, transactions) {
     const doctorSelect = document.getElementById('doctor-select');
     const labSelect = document.getElementById('lab-select');
 
@@ -200,18 +202,44 @@ function populateDoctorLabFromTransactions(transactions) {
         if (l) labs.add(l);
     });
 
+    try {
+        const [docsRes, labsRes] = await Promise.all([
+            fetch(`${BASE_URL}/api/v1/user/all-doctor?userId=${franchiseeId}`),
+            fetch(`${BASE_URL}/api/v1/user/all-Lab?userId=${franchiseeId}`)
+        ]);
+
+        if (docsRes.ok) {
+            const docsData = await docsRes.json();
+            const docsList = Array.isArray(docsData) ? docsData : (docsData.data || []);
+            docsList.forEach(d => {
+                const docName = (d.displayName || `${d.firstName || ''} ${d.lastName || ''}`).trim();
+                if (docName) doctors.add(docName);
+            });
+        }
+        
+        if (labsRes.ok) {
+            const labsData = await labsRes.json();
+            const labsList = Array.isArray(labsData) ? labsData : (labsData.data || []);
+            labsList.forEach(l => {
+                if (l.LabName) labs.add(l.LabName.trim());
+            });
+        }
+    } catch (err) {
+        console.error('Error fetching doctors/labs:', err);
+    }
+
     // clear existing (keep "all")
     while (doctorSelect.options.length > 1) doctorSelect.remove(1);
     while (labSelect.options.length > 1) labSelect.remove(1);
 
-    doctors.forEach(name => {
+    Array.from(doctors).sort().forEach(name => {
         const o = document.createElement('option');
         o.value = name;
         o.textContent = name;
         doctorSelect.appendChild(o);
     });
 
-    labs.forEach(name => {
+    Array.from(labs).sort().forEach(name => {
         const o = document.createElement('option');
         o.value = name;
         o.textContent = name;
@@ -264,10 +292,14 @@ function downloadExcel() {
     } else {
         headers.splice(4, 0, 'Credit');
         headers.splice(8, 0, 'Doctor');
-        headers.splice(11, 0, 'Lab Name','Booking-Amount', 'Closing Balance', 'Opening Balance');
+        headers.splice(11, 0, 'Discount', 'Discount (%)');
+        headers.splice(13, 0, 'Lab Name','Booking-Amount', 'Closing Balance', 'Opening Balance');
     }
 
     data.push(headers);
+
+    let totalBookingAmount = 0;
+    const bookingAmtCol = user.tenantId.modelType === '1layer' ? 12 : 14;
 
     for (let i = 0; i < table.rows.length; i++) {
         const tr = table.rows[i];
@@ -279,12 +311,22 @@ function downloadExcel() {
             row.push(cells[j].innerText);
         }
         data.push(row);
+        
+        const amt = parseFloat(cells[bookingAmtCol].innerText);
+        if (!isNaN(amt)) {
+            totalBookingAmount += amt;
+        }
     }
 
     if (data.length === 1) {
         alert('No visible rows to export');
         return;
     }
+
+    const totalRow = new Array(headers.length).fill('');
+    totalRow[0] = 'Total';
+    totalRow[bookingAmtCol] = totalBookingAmount.toFixed(2);
+    data.push(totalRow);
 
     const worksheet = XLSX.utils.aoa_to_sheet(data);
 
@@ -327,10 +369,14 @@ function downloadPDF() {
     } else {
         headers.splice(4, 0, 'Credit');
         headers.splice(8, 0, 'Doctor');
-        headers.splice(11, 0, 'Lab Name','Booking-Amount', 'Closing Balance', 'Opening Balance');
+        headers.splice(11, 0, 'Discount', 'Discount (%)');
+        headers.splice(13, 0, 'Lab Name','Booking-Amount', 'Closing Balance', 'Opening Balance');
     }
 
     const data = [];
+    let totalBookingAmount = 0;
+    const bookingAmtCol = user.tenantId.modelType === '1layer' ? 12 : 14;
+
     for (let i = 0; i < table.rows.length; i++) {
         const tr = table.rows[i];
         if (tr.style.display === 'none') continue; // skip filtered rows
@@ -340,12 +386,22 @@ function downloadPDF() {
             row.push(cells[j].innerText);
         }
         data.push(row);
+        
+        const amt = parseFloat(cells[bookingAmtCol].innerText);
+        if (!isNaN(amt)) {
+            totalBookingAmount += amt;
+        }
     }
 
     if (data.length === 0) {
         alert('No visible rows to export as PDF');
         return;
     }
+
+    const totalRow = new Array(headers.length).fill('');
+    totalRow[0] = 'Total';
+    totalRow[bookingAmtCol] = totalBookingAmount.toFixed(2);
+    data.push(totalRow);
 
     doc.setFontSize(16);
     doc.text('Franchisee Account', 14, 15);

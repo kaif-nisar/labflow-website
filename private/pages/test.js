@@ -65,14 +65,16 @@ async function populateLoadTest(test) {
         // let catdoc = await loadcategory(t.category);
 
         row.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" value="${t._id}" onchange="toggleBulkDeleteBtn()"></td>
             <td class="order"><i class="fa-solid fa-up-down"></i>${t.order}</td>
             <td>${t.Name}</td>
             <td>${t.Price}</td>
             <td>${t.sampleType}</td>
             <td>${t.Short_name}</td>
             <td>${t.category.category}</td>
-            <td class="actions">
-                <a href="#" onclick="loadPage('editTest', '${t._id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+            <td class="actions" style="display: flex; gap: 15px; align-items: center; border: none;">
+                <a href="#" onclick="loadPage('editTest', '${t._id}')" title="Edit Test" style="color: #007bff; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#0056b3'" onmouseout="this.style.color='#007bff'"><i class="fa-solid fa-pen-to-square"></i></a>
+                <a href="#" onclick="deleteTest('${t._id}')" title="Delete Test" style="color: #dc3545; font-size: 1.1em; transition: color 0.2s;" onmouseover="this.style.color='#c82333'" onmouseout="this.style.color='#dc3545'"><i class="fa-solid fa-trash"></i></a>
             </td>`;
 
         tbody.appendChild(row);
@@ -270,4 +272,70 @@ function filterTable() {
         }
     });
 }
+
+function toggleSelectAll(selectAllCheckbox) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    toggleBulkDeleteBtn();
+}
+
+function toggleBulkDeleteBtn() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (checkboxes.length > 0) {
+        bulkDeleteBtn.style.display = 'inline-block';
+    } else {
+        bulkDeleteBtn.style.display = 'none';
+    }
+}
+
+async function deleteTest(id) {
+    if (confirm('Are you sure you want to delete this test?')) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-tests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ testIds: [id] })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Test deleted successfully');
+                loadTest();
+            } else {
+                alert(data.message || 'Error deleting test');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete test');
+        }
+    }
+}
+
+async function bulkDeleteTests() {
+    const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+    const testIds = Array.from(checkboxes).map(cb => cb.value);
+    if (testIds.length === 0) return;
+    if (confirm(`Are you sure you want to delete ${testIds.length} tests?`)) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/delete-tests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                body: JSON.stringify({ testIds })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Tests deleted successfully');
+                document.getElementById('selectAllCheckbox').checked = false;
+                toggleBulkDeleteBtn();
+                loadTest();
+            } else {
+                alert(data.message || 'Error deleting tests');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to delete tests');
+        }
+    }
+}
+
 
