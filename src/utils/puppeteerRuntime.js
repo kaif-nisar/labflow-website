@@ -5,6 +5,20 @@ import { PUPPETEER_OFFLINE_ARGS } from "./pdfOfflineAssets.js";
 
 const getExecutableCandidates = () => {
     const configuredExecutable = String(process.env.PUPPETEER_EXECUTABLE_PATH || "").trim();
+    const platformCandidates = process.platform === "win32"
+        ? [
+            resolveReadablePath("chromium", "chrome-headless-shell-win64", "chrome-headless-shell.exe"),
+            resolveReadablePath("chromium", "chrome-win64", "chrome.exe"),
+            resolveReadablePath("chromium", "chrome-win", "chrome.exe"),
+        ]
+        : [
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/google-chrome",
+            "/usr/bin/chrome",
+            "/snap/bin/chromium",
+        ];
 
     return [
         configuredExecutable
@@ -12,9 +26,7 @@ const getExecutableCandidates = () => {
                 ? configuredExecutable
                 : resolveRuntimePath(configuredExecutable))
             : "",
-        resolveReadablePath("chromium", "chrome-headless-shell-win64", "chrome-headless-shell.exe"),
-        resolveReadablePath("chromium", "chrome-win64", "chrome.exe"),
-        resolveReadablePath("chromium", "chrome-win", "chrome.exe"),
+        ...platformCandidates,
     ].filter(Boolean);
 };
 
