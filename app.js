@@ -10,6 +10,7 @@ import mongoSanitize from "express-mongo-sanitize";
 import Connect_DB from "./src/db/index.js";
 import userRouter from "./src/routes/user.routes.js";
 import qrReportRouter from "./src/routes/qrReport.routes.js";
+import offlineReportRouter from "./src/routes/offlineReport.routes.js";
 import marketingRouter from "./src/routes/marketing.routes.js";
 import {
     verifyJWT,
@@ -211,12 +212,26 @@ app.use(hpp()); // HTTP Parameter Pollution Protection
 // 🌐 CORS CONFIGURATION
 // ========================
 
-app.use(cors({
+const defaultCors = cors({
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+});
+
+app.use((req, res, next) => {
+    // Electron may issue these requests from a file:// (null) origin. Keep
+    // this permissive CORS policy strictly scoped to the no-login offline sync
+    // channel; every existing API retains the configured CORS policy below.
+    if (req.path.startsWith("/api/v1/offline-reports")) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        if (req.method === "OPTIONS") return res.sendStatus(204);
+        return next();
+    }
+    return defaultCors(req, res, next);
+});
 
 app.use((req, res, next) => {
     if (process.env.NODE_ENV !== "production") {
@@ -440,6 +455,7 @@ import targetRouter from "./src/routes/target.routes.js";
 
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/qr-reports", qrReportRouter);
+app.use("/api/v1/offline-reports", offlineReportRouter);
 app.use("/r", qrReportRouter);
 app.use("/api/v1/target", targetRouter);
 app.use("/", marketingRouter);
