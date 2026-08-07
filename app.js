@@ -9,6 +9,7 @@ import xss from "xss-clean";
 import mongoSanitize from "express-mongo-sanitize";
 import Connect_DB from "./src/db/index.js";
 import userRouter from "./src/routes/user.routes.js";
+import qrReportRouter from "./src/routes/qrReport.routes.js";
 import marketingRouter from "./src/routes/marketing.routes.js";
 import {
     verifyJWT,
@@ -438,6 +439,8 @@ app.use((error, req, res, next) => {
 import targetRouter from "./src/routes/target.routes.js";
 
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/qr-reports", qrReportRouter);
+app.use("/r", qrReportRouter);
 app.use("/api/v1/target", targetRouter);
 app.use("/", marketingRouter);
 app.use(express.static("public", {
