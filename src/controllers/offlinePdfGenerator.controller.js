@@ -316,7 +316,7 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
 };
 
 const offlinePdfGeneratorController = async (params) => {
-    const {
+    let {
         pdfformat, layerone, showInvest, BoldRow, HLinred, HighLow, RowSpacing,
         selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
         cssContent, header, footer, backgroundImageUrl, disableBackgroundImage, checkBox, headermargin, footermargin, marginRight,
