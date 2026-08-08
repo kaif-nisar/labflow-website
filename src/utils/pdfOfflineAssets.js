@@ -264,8 +264,13 @@ export const readAssetAsBuffer = async (assetReference) => {
   }
 
   if (rawValue.startsWith("data:")) {
-    const [, mimeType = "", base64Payload = ""] =
-      rawValue.match(/^data:([^;]+);base64,(.+)$/i) || [];
+    const match = rawValue.match(/^data:([^;,]+)(?:;[^;,]+)*;base64,(.+)$/is);
+    if (!match) {
+      return null;
+    }
+
+    const mimeType = match[1].trim() || "image/png";
+    const base64Payload = match[2].replace(/\s+/g, "");
     if (!base64Payload) {
       return null;
     }

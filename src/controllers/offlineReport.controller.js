@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { OfflineReport } from "../models/offlineReport.model.js";
-import { pdfgeneratorcontroller2 } from "./pdfgenerator.controller.js";
+import { offlinePdfGeneratorController } from "./offlinePdfGenerator.controller.js";
 import { normalizeStoredUploadUrl } from "../utils/localStorage.js";
 
 const OFFLINE_REPORT_FIELDS = [
@@ -81,7 +81,7 @@ const downloadOfflineReportPdf = async (req, res) => {
             return res.status(404).json({ message: "This offline report is unavailable or has expired." });
         }
 
-        return pdfgeneratorcontroller2({
+        return offlinePdfGeneratorController({
             ...report,
             pdfformat: report.pdfFormat || "reportFormat1",
             layerone: false,
