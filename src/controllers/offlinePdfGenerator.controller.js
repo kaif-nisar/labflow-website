@@ -79,6 +79,7 @@ const buildPdfBodyDocument = ({
         '<meta charset="utf-8" />',
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
+        'html, body { background: transparent !important; }',
         safeCss,
         '.wrong i, .delete-btn i { display: none; }',
         'h2 { margin: 0 !important; padding: 0 !important; }',
