@@ -304,6 +304,7 @@ import {
   getAllInvoices, getpdfcontrolleruser, mergePdfsController, certificatepdfgenerator
 } from "../controllers/pdfgenerator.controller.js";
 import { getAllTemplates, uploadImage, deleteImage } from "../controllers/template.controller.js"
+import { saveOfflineReport } from "../controllers/offlineReport.controller.js";
 import { qrcodecontroller } from "../controllers/qrcode.controller.js"
 import { sendSMS, sendEmail, handleRequest } from "../controllers/sendingReport.controller.js";
 import {
@@ -1026,6 +1027,10 @@ router.route("/getting-pdf-data").post(verifyJWT, checkStaffPermission("canManag
 
 // // getting template
 router.route("/generate-qr").post(verifyJWT,qrcodecontroller);
+
+// offline report link endpoints (unauthenticated sync from desktop app)
+router.route("/offline-report-link").post(saveOfflineReport);
+router.route("/offline-reports").post(saveOfflineReport);
 
 // // getting template
 router.route("/reject-barcode").post(verifyJWT,deleteBarcode);

@@ -9,7 +9,7 @@ const OFFLINE_REPORT_FIELDS = [
     "htmlContent", "cssContent", "header", "footer", "backgroundImageUrl", "headermargin", "footermargin",
     "marginRight", "marginLeft", "LeftsignPd", "Rightsignpd", "investigationmargin", "showlab", "showdoctorfirst",
     "showdoctorsecond", "fileInputLab", "fileInputDoctorleft", "fileInputDoctorright", "fileInputLabtext",
-    "fileInputDoctorlefttext", "fileInputDoctorrighttext", "isdocumented", "pdfFormat"
+    "fileInputDoctorlefttext", "fileInputDoctorrighttext", "isdocumented", "pdfFormat", "checkBox", "disableBackgroundImage"
 ];
 
 const oneMonthFromNow = () => {
@@ -27,7 +27,9 @@ const getPublicBaseUrl = (req) => {
 // they regain connectivity. The opaque QR token is required for later access.
 const saveOfflineReport = async (req, res) => {
     try {
-        const offlineReportId = String(req.body?.offlineReportId || "").trim();
+        const offlineReportId = String(
+            req.body?.offlineReportId || req.body?.bookingId || req.body?.reportId || crypto.randomUUID()
+        ).trim();
         if (!offlineReportId || offlineReportId.length > 200) {
             return res.status(400).json({ message: "offlineReportId is required (max 200 characters)." });
         }
@@ -81,8 +83,13 @@ const downloadOfflineReportPdf = async (req, res) => {
             return res.status(404).json({ message: "This offline report is unavailable or has expired." });
         }
 
+        const shouldDisable = Boolean(report.disableBackgroundImage || report.checkBox);
+
         return offlinePdfGeneratorController({
             ...report,
+            backgroundImageUrl: shouldDisable ? "" : (report.backgroundImageUrl || ""),
+            disableBackgroundImage: shouldDisable,
+            checkBox: Boolean(report.checkBox),
             pdfformat: report.pdfFormat || "reportFormat1",
             layerone: false,
             res,

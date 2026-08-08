@@ -62,6 +62,9 @@ const buildPdfBodyDocument = ({
     BoldRow,
     hideCategories,
     hideTableHeadings,
+    backgroundImageUrl,
+    disableBackgroundImage,
+    checkBox,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
     const safeMarkup = sanitizePdfMarkup(htmlContent);
@@ -73,6 +76,23 @@ const buildPdfBodyDocument = ({
     const fontStack = resolvePdfFontStack(selectedFontFamily);
     const categoryDisplay = hideCategories ? 'none' : 'block';
 
+    const shouldApplyBackground = Boolean(backgroundImageUrl && !disableBackgroundImage && !checkBox);
+    const backgroundStyle = shouldApplyBackground ? `
+        html, body, .middle, .container, .container2, .container-format1, .container22, .report-page, .report-container {
+            background-color: transparent !important;
+        }
+        body, .middle, .container, .container2, .container-format1, .report-page, .report-container {
+            background-image: url('${backgroundImageUrl}') !important;
+            background-size: cover !important;
+            background-repeat: no-repeat !important;
+            background-position: center top !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    ` : `
+        html, body { background: transparent !important; }
+    `;
+
     return [
         '<!DOCTYPE html>',
         '<html>',
@@ -80,7 +100,7 @@ const buildPdfBodyDocument = ({
         '<meta charset="utf-8" />',
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
-        'html, body { background: transparent !important; }',
+        backgroundStyle,
         safeCss,
         '.wrong i, .delete-btn i { display: none; }',
         'h2 { margin: 0 !important; padding: 0 !important; }',
@@ -298,7 +318,7 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
 const offlinePdfGeneratorController = async ({
     pdfformat, layerone, showInvest, BoldRow, HLinred, HighLow, RowSpacing,
     selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
-    cssContent, header, footer, backgroundImageUrl, headermargin, footermargin, marginRight,
+    cssContent, header, footer, backgroundImageUrl, disableBackgroundImage, checkBox, headermargin, footermargin, marginRight,
     marginLeft, investigationmargin, LeftsignPd, Rightsignpd, res
 }) => {
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
@@ -318,6 +338,9 @@ const offlinePdfGeneratorController = async ({
     headermarginPx = cmToPx(parseNumericValue(headermargin, 2.8));
     footermarginPx = cmToPx(parseNumericValue(footermargin, 1));
 
+    const shouldDisableBackground = Boolean(disableBackgroundImage || checkBox);
+    const effectiveBgUrl = shouldDisableBackground ? "" : (backgroundImageUrl || "");
+
     try {
         const browser = await launchPdfBrowser();
         const page = await browser.newPage();
@@ -335,6 +358,9 @@ const offlinePdfGeneratorController = async ({
                 BoldRow,
                 hideCategories,
                 hideTableHeadings,
+                backgroundImageUrl: effectiveBgUrl,
+                disableBackgroundImage: shouldDisableBackground,
+                checkBox,
             });
 
             cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
@@ -372,7 +398,7 @@ const offlinePdfGeneratorController = async ({
                 },
             });
 
-            const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, backgroundImageUrl);
+            const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, effectiveBgUrl);
 
             if (!finalPdfBuffer) {
                 console.error('Final PDF buffer is null');

@@ -39,6 +39,8 @@ const offlineReportSchema = new mongoose.Schema({
     fileInputDoctorlefttext: { type: String, default: "" },
     fileInputDoctorrighttext: { type: String, default: "" },
     isdocumented: { type: Boolean, default: false },
+    checkBox: { type: Boolean, default: false },
+    disableBackgroundImage: { type: Boolean, default: false },
     // Not part of Customization, but needed to reproduce the offline layout.
     pdfFormat: { type: String, default: "reportFormat1" },
 
