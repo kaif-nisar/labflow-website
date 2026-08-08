@@ -20,6 +20,65 @@ const launchPdfBrowser = async () => {
     return puppeteer.launch(launchOptions);
 };
 
+/**
+ * Convert any image buffer (SVG, WebP, etc.) to a PNG buffer by rendering
+ * it inside a headless Chromium page and taking a screenshot.
+ * This is the most reliable approach when node-canvas lacks SVG support.
+ *
+ * @param {Buffer} imageBuffer  - Raw image bytes (e.g. SVG)
+ * @param {string} mimeType     - MIME type of the input (e.g. 'image/svg+xml')
+ * @param {number} [width=595]  - Target width in px (A4 @ 72dpi)
+ * @param {number} [height=842] - Target height in px
+ * @returns {Promise<Buffer|null>}
+ */
+const convertImageToPngViaPuppeteer = async (imageBuffer, mimeType, width = 595, height = 842) => {
+    let browser = null;
+    try {
+        const launchOptions = getPuppeteerLaunchOptions();
+        browser = await puppeteer.launch(launchOptions);
+        const page = await browser.newPage();
+        await page.setViewport({ width, height });
+
+        // Build a data-URL for the image so we don't need the filesystem
+        const base64 = imageBuffer.toString('base64');
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+
+        // Render the image stretched to fill the entire viewport
+        await page.setContent(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <meta charset="utf-8">
+            <style>
+                * { margin: 0; padding: 0; }
+                html, body { width: ${width}px; height: ${height}px; overflow: hidden; background: transparent; }
+                img { width: 100%; height: 100%; object-fit: cover; display: block; }
+            </style>
+            </head>
+            <body>
+            <img src="${dataUrl}" />
+            </body>
+            </html>
+        `, { waitUntil: 'networkidle0' });
+
+        const pngBuffer = await page.screenshot({
+            type: 'png',
+            clip: { x: 0, y: 0, width, height },
+            omitBackground: true,
+        });
+
+        console.log('[bg-pdf] SVG→PNG conversion via Puppeteer succeeded.', { width, height, pngSize: pngBuffer?.length ?? 0 });
+        return pngBuffer;
+    } catch (err) {
+        console.error('[bg-pdf] SVG→PNG Puppeteer conversion failed:', err?.message || err);
+        return null;
+    } finally {
+        if (browser) {
+            await browser.close().catch(() => {});
+        }
+    }
+};
+
 const renderOfflineHtmlOnPage = async (page, htmlContent, waitUntil = 'networkidle0') => {
     return loadOfflineHtmlIntoPage(page, htmlContent, {
         waitUntil,
@@ -284,42 +343,69 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
         });
 
         // ── Step 3: embed the image into the output PDF document ──────────────
-        const isPng = String(backgroundAsset.mimeType || '').includes('png');
-        const isWebp = String(backgroundAsset.mimeType || '').includes('webp');
+        // pdf-lib only supports PNG and JPG natively.
+        // SVG, WebP, BMP, GIF and any unknown format must be rasterized first.
+        const mimeStr = String(backgroundAsset.mimeType || '').toLowerCase();
+        const isPng  = mimeStr.includes('png');
+        const isJpg  = mimeStr.includes('jpeg') || mimeStr.includes('jpg');
+        const isSvg  = mimeStr.includes('svg');
+        const needsConversion = !isPng && !isJpg; // SVG, WebP, GIF, unknown...
 
-        const tryEmbed = async (doc, buffer, asPng) => {
-            if (asPng) {
-                return doc.embedPng(buffer);
+        // Determine page dimensions from the first PDF page (points → px at 72dpi = same value)
+        const firstPageForSize = inputPdfDoc.getPages()[0];
+        const pgW = Math.round(firstPageForSize.getWidth());
+        const pgH = Math.round(firstPageForSize.getHeight());
+
+        let workingBuffer = backgroundAsset.buffer;
+        let workingIsPng  = isPng;
+
+        if (needsConversion) {
+            console.log(`[bg-pdf] MIME type "${mimeStr}" is not directly supported by pdf-lib. Converting to PNG via Puppeteer...`);
+            const converted = await convertImageToPngViaPuppeteer(backgroundAsset.buffer, backgroundAsset.mimeType, pgW, pgH);
+            if (converted) {
+                workingBuffer = converted;
+                workingIsPng  = true;
+                console.log('[bg-pdf] Conversion to PNG succeeded. Buffer size:', workingBuffer.length);
+            } else {
+                console.error('[bg-pdf] Conversion failed — background image will not be applied.');
+                return inputPdfBuffer;
             }
-            return doc.embedJpg(buffer);
-        };
+        }
 
         try {
-            backgroundImage = await tryEmbed(outputPdfDoc, backgroundAsset.buffer, isPng);
-            console.log('[bg-pdf] Background image embedded successfully as', isPng ? 'PNG' : 'JPG');
-        } catch (primaryErr) {
-            console.warn('[bg-pdf] Primary embed failed, trying alternate format:', primaryErr?.message || primaryErr);
+            if (workingIsPng) {
+                backgroundImage = await outputPdfDoc.embedPng(workingBuffer);
+                console.log('[bg-pdf] PNG embedded successfully.');
+            } else {
+                backgroundImage = await outputPdfDoc.embedJpg(workingBuffer);
+                console.log('[bg-pdf] JPG embedded successfully.');
+            }
+        } catch (embedErr) {
+            // Last resort: try the other format, then Puppeteer PNG conversion
+            console.warn('[bg-pdf] Direct embed failed:', embedErr?.message || embedErr, '— trying alternate strategies...');
             try {
-                // Swap PNG ↔ JPG
-                backgroundImage = await tryEmbed(outputPdfDoc, backgroundAsset.buffer, !isPng);
-                console.log('[bg-pdf] Alternate format embed succeeded.');
-            } catch (fallbackErr) {
-                console.warn('[bg-pdf] Alternate embed also failed, trying canvas PNG conversion:', fallbackErr?.message || fallbackErr);
+                backgroundImage = await outputPdfDoc.embedPng(workingBuffer);
+                console.log('[bg-pdf] Fallback embedPng succeeded.');
+            } catch {
                 try {
-                    const convertedPngBuffer = await convertImageToPngBuffer(backgroundAsset.buffer);
-                    if (convertedPngBuffer) {
-                        backgroundImage = await outputPdfDoc.embedPng(convertedPngBuffer);
-                        console.log('[bg-pdf] Canvas-converted PNG embed succeeded. Buffer size:', convertedPngBuffer.length);
+                    backgroundImage = await outputPdfDoc.embedJpg(workingBuffer);
+                    console.log('[bg-pdf] Fallback embedJpg succeeded.');
+                } catch {
+                    // Final attempt: Puppeteer rasterization regardless of format
+                    console.warn('[bg-pdf] All direct embeds failed. Trying Puppeteer rasterization as last resort...');
+                    const lastResort = await convertImageToPngViaPuppeteer(backgroundAsset.buffer, backgroundAsset.mimeType, pgW, pgH);
+                    if (lastResort) {
+                        try {
+                            backgroundImage = await outputPdfDoc.embedPng(lastResort);
+                            console.log('[bg-pdf] Last-resort Puppeteer PNG embed succeeded.');
+                        } catch (finalErr) {
+                            console.error('[bg-pdf] Even last-resort embed failed:', finalErr?.message || finalErr);
+                            return inputPdfBuffer;
+                        }
                     } else {
-                        console.error('[bg-pdf] Canvas conversion returned null — no background will be applied.');
+                        console.error('[bg-pdf] All embedding strategies exhausted — returning PDF without background.');
+                        return inputPdfBuffer;
                     }
-                } catch (canvasErr) {
-                    console.error('[bg-pdf] All image embedding strategies failed:', {
-                        primaryError: primaryErr?.message || primaryErr,
-                        fallbackError: fallbackErr?.message || fallbackErr,
-                        canvasError: canvasErr?.message || canvasErr,
-                    });
-                    return inputPdfBuffer;
                 }
             }
         }
