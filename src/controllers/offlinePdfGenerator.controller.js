@@ -315,12 +315,14 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
     }
 };
 
-const offlinePdfGeneratorController = async ({
-    pdfformat, layerone, showInvest, BoldRow, HLinred, HighLow, RowSpacing,
-    selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
-    cssContent, header, footer, backgroundImageUrl, disableBackgroundImage, checkBox, headermargin, footermargin, marginRight,
-    marginLeft, investigationmargin, LeftsignPd, Rightsignpd, res
-}) => {
+const offlinePdfGeneratorController = async (params) => {
+    const {
+        pdfformat, layerone, showInvest, BoldRow, HLinred, HighLow, RowSpacing,
+        selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
+        cssContent, header, footer, backgroundImageUrl, disableBackgroundImage, checkBox, headermargin, footermargin, marginRight,
+        marginLeft, investigationmargin, LeftsignPd, Rightsignpd, res
+    } = params || {};
+
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
     const format3 = pdfformat === "reportFormat3";
     const cmToPx = (cm) => cm * 37.795;
@@ -338,8 +340,20 @@ const offlinePdfGeneratorController = async ({
     headermarginPx = cmToPx(parseNumericValue(headermargin, 2.8));
     footermarginPx = cmToPx(parseNumericValue(footermargin, 1));
 
+    const rawBg = backgroundImageUrl ||
+        params?.backgroundImage ||
+        params?.bgImage ||
+        params?.backgroundImg ||
+        params?.imageUrl ||
+        params?.templateImage ||
+        params?.template ||
+        params?.fileInputLab ||
+        params?.background ||
+        "";
+    const cleanBgUrl = String(rawBg || "").trim().replace(/[\r\n\s]+/g, "");
+
     const shouldDisableBackground = Boolean(disableBackgroundImage || checkBox);
-    const effectiveBgUrl = shouldDisableBackground ? "" : (backgroundImageUrl || "");
+    const effectiveBgUrl = shouldDisableBackground ? "" : cleanBgUrl;
 
     try {
         const browser = await launchPdfBrowser();

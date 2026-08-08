@@ -6,11 +6,28 @@ import { normalizeStoredUploadUrl } from "../utils/localStorage.js";
 const OFFLINE_REPORT_FIELDS = [
     "tenantId", "createdBy", "bookingId", "DownloadPdf", "showInvest", "BoldRow", "HLinred", "HighLow",
     "RowSpacing", "selectedFontSize", "selectedFontFamily", "hideCategories", "hideTableHeadings", "reportId",
-    "htmlContent", "cssContent", "header", "footer", "backgroundImageUrl", "headermargin", "footermargin",
+    "htmlContent", "cssContent", "header", "footer", "backgroundImageUrl", "backgroundImage", "bgImage",
+    "backgroundImg", "imageUrl", "templateImage", "template", "background", "headermargin", "footermargin",
     "marginRight", "marginLeft", "LeftsignPd", "Rightsignpd", "investigationmargin", "showlab", "showdoctorfirst",
     "showdoctorsecond", "fileInputLab", "fileInputDoctorleft", "fileInputDoctorright", "fileInputLabtext",
     "fileInputDoctorlefttext", "fileInputDoctorrighttext", "isdocumented", "pdfFormat", "checkBox", "disableBackgroundImage"
 ];
+
+const getIncomingBackgroundImageUrl = (obj = {}) => {
+    if (!obj || typeof obj !== "object") return "";
+    const candidate =
+        obj.backgroundImageUrl ||
+        obj.backgroundImage ||
+        obj.bgImage ||
+        obj.backgroundImg ||
+        obj.imageUrl ||
+        obj.templateImage ||
+        obj.template ||
+        obj.fileInputLab ||
+        obj.background ||
+        "";
+    return String(candidate || "").trim();
+};
 
 const oneMonthFromNow = () => {
     const expiry = new Date();
@@ -42,9 +59,12 @@ const saveOfflineReport = async (req, res) => {
                 .filter((field) => req.body[field] !== undefined)
                 .map((field) => [field, req.body[field]])
         );
-        if (data.backgroundImageUrl) {
-            data.backgroundImageUrl = normalizeStoredUploadUrl(data.backgroundImageUrl) || data.backgroundImageUrl;
+
+        const rawBgUrl = getIncomingBackgroundImageUrl(req.body);
+        if (rawBgUrl) {
+            data.backgroundImageUrl = normalizeStoredUploadUrl(rawBgUrl) || rawBgUrl;
         }
+
         data.expiresAt = oneMonthFromNow();
 
         let document = await OfflineReport.findOne({ offlineReportId }).select("+downloadToken");
@@ -84,10 +104,11 @@ const downloadOfflineReportPdf = async (req, res) => {
         }
 
         const shouldDisable = Boolean(report.disableBackgroundImage || report.checkBox);
+        const resolvedBgUrl = getIncomingBackgroundImageUrl(report);
 
         return offlinePdfGeneratorController({
             ...report,
-            backgroundImageUrl: shouldDisable ? "" : (report.backgroundImageUrl || ""),
+            backgroundImageUrl: shouldDisable ? "" : resolvedBgUrl,
             disableBackgroundImage: shouldDisable,
             checkBox: Boolean(report.checkBox),
             pdfformat: report.pdfFormat || "reportFormat1",
