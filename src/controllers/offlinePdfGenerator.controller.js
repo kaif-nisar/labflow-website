@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import { PDFDocument } from 'pdf-lib';
 import {
+    convertImageToPngBuffer,
     loadOfflineHtmlIntoPage,
     readAssetAsBuffer,
     rewriteHtmlForOfflinePdf,
@@ -244,8 +245,16 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
                     backgroundImage = await outputPdfDoc.embedPng(backgroundAsset.buffer);
                 }
             } catch (fallbackErr) {
-                console.error('Failed to embed background image:', fallbackErr);
-                return inputPdfBuffer;
+                console.warn('Native pdf-lib image embedding failed, attempting canvas conversion to PNG...', fallbackErr?.message || fallbackErr);
+                try {
+                    const convertedPngBuffer = await convertImageToPngBuffer(backgroundAsset.buffer);
+                    if (convertedPngBuffer) {
+                        backgroundImage = await outputPdfDoc.embedPng(convertedPngBuffer);
+                    }
+                } catch (canvasErr) {
+                    console.error('Failed to embed background image after canvas conversion:', canvasErr);
+                    return inputPdfBuffer;
+                }
             }
         }
 

@@ -6,6 +6,7 @@ import { certificates } from '../models/certificate.model.js';
 import { defaultpdfsetting } from '../models/defaultpdfsettings.model.js';
 import { Template } from '../models/template.model.js';
 import {
+    convertImageToPngBuffer,
     loadOfflineHtmlIntoPage,
     readAssetAsBuffer,
     rewriteHtmlForOfflinePdf,

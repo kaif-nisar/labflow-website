@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { createCanvas, loadImage } from "canvas";
 import { UPLOAD_ROOT } from "./localStorage.js";
 import {
   getRuntimeRoot,
@@ -253,53 +254,153 @@ export const rewriteHtmlForOfflinePdf = async (html = "") => {
   return replaceCssUrlReferences(markup);
 };
 
+export const detectMimeTypeFromBuffer = (buffer) => {
+  if (!buffer || buffer.length < 4) return null;
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return "image/png";
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    return "image/gif";
+  }
+  if (
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer.length >= 12 &&
+    buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    return "image/bmp";
+  }
+  return null;
+};
+
+export const isBase64Data = (value) => {
+  if (!value) return false;
+  const str = String(value).trim();
+  if (str.startsWith("data:")) return true;
+  const cleaned = str.replace(/\s+/g, "");
+  if (cleaned.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(cleaned)) {
+    try {
+      const buf = Buffer.from(cleaned, "base64");
+      return Boolean(detectMimeTypeFromBuffer(buf));
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+export const convertImageToPngBuffer = async (imageBuffer) => {
+  try {
+    const img = await loadImage(imageBuffer);
+    const canvas = createCanvas(img.width, img.height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    return canvas.toBuffer("image/png");
+  } catch (error) {
+    console.error("[pdf] Canvas image conversion error:", error?.message || error);
+    return null;
+  }
+};
+
 export const readAssetAsBuffer = async (assetReference) => {
   if (!assetReference) {
     return null;
   }
 
-  const rawValue = String(assetReference).trim();
+  let rawValue = String(assetReference).trim();
   if (!rawValue) {
     return null;
   }
 
   if (rawValue.startsWith("data:")) {
-    const match = rawValue.match(/^data:([^;,]+)(?:;[^;,]+)*;base64,(.+)$/is);
-    if (!match) {
-      return null;
-    }
+    try {
+      if (rawValue.includes("%")) {
+        try {
+          rawValue = decodeURIComponent(rawValue);
+        } catch {
+          // ignore error if decoding fails
+        }
+      }
 
-    const mimeType = match[1].trim() || "image/png";
-    const base64Payload = match[2].replace(/\s+/g, "");
-    if (!base64Payload) {
-      return null;
-    }
+      const match = rawValue.match(/^data:([^;,]+)(?:;[^;,]+)*;base64,(.+)$/is);
+      if (match) {
+        const mimeType = match[1].trim() || "image/png";
+        const base64Payload = match[2].replace(/\s+/g, "");
+        if (base64Payload) {
+          const buffer = Buffer.from(base64Payload, "base64");
+          const detectedMime = detectMimeTypeFromBuffer(buffer) || mimeType;
+          return { buffer, mimeType: detectedMime };
+        }
+      }
 
-    return {
-      buffer: Buffer.from(base64Payload, "base64"),
-      mimeType,
-    };
+      const commaIndex = rawValue.indexOf(",");
+      if (commaIndex !== -1) {
+        const header = rawValue.slice(0, commaIndex);
+        const payload = rawValue.slice(commaIndex + 1).replace(/\s+/g, "");
+        const isBase64 = header.includes(";base64");
+        const mimeMatch = header.match(/^data:([^;,]+)/);
+        const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+        const buffer = isBase64
+          ? Buffer.from(payload, "base64")
+          : Buffer.from(decodeURIComponent(payload), "utf8");
+        const detectedMime = detectMimeTypeFromBuffer(buffer) || mimeType;
+        return { buffer, mimeType: detectedMime };
+      }
+    } catch (err) {
+      console.warn("[pdf] Failed to parse data URL in readAssetAsBuffer:", err?.message || err);
+    }
   }
 
   const localPath = await resolveLocalAssetPath(rawValue);
   if (localPath) {
-    const buffer = await fs.readFile(localPath);
-    return {
-      buffer,
-      mimeType: getMimeType(localPath),
-    };
+    try {
+      const buffer = await fs.readFile(localPath);
+      const detectedMime = detectMimeTypeFromBuffer(buffer) || getMimeType(localPath);
+      return {
+        buffer,
+        mimeType: detectedMime,
+      };
+    } catch (err) {
+      console.warn("[pdf] Failed to read local file asset:", err?.message || err);
+    }
   }
 
   if (/^https?:\/\//i.test(rawValue)) {
-    const response = await axios.get(rawValue, {
-      responseType: "arraybuffer",
-      timeout: 10000,
-    });
+    try {
+      const response = await axios.get(rawValue, {
+        responseType: "arraybuffer",
+        timeout: 10000,
+      });
 
-    return {
-      buffer: Buffer.from(response.data),
-      mimeType: response.headers["content-type"] || getMimeType(rawValue),
-    };
+      const buffer = Buffer.from(response.data);
+      const detectedMime = detectMimeTypeFromBuffer(buffer) || response.headers["content-type"] || getMimeType(rawValue);
+      return {
+        buffer,
+        mimeType: detectedMime,
+      };
+    } catch (err) {
+      console.warn("[pdf] Failed to fetch remote asset URL:", rawValue, err?.message || err);
+    }
+  }
+
+  const cleanBase64 = rawValue.replace(/\s+/g, "");
+  if (cleanBase64.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(cleanBase64)) {
+    try {
+      const buffer = Buffer.from(cleanBase64, "base64");
+      const detectedMime = detectMimeTypeFromBuffer(buffer);
+      if (detectedMime) {
+        return {
+          buffer,
+          mimeType: detectedMime,
+        };
+      }
+    } catch {
+      // ignore error
+    }
   }
 
   return null;

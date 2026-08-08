@@ -254,6 +254,11 @@ export const normalizeStoredUploadUrl = (identifier) => {
         return rawValue;
     }
 
+    const cleanBase64 = rawValue.replace(/\s+/g, "");
+    if (cleanBase64.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(cleanBase64)) {
+        return rawValue;
+    }
+
     if (isCloudinaryPublicId(rawValue)) {
         return buildCloudinaryUrl(normalizeStoredUploadPublicId(rawValue));
     }
@@ -282,6 +287,11 @@ export const doesLocalFileExist = async (identifier) => {
     }
 
     if (rawValue.startsWith("data:") || isHttpUrl(rawValue) || isCloudinaryPublicId(rawValue)) {
+        return true;
+    }
+
+    const cleanBase64 = rawValue.replace(/\s+/g, "");
+    if (cleanBase64.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(cleanBase64)) {
         return true;
     }
 
