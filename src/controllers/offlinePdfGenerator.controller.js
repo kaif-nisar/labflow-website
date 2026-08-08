@@ -76,21 +76,18 @@ const buildPdfBodyDocument = ({
     const fontStack = resolvePdfFontStack(selectedFontFamily);
     const categoryDisplay = hideCategories ? 'none' : 'block';
 
+    // When a background image is present, we intentionally do NOT set it via CSS.
+    // Instead we tell Puppeteer to produce a transparent PDF (omitBackground:true)
+    // so that pdf-lib can draw the image behind the PDF content layer without the
+    // content's opaque white background covering it.
+    // If there is NO background image we still need the page to be transparent
+    // so that any consumer of the buffer can control the appearance.
     const shouldApplyBackground = Boolean(backgroundImageUrl && !disableBackgroundImage && !checkBox);
-    const backgroundStyle = shouldApplyBackground ? `
+    const backgroundStyle = `
         html, body, .middle, .container, .container2, .container-format1, .container22, .report-page, .report-container {
             background-color: transparent !important;
+            background-image: none !important;
         }
-        body, .middle, .container, .container2, .container-format1, .report-page, .report-container {
-            background-image: url('${backgroundImageUrl}') !important;
-            background-size: cover !important;
-            background-repeat: no-repeat !important;
-            background-position: center top !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-    ` : `
-        html, body { background: transparent !important; }
     `;
 
     return [
@@ -230,73 +227,141 @@ const adjustPdfMargins = async (pdfBuffer, marginRight, marginLeft) => {
 };
 
 const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
+    console.log('[bg-pdf] addBackgroundToPdf called', {
+        hasInputBuffer: Boolean(inputPdfBuffer),
+        inputBufferLength: inputPdfBuffer?.length ?? 0,
+        backgroundUrlType: !backgroundImageUrl ? 'none'
+            : backgroundImageUrl.startsWith('data:') ? `data-url(${backgroundImageUrl.slice(0, 40)}...)`
+            : backgroundImageUrl.startsWith('http') ? `remote-url(${backgroundImageUrl.slice(0, 80)})`
+            : `path-or-other(${String(backgroundImageUrl).slice(0, 80)})`,
+        backgroundUrlLength: backgroundImageUrl?.length ?? 0,
+    });
+
     if (!inputPdfBuffer) {
-        console.error('Input PDF buffer is null or undefined');
+        console.error('[bg-pdf] Input PDF buffer is null or undefined — cannot compose background.');
         return null;
     }
 
     if (!backgroundImageUrl) {
+        console.log('[bg-pdf] No background image URL provided — returning original PDF buffer unchanged.');
         return inputPdfBuffer;
     }
 
     try {
-        const inputPdfDoc = await PDFDocument.load(inputPdfBuffer);
-        const outputPdfDoc = await PDFDocument.create();
-        let backgroundImage = null;
-
-        const backgroundAsset = await readAssetAsBuffer(backgroundImageUrl);
-        if (!backgroundAsset?.buffer) {
-            console.warn('Background image could not be resolved, returning original PDF buffer.');
+        // ── Step 1: load the source (transparent) Puppeteer PDF ──────────────
+        let inputPdfDoc;
+        try {
+            inputPdfDoc = await PDFDocument.load(inputPdfBuffer);
+            console.log('[bg-pdf] Source PDF loaded successfully. Pages:', inputPdfDoc.getPageCount());
+        } catch (loadErr) {
+            console.error('[bg-pdf] Failed to load input PDF buffer:', loadErr?.message || loadErr);
             return inputPdfBuffer;
         }
 
-        const isPng = backgroundAsset.mimeType?.includes('png');
+        const outputPdfDoc = await PDFDocument.create();
+        let backgroundImage = null;
+
+        // ── Step 2: resolve the background image asset ────────────────────────
+        let backgroundAsset;
         try {
-            if (isPng) {
-                backgroundImage = await outputPdfDoc.embedPng(backgroundAsset.buffer);
-            } else {
-                backgroundImage = await outputPdfDoc.embedJpg(backgroundAsset.buffer);
+            backgroundAsset = await readAssetAsBuffer(backgroundImageUrl);
+        } catch (assetErr) {
+            console.error('[bg-pdf] readAssetAsBuffer threw an error:', assetErr?.message || assetErr);
+        }
+
+        if (!backgroundAsset?.buffer) {
+            console.warn('[bg-pdf] Background image asset could not be resolved.', {
+                urlPrefix: String(backgroundImageUrl || '').slice(0, 80),
+                urlLength: backgroundImageUrl?.length ?? 0,
+            });
+            console.warn('[bg-pdf] Returning original PDF without background.');
+            return inputPdfBuffer;
+        }
+
+        console.log('[bg-pdf] Background asset resolved.', {
+            mimeType: backgroundAsset.mimeType,
+            bufferLength: backgroundAsset.buffer.length,
+        });
+
+        // ── Step 3: embed the image into the output PDF document ──────────────
+        const isPng = String(backgroundAsset.mimeType || '').includes('png');
+        const isWebp = String(backgroundAsset.mimeType || '').includes('webp');
+
+        const tryEmbed = async (doc, buffer, asPng) => {
+            if (asPng) {
+                return doc.embedPng(buffer);
             }
+            return doc.embedJpg(buffer);
+        };
+
+        try {
+            backgroundImage = await tryEmbed(outputPdfDoc, backgroundAsset.buffer, isPng);
+            console.log('[bg-pdf] Background image embedded successfully as', isPng ? 'PNG' : 'JPG');
         } catch (primaryErr) {
+            console.warn('[bg-pdf] Primary embed failed, trying alternate format:', primaryErr?.message || primaryErr);
             try {
-                if (isPng) {
-                    backgroundImage = await outputPdfDoc.embedJpg(backgroundAsset.buffer);
-                } else {
-                    backgroundImage = await outputPdfDoc.embedPng(backgroundAsset.buffer);
-                }
+                // Swap PNG ↔ JPG
+                backgroundImage = await tryEmbed(outputPdfDoc, backgroundAsset.buffer, !isPng);
+                console.log('[bg-pdf] Alternate format embed succeeded.');
             } catch (fallbackErr) {
-                console.warn('Native pdf-lib image embedding failed, attempting canvas conversion to PNG...', fallbackErr?.message || fallbackErr);
+                console.warn('[bg-pdf] Alternate embed also failed, trying canvas PNG conversion:', fallbackErr?.message || fallbackErr);
                 try {
                     const convertedPngBuffer = await convertImageToPngBuffer(backgroundAsset.buffer);
                     if (convertedPngBuffer) {
                         backgroundImage = await outputPdfDoc.embedPng(convertedPngBuffer);
+                        console.log('[bg-pdf] Canvas-converted PNG embed succeeded. Buffer size:', convertedPngBuffer.length);
+                    } else {
+                        console.error('[bg-pdf] Canvas conversion returned null — no background will be applied.');
                     }
                 } catch (canvasErr) {
-                    console.error('Failed to embed background image after canvas conversion:', canvasErr);
+                    console.error('[bg-pdf] All image embedding strategies failed:', {
+                        primaryError: primaryErr?.message || primaryErr,
+                        fallbackError: fallbackErr?.message || fallbackErr,
+                        canvasError: canvasErr?.message || canvasErr,
+                    });
                     return inputPdfBuffer;
                 }
             }
         }
 
-        const pages = inputPdfDoc.getPages();
-        const pageWidth = pages[0].getWidth();
-        const pageHeight = pages[0].getHeight();
+        if (!backgroundImage) {
+            console.warn('[bg-pdf] backgroundImage is null after all embed attempts — returning original PDF.');
+            return inputPdfBuffer;
+        }
 
-        for (let i = 0; i < pages.length; i++) {
+        // ── Step 4: compose pages — background first, then transparent PDF content ──
+        const sourcePages = inputPdfDoc.getPages();
+        if (sourcePages.length === 0) {
+            console.error('[bg-pdf] Source PDF has no pages.');
+            return inputPdfBuffer;
+        }
+
+        const pageWidth = sourcePages[0].getWidth();
+        const pageHeight = sourcePages[0].getHeight();
+        console.log('[bg-pdf] Composing', sourcePages.length, 'pages at', pageWidth, 'x', pageHeight);
+
+        for (let i = 0; i < sourcePages.length; i++) {
             const newPage = outputPdfDoc.addPage([pageWidth, pageHeight]);
 
-            if (backgroundImage) {
-                newPage.drawImage(backgroundImage, {
-                    x: 0,
-                    y: 0,
-                    width: pageWidth,
-                    height: pageHeight,
-                });
+            // Draw background image first (behind content)
+            newPage.drawImage(backgroundImage, {
+                x: 0,
+                y: 0,
+                width: pageWidth,
+                height: pageHeight,
+            });
+
+            // Embed the Puppeteer-generated page (transparent) and draw it on top
+            let copiedPage;
+            try {
+                [copiedPage] = await outputPdfDoc.embedPages([inputPdfDoc.getPages()[i]]);
+            } catch (embedPageErr) {
+                console.error(`[bg-pdf] Failed to embed page ${i}:`, embedPageErr?.message || embedPageErr);
+                return null;
             }
 
-            const [copiedPage] = await outputPdfDoc.embedPages([inputPdfDoc.getPages()[i]]);
             if (!copiedPage) {
-                console.error(`Failed to copy page at index ${i}`);
+                console.error(`[bg-pdf] embedPages returned null for page index ${i}`);
                 return null;
             }
 
@@ -308,9 +373,14 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
             });
         }
 
-        return await outputPdfDoc.save();
+        const finalBuffer = await outputPdfDoc.save();
+        console.log('[bg-pdf] Background composition complete. Final buffer size:', finalBuffer.length);
+        return finalBuffer;
     } catch (error) {
-        console.error('Error adding background to offline PDF:', error);
+        console.error('[bg-pdf] Unexpected error in addBackgroundToPdf:', {
+            message: error?.message || String(error),
+            stack: error?.stack || '',
+        });
         return null;
     }
 };
@@ -355,12 +425,29 @@ const offlinePdfGeneratorController = async (params) => {
     const shouldDisableBackground = Boolean(disableBackgroundImage || checkBox);
     const effectiveBgUrl = shouldDisableBackground ? "" : cleanBgUrl;
 
+    // Log the effective background URL details so failures are easy to diagnose.
+    console.log('[offline-pdf] Starting PDF generation', {
+        reportId,
+        pdfformat,
+        shouldDisableBackground,
+        effectiveBgUrlType: !effectiveBgUrl ? 'none'
+            : effectiveBgUrl.startsWith('data:') ? `data-url(len=${effectiveBgUrl.length})`
+            : effectiveBgUrl.startsWith('http') ? `remote-url(${effectiveBgUrl.slice(0, 80)})`
+            : `local-path(${effectiveBgUrl.slice(0, 80)})`,
+        effectiveBgUrlLength: effectiveBgUrl?.length ?? 0,
+    });
+
     try {
         const browser = await launchPdfBrowser();
         const page = await browser.newPage();
         let cleanupPageContent = async () => { };
 
         try {
+            // When a background image will be applied by pdf-lib, we render the
+            // Puppeteer page with a fully transparent background so that the
+            // pdf-lib background layer can show through underneath the content.
+            // We always pass an empty backgroundImageUrl to buildPdfBodyDocument
+            // so CSS never sets a background-image (which would conflict).
             const contentWithCssAndImage = buildPdfBodyDocument({
                 cssContent,
                 htmlContent,
@@ -372,12 +459,13 @@ const offlinePdfGeneratorController = async (params) => {
                 BoldRow,
                 hideCategories,
                 hideTableHeadings,
-                backgroundImageUrl: effectiveBgUrl,
-                disableBackgroundImage: shouldDisableBackground,
+                backgroundImageUrl: '', // always empty — pdf-lib handles the bg
+                disableBackgroundImage: true, // prevent CSS bg
                 checkBox,
             });
 
             cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
+            console.log('[offline-pdf] HTML rendered into Puppeteer page.');
 
             const offlineHeaderTemplate = await buildPdfHeaderTemplate({
                 format3,
@@ -398,9 +486,14 @@ const offlinePdfGeneratorController = async (params) => {
                 selectedFontFamily,
             });
 
-            const pdfBuffer = await page.pdf({
+            // omitBackground: true makes Puppeteer produce a PDF with a
+            // transparent page background instead of the default white fill.
+            // This is the key fix — without it, the white background painted by
+            // Chromium covers the image drawn by pdf-lib below the content layer.
+            const pdfOptions = {
                 format: 'A4',
                 printBackground: true,
+                omitBackground: Boolean(effectiveBgUrl), // transparent when bg image present
                 displayHeaderFooter: true,
                 headerTemplate: offlineHeaderTemplate,
                 footerTemplate: offlineFooterTemplate,
@@ -410,17 +503,29 @@ const offlinePdfGeneratorController = async (params) => {
                     left: '10px',
                     right: '10px',
                 },
-            });
+            };
 
-            const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, effectiveBgUrl);
+            console.log('[offline-pdf] Calling page.pdf() with omitBackground =', pdfOptions.omitBackground);
+            const pdfBuffer = await page.pdf(pdfOptions);
+            console.log('[offline-pdf] page.pdf() complete. Buffer size:', pdfBuffer?.length ?? 0);
 
-            if (!finalPdfBuffer) {
-                console.error('Final PDF buffer is null');
-                res.status(500).send('Failed to generate final PDF');
-                return;
+            let finalPdfBuffer;
+            if (effectiveBgUrl) {
+                console.log('[offline-pdf] Applying background image via pdf-lib...');
+                finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, effectiveBgUrl);
+                if (!finalPdfBuffer) {
+                    console.error('[offline-pdf] addBackgroundToPdf returned null — falling back to original PDF without background.');
+                    finalPdfBuffer = pdfBuffer;
+                } else {
+                    console.log('[offline-pdf] Background applied successfully. Final buffer size:', finalPdfBuffer.length);
+                }
+            } else {
+                console.log('[offline-pdf] No background image — using raw Puppeteer PDF.');
+                finalPdfBuffer = pdfBuffer;
             }
 
             const finalpdfbufferwithmargin = await adjustPdfMargins(finalPdfBuffer, marginRightPx, marginLeftPx);
+            console.log('[offline-pdf] Margin adjustment complete. Sending response.');
 
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename="offline_report.pdf"');
@@ -431,7 +536,7 @@ const offlinePdfGeneratorController = async (params) => {
             await browser.close().catch(() => { });
         }
     } catch (error) {
-        console.error('Error generating offline PDF:', {
+        console.error('[offline-pdf] Error generating offline PDF:', {
             message: error?.message || String(error),
             stack: error?.stack || '',
             reportId,

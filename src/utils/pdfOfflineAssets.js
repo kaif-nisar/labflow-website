@@ -316,6 +316,13 @@ export const readAssetAsBuffer = async (assetReference) => {
     return null;
   }
 
+  // Diagnostic entry log
+  const inputType = rawValue.startsWith('data:') ? `data-url(len=${rawValue.length})`
+    : /^https?:\/\//i.test(rawValue) ? `remote-url(${rawValue.slice(0, 80)})`
+    : rawValue.startsWith('file://') ? `file-url(${rawValue.slice(0, 80)})`
+    : `path-or-base64(len=${rawValue.length}, prefix=${rawValue.slice(0, 40)})`;
+  console.log('[readAssetAsBuffer] Called with:', inputType);
+
   if (rawValue.startsWith("data:")) {
     try {
       if (rawValue.includes("%")) {
@@ -333,8 +340,11 @@ export const readAssetAsBuffer = async (assetReference) => {
         if (base64Payload) {
           const buffer = Buffer.from(base64Payload, "base64");
           const detectedMime = detectMimeTypeFromBuffer(buffer) || mimeType;
+          console.log('[readAssetAsBuffer] data-URL decoded via primary regex.', { mimeType: detectedMime, bufferLength: buffer.length });
           return { buffer, mimeType: detectedMime };
         }
+      } else {
+        console.warn('[readAssetAsBuffer] data-URL primary regex did NOT match. Attempting fallback comma-split.', { prefix: rawValue.slice(0, 60) });
       }
 
       const commaIndex = rawValue.indexOf(",");
@@ -348,10 +358,13 @@ export const readAssetAsBuffer = async (assetReference) => {
           ? Buffer.from(payload, "base64")
           : Buffer.from(decodeURIComponent(payload), "utf8");
         const detectedMime = detectMimeTypeFromBuffer(buffer) || mimeType;
+        console.log('[readAssetAsBuffer] data-URL decoded via fallback comma-split.', { mimeType: detectedMime, bufferLength: buffer.length, isBase64 });
         return { buffer, mimeType: detectedMime };
+      } else {
+        console.warn('[readAssetAsBuffer] data-URL has no comma separator — cannot decode.');
       }
     } catch (err) {
-      console.warn("[pdf] Failed to parse data URL in readAssetAsBuffer:", err?.message || err);
+      console.warn("[readAssetAsBuffer] Failed to parse data URL:", err?.message || err);
     }
   }
 
@@ -360,12 +373,17 @@ export const readAssetAsBuffer = async (assetReference) => {
     try {
       const buffer = await fs.readFile(localPath);
       const detectedMime = detectMimeTypeFromBuffer(buffer) || getMimeType(localPath);
+      console.log('[readAssetAsBuffer] Local file read successfully.', { localPath, mimeType: detectedMime, bufferLength: buffer.length });
       return {
         buffer,
         mimeType: detectedMime,
       };
     } catch (err) {
-      console.warn("[pdf] Failed to read local file asset:", err?.message || err);
+      console.warn("[readAssetAsBuffer] Failed to read local file asset:", { localPath, error: err?.message || err });
+    }
+  } else {
+    if (!rawValue.startsWith('data:') && !/^https?:\/\//i.test(rawValue)) {
+      console.warn('[readAssetAsBuffer] Could not resolve local path for:', rawValue.slice(0, 100));
     }
   }
 
@@ -378,12 +396,13 @@ export const readAssetAsBuffer = async (assetReference) => {
 
       const buffer = Buffer.from(response.data);
       const detectedMime = detectMimeTypeFromBuffer(buffer) || response.headers["content-type"] || getMimeType(rawValue);
+      console.log('[readAssetAsBuffer] Remote URL fetched successfully.', { url: rawValue.slice(0, 80), mimeType: detectedMime, bufferLength: buffer.length });
       return {
         buffer,
         mimeType: detectedMime,
       };
     } catch (err) {
-      console.warn("[pdf] Failed to fetch remote asset URL:", rawValue, err?.message || err);
+      console.warn("[readAssetAsBuffer] Failed to fetch remote asset URL:", { url: rawValue.slice(0, 80), error: err?.message || err });
     }
   }
 
@@ -393,16 +412,20 @@ export const readAssetAsBuffer = async (assetReference) => {
       const buffer = Buffer.from(cleanBase64, "base64");
       const detectedMime = detectMimeTypeFromBuffer(buffer);
       if (detectedMime) {
+        console.log('[readAssetAsBuffer] Raw base64 decoded successfully.', { mimeType: detectedMime, bufferLength: buffer.length });
         return {
           buffer,
           mimeType: detectedMime,
         };
+      } else {
+        console.warn('[readAssetAsBuffer] Raw base64 decoded but MIME type could not be detected (possibly not a valid image).');
       }
     } catch {
       // ignore error
     }
   }
 
+  console.error('[readAssetAsBuffer] All resolution strategies exhausted — returning null.', { inputType });
   return null;
 };
 

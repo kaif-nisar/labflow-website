@@ -106,6 +106,25 @@ const downloadOfflineReportPdf = async (req, res) => {
         const shouldDisable = Boolean(report.disableBackgroundImage || report.checkBox);
         const resolvedBgUrl = getIncomingBackgroundImageUrl(report);
 
+        // Diagnostic log: always print background details so failures are traceable.
+        console.log('[offline-report] Preparing PDF download', {
+            bookingId: report.bookingId,
+            pdfFormat: report.pdfFormat,
+            shouldDisable,
+            checkBox: Boolean(report.checkBox),
+            disableBackgroundImage: Boolean(report.disableBackgroundImage),
+            resolvedBgUrlType: !resolvedBgUrl ? 'none'
+                : resolvedBgUrl.startsWith('data:') ? `data-url(len=${resolvedBgUrl.length}, prefix=${resolvedBgUrl.slice(0, 40)})`
+                : resolvedBgUrl.startsWith('http') ? `remote-url(${resolvedBgUrl.slice(0, 100)})`
+                : `path-or-other(${resolvedBgUrl.slice(0, 100)})`,
+            // Log each individual background field so we know which one resolved
+            backgroundImageUrl: report.backgroundImageUrl ? `set(len=${String(report.backgroundImageUrl).length})` : 'empty',
+            backgroundImage: report.backgroundImage ? `set(len=${String(report.backgroundImage).length})` : 'empty',
+            bgImage: report.bgImage ? `set(len=${String(report.bgImage).length})` : 'empty',
+            imageUrl: report.imageUrl ? `set(len=${String(report.imageUrl).length})` : 'empty',
+            fileInputLab: report.fileInputLab ? `set(len=${String(report.fileInputLab).length})` : 'empty',
+        });
+
         return offlinePdfGeneratorController({
             ...report,
             backgroundImageUrl: shouldDisable ? "" : resolvedBgUrl,
@@ -116,7 +135,7 @@ const downloadOfflineReportPdf = async (req, res) => {
             res,
         });
     } catch (error) {
-        console.error("Unable to generate offline report PDF:", error);
+        console.error("[offline-report] Unable to generate offline report PDF:", error);
         return res.status(500).json({ message: "Unable to generate the report PDF." });
     }
 };
