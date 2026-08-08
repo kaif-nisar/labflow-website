@@ -1627,38 +1627,68 @@ const getDashboardData = async (req, res) => {
 
 // Helper function to get user hierarchy statistics
 async function getUserHierarchyStats(userId, role, modelType) {
-  const stats = {};
+  const stats = {
+    superFranchisees: 0,
+    franchisees: 0,
+    subFranchisees: 0,
+    directUsers: 0,
+    indirectUsers: 0,
+    totalUsers: 0,
+  };
 
-  // Count direct users created by this user
-  const userCounts = await User.aggregate([
-    { $match: { createdBy: userId } },
-    { $group: { _id: "$role", count: { $sum: 1 } } },
+  const userObjId = mongoose.Types.ObjectId.isValid(String(userId))
+    ? new mongoose.Types.ObjectId(userId)
+    : userId;
+
+  // Single-query graph traversal aggregation pipeline
+  const [hierarchyResult] = await User.aggregate([
+    { $match: { _id: userObjId } },
+    {
+      $graphLookup: {
+        from: "users",
+        startWith: "$_id",
+        connectFromField: "_id",
+        connectToField: "createdBy",
+        as: "network",
+        maxDepth: 1, // Depth 0 = direct users, Depth 1 = indirect users
+        depthField: "depth"
+      }
+    },
+    {
+      $project: {
+        directUsers: {
+          $filter: {
+            input: "$network",
+            as: "u",
+            cond: { $eq: ["$$u.depth", 0] }
+          }
+        },
+        indirectUsers: {
+          $filter: {
+            input: "$network",
+            as: "u",
+            cond: { $eq: ["$$u.depth", 1] }
+          }
+        }
+      }
+    }
   ]);
 
-  // Initialize counts for all possible roles
-  stats.superFranchisees = 0;
-  stats.franchisees = 0;
-  stats.subFranchisees = 0;
-
-  // Update with actual counts
-  userCounts.forEach((item) => {
-    if (item._id === "superFranchisee") stats.superFranchisees = item.count;
-    if (item._id === "franchisee") stats.franchisees = item.count;
-    if (item._id === "subFranchisee") stats.subFranchisees = item.count;
-  });
-
-  // Get total users in hierarchy (direct and indirect)
-  const createdUsers = await User.find({ createdBy: userId });
-  let totalIndirectUsers = 0;
-
-  // Count indirect users (users created by direct users)
-  for (const user of createdUsers) {
-    const indirectCount = await User.countDocuments({ createdBy: user._id });
-    totalIndirectUsers += indirectCount;
+  if (!hierarchyResult) {
+    return stats;
   }
 
-  stats.directUsers = createdUsers.length;
-  stats.indirectUsers = totalIndirectUsers;
+  const directUsers = hierarchyResult.directUsers || [];
+  const indirectUsers = hierarchyResult.indirectUsers || [];
+
+  directUsers.forEach((u) => {
+    if (u.role === "superFranchisee") stats.superFranchisees++;
+    if (u.role === "franchisee") stats.franchisees++;
+    if (u.role === "subFranchisee") stats.subFranchisees++;
+  });
+
+  stats.directUsers = directUsers.length;
+  stats.indirectUsers = indirectUsers.length;
   stats.totalUsers = stats.directUsers + stats.indirectUsers;
 
   return stats;

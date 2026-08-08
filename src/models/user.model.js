@@ -930,4 +930,7 @@ userSchema.statics.getExpiringSubscriptions = async function (days = 5) {
   });
 };
 
+userSchema.index({ tenantId: 1, role: 1, isActive: 1 });
+userSchema.index({ createdBy: 1, role: 1 });
+
 export const User = mongoose.model("User", userSchema);

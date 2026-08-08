@@ -1374,7 +1374,7 @@ const SearchBookingController = asyncHandler(async (req, res) => {
         const booking = await newBooking.findOne(searchQuery)
             .populate('createdBy', 'fullName username')
             .populate('subFranchiseeId', 'name')
-            .populate('savedDoctorId', 'displayName firstName lastName')
+            .populate('savedDoctorId', 'displayName firstName lastName email')
             .populate('savedLabId', 'name');
 
         if (!booking) {
@@ -1384,39 +1384,51 @@ const SearchBookingController = asyncHandler(async (req, res) => {
             });
         }
 
-        // Get test names for table data
-        const enhancedTableData = await Promise.all(
-            (booking.tableData || []).map(async (entry) => {
-                let testNames = [];
+        // Collect all test/panel/package IDs for batch lookup (eliminates N+1 query overhead)
+        const testIds = [];
+        const panelIds = [];
+        const packageIds = [];
 
-                if (entry.ids && entry.ids.length > 0) {
-                    for (const idObj of entry.ids) {
-                        try {
-                            let testDoc = null;
+        (booking.tableData || []).forEach(entry => {
+            if (entry.ids && entry.ids.length > 0) {
+                entry.ids.forEach(idObj => {
+                    if (idObj.collectionName === "testSchema") testIds.push(idObj.id);
+                    else if (idObj.collectionName === "addPannel") panelIds.push(idObj.id);
+                    else if (idObj.collectionName === "Package") packageIds.push(idObj.id);
+                });
+            }
+        });
 
-                            if (idObj.collectionName === "testSchema") {
-                                testDoc = await testSchema.findById(idObj.id).select('Name');
-                                if (testDoc) testNames.push(testDoc.Name);
-                            } else if (idObj.collectionName === "addPannel") {
-                                testDoc = await addPannel.findById(idObj.id).select('name');
-                                if (testDoc) testNames.push(testDoc.name);
-                            } else if (idObj.collectionName === "Package") {
-                                testDoc = await Package.findById(idObj.id).select('packageName');
-                                if (testDoc) testNames.push(testDoc.packageName);
-                            }
-                        } catch (error) {
-                            console.log(`Error fetching test ${idObj.id}:`, error);
-                        }
+        const [testDocs, panelDocs, packageDocs] = await Promise.all([
+            testIds.length ? testSchema.find({ _id: { $in: testIds } }).select("Name").lean() : [],
+            panelIds.length ? addPannel.find({ _id: { $in: panelIds } }).select("name").lean() : [],
+            packageIds.length ? Package.find({ _id: { $in: packageIds } }).select("packageName").lean() : []
+        ]);
+
+        const testMap = new Map(testDocs.map(doc => [String(doc._id), doc.Name]));
+        const panelMap = new Map(panelDocs.map(doc => [String(doc._id), doc.name]));
+        const packageMap = new Map(packageDocs.map(doc => [String(doc._id), doc.packageName]));
+
+        const enhancedTableData = (booking.tableData || []).map(entry => {
+            const testNames = [];
+            if (entry.ids && entry.ids.length > 0) {
+                entry.ids.forEach(idObj => {
+                    const idStr = String(idObj.id);
+                    if (idObj.collectionName === "testSchema" && testMap.has(idStr)) {
+                        testNames.push(testMap.get(idStr));
+                    } else if (idObj.collectionName === "addPannel" && panelMap.has(idStr)) {
+                        testNames.push(panelMap.get(idStr));
+                    } else if (idObj.collectionName === "Package" && packageMap.has(idStr)) {
+                        testNames.push(packageMap.get(idStr));
                     }
-                }
-
-                return {
-                    ...entry,
-                    testNames: testNames,
-                    barcodeId: entry.barcodeId || entry.confirmBarcodeId
-                };
-            })
-        );
+                });
+            }
+            return {
+                ...(entry.toObject ? entry.toObject() : entry),
+                testNames,
+                barcodeId: entry.barcodeId || entry.confirmBarcodeId
+            };
+        });
 
         // Prepare response data
         const populatedSubFranchisee = booking.subFranchiseeId;
@@ -1444,9 +1456,9 @@ const SearchBookingController = asyncHandler(async (req, res) => {
             status: booking.status || 'pending',
             tableData: enhancedTableData,
             selectedItems: booking.selectedItems || [],
-            savedDoctor: booking.savedDoctor || getDoctorDisplayName(populatedDoctor) || '',
+            savedDoctor: booking.savedDoctor || populatedDoctor?.displayName || '',
             savedDoctorId: populatedDoctor?._id || booking.savedDoctorId || null,
-            savedDoctorEmail: booking.savedDoctorEmail || '',
+            savedDoctorEmail: booking.savedDoctorEmail || populatedDoctor?.email || '',
             savedLab: booking.savedLab || populatedLab?.name || '',
             savedLabId: populatedLab?._id || booking.savedLabId || null,
             file: booking.file || '',
@@ -1459,17 +1471,17 @@ const SearchBookingController = asyncHandler(async (req, res) => {
             discountunit: booking.discountunit || 0
         };
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            message: 'Booking found successfully',
+            message: 'Booking retrieved successfully',
             data: bookingData
         });
 
     } catch (error) {
-        console.error("Search booking error:", error);
-        res.status(500).json({
+        console.error('Error searching booking:', error);
+        return res.status(500).json({
             success: false,
-            message: 'Internal server error',
+            message: 'Failed to search booking',
             error: error.message
         });
     }
@@ -2135,10 +2147,12 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
         endDate
     } = req.body;
 
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+    const skip = (pageNum - 1) * limitNum;
 
     let query = {
-        tenantId: req.user.tenantId._id,
+        tenantId: new mongoose.Types.ObjectId(req.user.tenantId._id),
         status: { $nin: ["cancelled", "canceled"] }
     };
     const andConditions = [];
@@ -2199,7 +2213,7 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
         }
     }
 
-    // Handle barcode filter
+    // Handle barcode filter efficiently
     if (barcode) {
         const barcodeDocs = await acceptedBarcode.find(
             { "barcodes.barcode": { $regex: barcode, $options: 'i' } },
@@ -2213,8 +2227,8 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
             return res.status(200).json({
                 bookings: [],
                 total: 0,
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: pageNum,
+                limit: limitNum,
             });
         }
     }
@@ -2223,108 +2237,204 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
         query.$and = andConditions;
     }
 
-    // Fetch bookings with pagination
-    const bookings = await newBooking
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean();
-
-    const total = await newBooking.countDocuments(query);
-
-    // Process barcodes and LIS data for current page bookings
-    if (bookings.length > 0) {
-        const bookingIds = bookings.map(b => b.bookingId);
-
-        // Fetch barcodes for current page
-        const barcodeData = await acceptedBarcode.find(
-            { bookingId: { $in: bookingIds } },
-            { bookingId: 1, barcodes: 1 }
-        ).lean();
-
-        // Create barcode map
-        const barcodeMap = new Map();
-        const allBarcodeIds = []; // Collect all barcode IDs for LIS check
-
-        barcodeData.forEach(doc => {
-            const barcodes = doc.barcodes.map(b => b.barcode);
-            barcodeMap.set(doc.bookingId, barcodes);
-            allBarcodeIds.push(...barcodes);
-        });
-
-        // Check LIS data availability for all barcodes in one query
-        let lisAvailabilityMap = new Map();
-
-        if (allBarcodeIds.length > 0) {
-            const lisDataDocs = await lisdata.find(
-                { "lisData.sample_id": { $in: allBarcodeIds } },
-                { "lisData.sample_id": 1 }
-            ).lean();
-
-            // Create a set of barcodes that have LIS data for O(1) lookup
-            const barcodesWithLis = new Set(
-                lisDataDocs.map(doc => doc.lisData?.sample_id).filter(Boolean)
-            );
-
-            // Map each barcode to its LIS availability
-            allBarcodeIds.forEach(barcodeId => {
-                lisAvailabilityMap.set(barcodeId, barcodesWithLis.has(barcodeId));
-            });
+    // Single-pass high performance MongoDB Aggregation Pipeline with $facet
+    const aggregationResults = await newBooking.aggregate([
+        { $match: query },
+        { $sort: { createdAt: -1 } },
+        {
+            $facet: {
+                metadata: [{ $count: "total" }],
+                bookings: [
+                    { $skip: skip },
+                    { $limit: limitNum },
+                    {
+                        $lookup: {
+                            from: "acceptedbarcodes",
+                            localField: "bookingId",
+                            foreignField: "bookingId",
+                            as: "barcodeDoc"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            acceptedbarcodeObj: { $arrayElemAt: ["$barcodeDoc", 0] }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            acceptedbarcode: {
+                                $ifNull: [
+                                    {
+                                        $map: {
+                                            input: { $ifNull: ["$acceptedbarcodeObj.barcodes", []] },
+                                            as: "b",
+                                            in: "$$b.barcode"
+                                        }
+                                    },
+                                    []
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: "lisdatas",
+                            localField: "acceptedbarcode",
+                            foreignField: "lisData.sample_id",
+                            as: "lisDocs"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            lisSampleSet: {
+                                $map: {
+                                    input: "$lisDocs",
+                                    as: "ld",
+                                    in: "$$ld.lisData.sample_id"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            barcodeDetails: {
+                                $map: {
+                                    input: "$acceptedbarcode",
+                                    as: "code",
+                                    in: {
+                                        barcode: "$$code",
+                                        isLisPresent: { $in: ["$$code", "$lisSampleSet"] }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            isLisPresent: {
+                                $gt: [
+                                    {
+                                        $size: {
+                                            $filter: {
+                                                input: "$barcodeDetails",
+                                                as: "bd",
+                                                cond: { $eq: ["$$bd.isLisPresent", true] }
+                                            }
+                                        }
+                                    },
+                                    0
+                                ]
+                            },
+                            lisStats: {
+                                total: { $size: "$barcodeDetails" },
+                                withLis: {
+                                    $size: {
+                                        $filter: {
+                                            input: "$barcodeDetails",
+                                            as: "bd",
+                                            cond: { $eq: ["$$bd.isLisPresent", true] }
+                                        }
+                                    }
+                                },
+                                withoutLis: {
+                                    $size: {
+                                        $filter: {
+                                            input: "$barcodeDetails",
+                                            as: "bd",
+                                            cond: { $eq: ["$$bd.isLisPresent", false] }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $project: {
+                            barcodeDoc: 0,
+                            acceptedbarcodeObj: 0,
+                            lisDocs: 0,
+                            lisSampleSet: 0
+                        }
+                    }
+                ]
+            }
         }
+    ]);
 
-        // Attach barcodes and LIS status to each booking
-        bookings.forEach(booking => {
-            const bookingBarcodes = barcodeMap.get(booking.bookingId) || [];
-
-            // Create detailed barcode status array
-            const barcodeDetails = bookingBarcodes.map(barcode => ({
-                barcode: barcode,
-                isLisPresent: lisAvailabilityMap.get(barcode) || false
-            }));
-
-            // Backward compatibility - keep old format
-            booking.acceptedbarcode = bookingBarcodes;
-
-            // New detailed format
-            booking.barcodeDetails = barcodeDetails;
-
-            // Overall LIS status - true if ANY barcode has LIS data
-            booking.isLisPresent = barcodeDetails.length > 0
-                ? barcodeDetails.some(detail => detail.isLisPresent === true)
-                : false;
-
-            // Additional stats
-            booking.lisStats = {
-                total: barcodeDetails.length,
-                withLis: barcodeDetails.filter(d => d.isLisPresent).length,
-                withoutLis: barcodeDetails.filter(d => !d.isLisPresent).length
-            };
-        });
-    }
+    const total = aggregationResults[0]?.metadata[0]?.total || 0;
+    const bookings = aggregationResults[0]?.bookings || [];
 
     return res.status(200).json({
         bookings,
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
     });
 });
 
 const getDashboardDataController = asyncHandler(async (req, res) => {
-    const tenantId = req.user.tenantId._id;
+    const tenantId = new mongoose.Types.ObjectId(req.user.tenantId._id);
     const userRole = req.user.role;
     const permissions = req.user.permissions || {};
 
-    // Parallel queries with conditional execution based on permissions
     const queries = [];
-    
-    // Query 1: Always fetch bookings (most users need this)
+
+    // Query 1: High performance DB Aggregation Pipeline for stats and charts
     queries.push(
-        newBooking.find({ tenantId })
-            .select('total status date tableData')
-            .sort({ createdAt: -1 })
-            .lean()
+        newBooking.aggregate([
+            { $match: { tenantId } },
+            {
+                $facet: {
+                    stats: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalBookings: { $sum: 1 },
+                                totalRevenue: { $sum: { $ifNull: ["$total", 0] } },
+                                pendingTests: {
+                                    $sum: {
+                                        $cond: [{ $eq: ["$status", "pending"] }, 1, 0]
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    monthlyRevenue: [
+                        { $match: { date: { $exists: true, $ne: null } } },
+                        {
+                            $group: {
+                                _id: { $dateToString: { format: "%Y-%m", date: "$date" } },
+                                revenue: { $sum: { $ifNull: ["$total", 0] } }
+                            }
+                        },
+                        { $sort: { _id: 1 } }
+                    ],
+                    dailyRevenue: [
+                        { $match: { date: { $exists: true, $ne: null } } },
+                        {
+                            $group: {
+                                _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                                revenue: { $sum: { $ifNull: ["$total", 0] } }
+                            }
+                        },
+                        { $sort: { _id: -1 } },
+                        { $limit: 30 }
+                    ],
+                    topTests: [
+                        { $unwind: "$tableData" },
+                        { $match: { "tableData.testName": { $exists: true, $ne: "" } } },
+                        {
+                            $group: {
+                                _id: "$tableData.testName",
+                                count: { $sum: 1 }
+                            }
+                        },
+                        { $sort: { count: -1 } },
+                        { $limit: 4 }
+                    ]
+                }
+            }
+        ])
     );
 
     // Query 2: Fetch franchisees only if user has permission
@@ -2342,112 +2452,37 @@ const getDashboardDataController = asyncHandler(async (req, res) => {
         queries.push(Promise.resolve([]));
     }
 
-    // Execute all queries in parallel
-    const [bookings, franchisees] = await Promise.all(queries);
+    const [aggResult, franchisees] = await Promise.all(queries);
+    const facetData = aggResult[0] || {};
+    const statsData = facetData.stats?.[0] || { totalBookings: 0, totalRevenue: 0, pendingTests: 0 };
 
-    // Initialize response structure
+    const monthlyEntries = facetData.monthlyRevenue || [];
+    const dailyEntries = (facetData.dailyRevenue || []).slice().reverse();
+    const topTestEntries = facetData.topTests || [];
+
     const response = {
         stats: {
-            totalBookings: 0,
-            totalRevenue: 0,
-            pendingTests: 0,
-            activeFranchises: 0
+            totalBookings: statsData.totalBookings,
+            totalRevenue: Math.round(statsData.totalRevenue),
+            pendingTests: statsData.pendingTests,
+            activeFranchises: franchisees.length
         },
         charts: {
-            monthlyRevenue: { labels: [], data: [] },
-            dailyRevenue: { labels: [], data: [] },
-            topTests: { labels: [], data: [] }
-        },
-        franchisees: []
-    };
-
-    // If no bookings, return empty response
-    if (bookings.length === 0) {
-        response.franchisees = franchisees;
-        response.stats.activeFranchises = franchisees.length;
-        return res.status(200).json(response);
-    }
-
-    // Single-pass calculation using Maps for O(1) lookups
-    let totalRevenue = 0;
-    let pendingTests = 0;
-    const dailyRevenue = new Map();
-    const monthlyRevenue = new Map();
-    const testCategories = new Map();
-
-    // Process all bookings in one loop
-    for (const booking of bookings) {
-        // Revenue calculation
-        const revenue = booking.total || 0;
-        totalRevenue += revenue;
-
-        // Pending tests count
-        if (booking.status === "pending") {
-            pendingTests++;
-        }
-
-        // Date-based calculations
-        if (booking.date) {
-            const date = new Date(booking.date);
-            
-            if (!isNaN(date.getTime())) {
-                // Daily revenue (YYYY-MM-DD format for proper sorting)
-                const dayKey = date.toISOString().split('T')[0];
-                dailyRevenue.set(dayKey, (dailyRevenue.get(dayKey) || 0) + revenue);
-
-                // Monthly revenue (YYYY-MM format)
-                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                monthlyRevenue.set(monthKey, (monthlyRevenue.get(monthKey) || 0) + revenue);
+            monthlyRevenue: {
+                labels: monthlyEntries.map(item => item._id),
+                data: monthlyEntries.map(item => Math.round(item.revenue))
+            },
+            dailyRevenue: {
+                labels: dailyEntries.map(item => item._id),
+                data: dailyEntries.map(item => Math.round(item.revenue))
+            },
+            topTests: {
+                labels: topTestEntries.map(item => item._id),
+                data: topTestEntries.map(item => item.count)
             }
-        }
-
-        // Test categories
-        if (booking.tableData?.[0]?.testName) {
-            const testName = booking.tableData[0].testName;
-            testCategories.set(testName, (testCategories.get(testName) || 0) + 1);
-        }
-    }
-
-    // Format stats
-    response.stats = {
-        totalBookings: bookings.length,
-        totalRevenue: Math.round(totalRevenue),
-        pendingTests,
-        activeFranchises: franchisees.length
+        },
+        franchisees
     };
-
-    // Format monthly revenue chart data
-    const monthlyEntries = Array.from(monthlyRevenue.entries())
-        .sort(([a], [b]) => a.localeCompare(b));
-    
-    response.charts.monthlyRevenue = {
-        labels: monthlyEntries.map(([month]) => month),
-        data: monthlyEntries.map(([, value]) => Math.round(value))
-    };
-
-    // Format daily revenue chart data (last 30 days, reversed for chronological order)
-    const dailyEntries = Array.from(dailyRevenue.entries())
-        .sort(([a], [b]) => b.localeCompare(a))
-        .slice(0, 30)
-        .reverse();
-    
-    response.charts.dailyRevenue = {
-        labels: dailyEntries.map(([day]) => day),
-        data: dailyEntries.map(([, value]) => Math.round(value))
-    };
-
-    // Format top 4 test categories
-    const topTestEntries = Array.from(testCategories.entries())
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 4);
-    
-    response.charts.topTests = {
-        labels: topTestEntries.map(([name]) => name),
-        data: topTestEntries.map(([, count]) => count)
-    };
-
-    // Add franchisees data
-    response.franchisees = franchisees;
 
     return res.status(200).json(response);
 });
@@ -3693,85 +3728,107 @@ const updategeneratedbillvariable = async (req, res) => {
 const HoldBookings = asyncHandler(async (req, res) => {
     let userId;
     if (req.user.role === 'staff') {
-        userId = req.user.parentUser
+        userId = req.user.parentUser;
     } else {
-        userId = req.user._id
+        userId = req.user._id;
     }
     const tenantId = req.user.tenantId;
 
+    const holdList = await newBooking.aggregate([
+        {
+            $match: {
+                createdBy: new mongoose.Types.ObjectId(userId),
+                tenantId: new mongoose.Types.ObjectId(tenantId._id),
+                status: { $in: ["Hold", "clinical"] }
+            }
+        },
+        { $sort: { createdAt: -1 } },
+        {
+            $lookup: {
+                from: "conversations",
+                let: { bId: "$bookingId" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ["$bookingId", "$$bId"] },
+                                    { $eq: ["$tenantId", new mongoose.Types.ObjectId(tenantId._id)] }
+                                ]
+                            }
+                        }
+                    },
+                    { $project: { messages: 1, _id: 0 } }
+                ],
+                as: "convData"
+            }
+        },
+        {
+            $addFields: {
+                messages: { $arrayElemAt: ["$convData.messages", 0] }
+            }
+        },
+        { $project: { convData: 0 } }
+    ]);
 
-    console.log("tenantId:", tenantId._id);
-    console.log("createdBy:", userId);
-
-    const HoldBookings = await newBooking.find({
-
-        createdBy: userId,
-        status: { $in: ["Hold", "clinical"] }
-    }).lean();
-
-    if (!HoldBookings || HoldBookings.length === 0) {
-        console.log("Hold bookings not found");
+    if (!holdList || holdList.length === 0) {
         return res.status(200).json(new ApiResponse(200, "empty"));
     }
 
-    // Add messages to each booking
-    for (let booking of HoldBookings) {
-
-        const conversation = await Conversation.findOne({
-            bookingId: booking.bookingId,
-            tenantId: tenantId._id
-        });
-
-        if (conversation) {
-            console.log("conversation found");
-
-            booking.messages = conversation.messages;
-        }
-    }
-
-    return res.status(200).json(new ApiResponse(200, HoldBookings, "Hold bookings fetched successfully"));
+    return res.status(200).json(new ApiResponse(200, holdList, "Hold bookings fetched successfully"));
 });
 
 const canceledBookings = asyncHandler(async (req, res) => {
     let userId;
     if (req.user.role === 'staff') {
-        userId = req.user.parentUser
+        userId = req.user.parentUser;
     } else {
-        userId = req.user._id
+        userId = req.user._id;
     }
-
     const tenantId = req.user.tenantId;
 
-    console.log("tenantId:", tenantId._id);
-    console.log("createdBy:", userId);
+    const cancelList = await newBooking.aggregate([
+        {
+            $match: {
+                createdBy: new mongoose.Types.ObjectId(userId),
+                tenantId: new mongoose.Types.ObjectId(tenantId._id),
+                status: "cancelled"
+            }
+        },
+        { $sort: { createdAt: -1 } },
+        {
+            $lookup: {
+                from: "conversations",
+                let: { bId: "$bookingId" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ["$bookingId", "$$bId"] },
+                                    { $eq: ["$tenantId", new mongoose.Types.ObjectId(tenantId._id)] }
+                                ]
+                            }
+                        }
+                    },
+                    { $project: { messages: 1, _id: 0 } }
+                ],
+                as: "convData"
+            }
+        },
+        {
+            $addFields: {
+                messages: { $arrayElemAt: ["$convData.messages", 0] }
+            }
+        },
+        { $project: { convData: 0 } }
+    ]);
 
-    const HoldBookings = await newBooking.find({
-
-        createdBy: userId,
-        status: "cancelled"
-    }).sort({ createdAt: -1 }).lean();
-
-    if (!HoldBookings || HoldBookings.length === 0) {
-        console.log("Hold bookings not found");
+    if (!cancelList || cancelList.length === 0) {
         return res.status(200).json(new ApiResponse(200, "empty"));
     }
 
-    // Add messages to each booking
-    for (let booking of HoldBookings) {
-
-        const conversation = await Conversation.findOne({
-            bookingId: booking.bookingId,
-            tenantId: tenantId._id
-        });
-
-        if (conversation) {
-            console.log("conversation found");
-
-            booking.messages = conversation.messages;
-        }
-    }
-
-    return res.status(200).json(new ApiResponse(200, HoldBookings, "Hold bookings fetched successfully"));
+    return res.status(200).json(new ApiResponse(200, cancelList, "Hold bookings fetched successfully"));
 });
 
 const countBookingsForAllTenants = asyncHandler(async (req, res) => {
@@ -3869,10 +3926,12 @@ const getAllCancelledBookingsController = asyncHandler(async (req, res) => {
         barcode
     } = req.body;
 
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+    const skip = (pageNum - 1) * limitNum;
 
     let query = {
-        tenantId: req.user.tenantId._id,
+        tenantId: new mongoose.Types.ObjectId(req.user.tenantId._id),
         status: { $in: ["cancelled", "canceled"] }
     };
 
@@ -3886,7 +3945,7 @@ const getAllCancelledBookingsController = asyncHandler(async (req, res) => {
     if (franchisee) query.createdbyuser = { $regex: franchisee, $options: 'i' };
     if (doctorName) query.doctorName = { $regex: doctorName, $options: 'i' };
 
-    // Handle barcode filter
+    // Handle barcode filter efficiently
     if (barcode) {
         const barcodeDocs = await acceptedBarcode.find(
             { "barcodes.barcode": { $regex: barcode, $options: 'i' } },
@@ -3900,97 +3959,143 @@ const getAllCancelledBookingsController = asyncHandler(async (req, res) => {
             return res.status(200).json({
                 bookings: [],
                 total: 0,
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: pageNum,
+                limit: limitNum,
             });
         }
     }
 
-    // Fetch bookings with pagination
-    const bookings = await newBooking
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean();
-
-    const total = await newBooking.countDocuments(query);
-
-    // Process barcodes and LIS data for current page bookings
-    if (bookings.length > 0) {
-        const bookingIds = bookings.map(b => b.bookingId);
-
-        // Fetch barcodes for current page
-        const barcodeData = await acceptedBarcode.find(
-            { bookingId: { $in: bookingIds } },
-            { bookingId: 1, barcodes: 1 }
-        ).lean();
-
-        // Create barcode map
-        const barcodeMap = new Map();
-        const allBarcodeIds = []; // Collect all barcode IDs for LIS check
-
-        barcodeData.forEach(doc => {
-            const barcodes = doc.barcodes.map(b => b.barcode);
-            barcodeMap.set(doc.bookingId, barcodes);
-            allBarcodeIds.push(...barcodes);
-        });
-
-        // Check LIS data availability for all barcodes in one query
-        let lisAvailabilityMap = new Map();
-
-        if (allBarcodeIds.length > 0) {
-            const lisDataDocs = await lisdata.find(
-                { "lisData.sample_id": { $in: allBarcodeIds } },
-                { "lisData.sample_id": 1 }
-            ).lean();
-
-            // Create a set of barcodes that have LIS data for O(1) lookup
-            const barcodesWithLis = new Set(
-                lisDataDocs.map(doc => doc.lisData?.sample_id).filter(Boolean)
-            );
-
-            // Map each barcode to its LIS availability
-            allBarcodeIds.forEach(barcodeId => {
-                lisAvailabilityMap.set(barcodeId, barcodesWithLis.has(barcodeId));
-            });
+    const aggregationResults = await newBooking.aggregate([
+        { $match: query },
+        { $sort: { createdAt: -1 } },
+        {
+            $facet: {
+                metadata: [{ $count: "total" }],
+                bookings: [
+                    { $skip: skip },
+                    { $limit: limitNum },
+                    {
+                        $lookup: {
+                            from: "acceptedbarcodes",
+                            localField: "bookingId",
+                            foreignField: "bookingId",
+                            as: "barcodeDoc"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            acceptedbarcodeObj: { $arrayElemAt: ["$barcodeDoc", 0] }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            acceptedbarcode: {
+                                $ifNull: [
+                                    {
+                                        $map: {
+                                            input: { $ifNull: ["$acceptedbarcodeObj.barcodes", []] },
+                                            as: "b",
+                                            in: "$$b.barcode"
+                                        }
+                                    },
+                                    []
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: "lisdatas",
+                            localField: "acceptedbarcode",
+                            foreignField: "lisData.sample_id",
+                            as: "lisDocs"
+                        }
+                    },
+                    {
+                        $addFields: {
+                            lisSampleSet: {
+                                $map: {
+                                    input: "$lisDocs",
+                                    as: "ld",
+                                    in: "$$ld.lisData.sample_id"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            barcodeDetails: {
+                                $map: {
+                                    input: "$acceptedbarcode",
+                                    as: "code",
+                                    in: {
+                                        barcode: "$$code",
+                                        isLisPresent: { $in: ["$$code", "$lisSampleSet"] }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $addFields: {
+                            isLisPresent: {
+                                $gt: [
+                                    {
+                                        $size: {
+                                            $filter: {
+                                                input: "$barcodeDetails",
+                                                as: "bd",
+                                                cond: { $eq: ["$$bd.isLisPresent", true] }
+                                            }
+                                        }
+                                    },
+                                    0
+                                ]
+                            },
+                            lisStats: {
+                                total: { $size: "$barcodeDetails" },
+                                withLis: {
+                                    $size: {
+                                        $filter: {
+                                            input: "$barcodeDetails",
+                                            as: "bd",
+                                            cond: { $eq: ["$$bd.isLisPresent", true] }
+                                        }
+                                    }
+                                },
+                                withoutLis: {
+                                    $size: {
+                                        $filter: {
+                                            input: "$barcodeDetails",
+                                            as: "bd",
+                                            cond: { $eq: ["$$bd.isLisPresent", false] }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        $project: {
+                            barcodeDoc: 0,
+                            acceptedbarcodeObj: 0,
+                            lisDocs: 0,
+                            lisSampleSet: 0
+                        }
+                    }
+                ]
+            }
         }
+    ]);
 
-        // Attach barcodes and LIS status to each booking
-        bookings.forEach(booking => {
-            const bookingBarcodes = barcodeMap.get(booking.bookingId) || [];
-
-            // Create detailed barcode status array
-            const barcodeDetails = bookingBarcodes.map(barcode => ({
-                barcode: barcode,
-                isLisPresent: lisAvailabilityMap.get(barcode) || false
-            }));
-
-            // Backward compatibility - keep old format
-            booking.acceptedbarcode = bookingBarcodes;
-
-            // New detailed format
-            booking.barcodeDetails = barcodeDetails;
-
-            // Overall LIS status - true if ANY barcode has LIS data
-            booking.isLisPresent = barcodeDetails.length > 0
-                ? barcodeDetails.some(detail => detail.isLisPresent === true)
-                : false;
-
-            // Additional stats
-            booking.lisStats = {
-                total: barcodeDetails.length,
-                withLis: barcodeDetails.filter(d => d.isLisPresent).length,
-                withoutLis: barcodeDetails.filter(d => !d.isLisPresent).length
-            };
-        });
-    }
+    const total = aggregationResults[0]?.metadata[0]?.total || 0;
+    const bookings = aggregationResults[0]?.bookings || [];
 
     return res.status(200).json({
         bookings,
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
     });
 });
 
