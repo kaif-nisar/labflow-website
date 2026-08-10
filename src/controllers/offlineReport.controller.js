@@ -13,13 +13,31 @@ const OFFLINE_REPORT_FIELDS = [
     "fileInputDoctorlefttext", "fileInputDoctorrighttext", "isdocumented", "pdfFormat", "checkBox", "disableBackgroundImage"
 ];
 
+const BG_CANDIDATE_FIELDS = [
+    "backgroundImageUrl", "backgroundImage", "bgImage", "imageUrl", "templateImage", "template", "background",
+    "fileInputLab", "fileInputDoctorleft", "fileInputDoctorright", "fileInputLabtext", "fileInputDoctorlefttext", "fileInputDoctorrighttext"
+];
+
 const getIncomingBackgroundImageUrl = (obj = {}) => {
     if (!obj || typeof obj !== "object") return "";
-    const candidate =
-        obj.backgroundImageUrl ||
-        obj.backgroundImage ||
-        "";
-    return String(candidate || "").trim();
+
+    for (const key of BG_CANDIDATE_FIELDS) {
+        let val = obj[key];
+        if (val === undefined || val === null) continue;
+
+        if (typeof val === "object") {
+            if (typeof val.url === "string" && val.url.trim()) {
+                val = val.url;
+            } else {
+                continue;
+            }
+        }
+
+        const str = String(val || "").trim();
+        if (str) return str;
+    }
+
+    return "";
 };
 
 const oneMonthFromNow = () => {
@@ -37,6 +55,70 @@ const getPublicBaseUrl = (req) => {
 // they regain connectivity. The opaque QR token is required for later access.
 const saveOfflineReport = async (req, res) => {
     try {
+        // Diagnostic: log incoming background-related fields to help trace empty-save bugs
+        try {
+            const incomingSummary = {};
+            for (const key of BG_CANDIDATE_FIELDS) {
+                const v = req.body?.[key];
+                if (v === undefined) {
+                    incomingSummary[key] = "(absent)";
+                } else if (v === null) {
+                    incomingSummary[key] = "(null)";
+                } else if (typeof v === "string") {
+                    incomingSummary[key] = `string(len=${v.length})`;
+                } else if (typeof v === "object") {
+                    incomingSummary[key] = `object(keys=${Object.keys(v || {}).length})`;
+                } else {
+                    incomingSummary[key] = typeof v;
+                }
+            }
+
+            console.log('[offline-report] Incoming background fields:', incomingSummary, {
+                contentType: req.get('content-type'),
+                contentLength: req.get('content-length') || '(unknown)'
+            });
+        } catch (e) {
+            console.warn('[offline-report] Failed to compute incoming summary', e);
+        }
+        // Diagnostic: summary for all expected offline report fields (type + length)
+        try {
+            const fieldSummary = {};
+            for (const key of OFFLINE_REPORT_FIELDS) {
+                const v = req.body?.[key];
+                if (v === undefined) {
+                    fieldSummary[key] = "(absent)";
+                    continue;
+                }
+                if (v === null) {
+                    fieldSummary[key] = "(null)";
+                    continue;
+                }
+
+                const t = typeof v;
+                if (t === "string") {
+                    const len = v.length;
+                    const startsData = v.startsWith && v.startsWith("data:") ? true : false;
+                    fieldSummary[key] = `string(len=${len}, data=${startsData})`;
+                    continue;
+                }
+
+                if (Array.isArray(v)) {
+                    fieldSummary[key] = `array(len=${v.length})`;
+                    continue;
+                }
+
+                if (t === "object") {
+                    fieldSummary[key] = `object(keys=${Object.keys(v || {}).length})`;
+                    continue;
+                }
+
+                fieldSummary[key] = t;
+            }
+
+            console.log('[offline-report] Incoming fields summary:', fieldSummary);
+        } catch (e) {
+            console.warn('[offline-report] Failed to compute fields summary', e);
+        }
         const offlineReportId = String(
             req.body?.offlineReportId || req.body?.bookingId || req.body?.reportId || crypto.randomUUID()
         ).trim();
@@ -49,7 +131,14 @@ const saveOfflineReport = async (req, res) => {
 
         const data = Object.fromEntries(
             OFFLINE_REPORT_FIELDS
-                .filter((field) => req.body[field] !== undefined)
+                .filter((field) => {
+                    const v = req.body[field];
+                    if (v === undefined || v === null) return false;
+                    if (typeof v === "string") {
+                        return v.trim() !== "";
+                    }
+                    return true;
+                })
                 .map((field) => [field, req.body[field]])
         );
 
