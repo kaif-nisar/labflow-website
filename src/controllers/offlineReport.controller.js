@@ -18,13 +18,6 @@ const getIncomingBackgroundImageUrl = (obj = {}) => {
     const candidate =
         obj.backgroundImageUrl ||
         obj.backgroundImage ||
-        obj.bgImage ||
-        obj.backgroundImg ||
-        obj.imageUrl ||
-        obj.templateImage ||
-        obj.template ||
-        obj.fileInputLab ||
-        obj.background ||
         "";
     return String(candidate || "").trim();
 };
