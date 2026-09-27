@@ -1,0 +1,1004 @@
+<div id="ai-copilot-app" class="copilot-root">
+  <style>
+    /* Scoped LabFlow AI Copilot Styles - Clinical & Responsive */
+    #ai-copilot-app {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #0f172a;
+      background-color: #f8fafc;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
+      margin: 0 auto;
+      max-width: 1200px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 125px);
+      height: calc(100dvh - 125px);
+      max-height: calc(100vh - 125px);
+      max-height: calc(100dvh - 125px);
+      min-height: 400px;
+      overflow: hidden;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    body:has(#ai-copilot-app) .content-box,
+    body.portal-ui-enhanced.portal-shell-admin .content-box:has(#ai-copilot-app) {
+      padding-top: 85px !important;
+      padding-bottom: 8px !important;
+      overflow: hidden !important;
+    }
+
+    #ai-copilot-app * {
+      box-sizing: border-box;
+    }
+
+    /* Top Header */
+    .copilot-header {
+      background: #ffffff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+
+    .copilot-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .copilot-avatar-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1e293b 0%, #312e81 100%);
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      box-shadow: 0 4px 12px rgba(30, 41, 59, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .copilot-title-group {
+      min-width: 0;
+    }
+
+    .copilot-title-group h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .copilot-title-group p {
+      margin: 2px 0 0 0;
+      font-size: 12px;
+      color: #64748b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge-gemini {
+      font-size: 11px;
+      font-weight: 700;
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+      border-radius: 20px;
+      padding: 2px 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: 0.2px;
+    }
+
+    .status-dot-active {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      display: inline-block;
+      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+    }
+
+    .btn-reset-chat {
+      background: #f8fafc;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn-reset-chat:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+
+    /* Suggestion Chips */
+    .copilot-chips-bar {
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex-shrink: 0;
+      white-space: nowrap;
+      scrollbar-width: thin;
+    }
+
+    .copilot-chips-bar::-webkit-scrollbar {
+      height: 4px;
+    }
+    .copilot-chips-bar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    .chips-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      margin-right: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .copilot-chip {
+      background: #ffffff;
+      color: #1e293b;
+      border: 1px solid #e2e8f0;
+      padding: 6px 13px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease-in-out;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      flex-shrink: 0;
+    }
+
+    .copilot-chip i {
+      font-size: 12px;
+    }
+
+    .copilot-chip:hover {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #2563eb;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(37, 99, 235, 0.2);
+    }
+
+    .copilot-chip:hover i {
+      color: #ffffff !important;
+    }
+
+    /* Chat Messages Stream */
+    .copilot-chat-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #f8fafc;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Message Bubbles */
+    .msg-user-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .msg-user-bubble {
+      background: #2563eb;
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 16px 16px 2px 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 80%;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.18);
+      word-break: break-word;
+    }
+
+    .msg-user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .msg-ai-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      max-width: 92%;
+      width: 100%;
+    }
+
+    .msg-ai-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1e293b 0%, #312e81 100%);
+      color: #60a5fa;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(30, 41, 59, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .msg-ai-content {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .msg-ai-bubble {
+      background: #ffffff;
+      color: #0f172a;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px 16px 16px 16px;
+      padding: 15px 18px;
+      font-size: 14px;
+      line-height: 1.6;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+      word-break: break-word;
+    }
+
+    .msg-ai-bubble strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .msg-ai-bubble ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    .msg-ai-bubble li {
+      margin: 4px 0;
+      color: #334155;
+    }
+
+    .msg-time {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Action Cards */
+    .copilot-action-card {
+      background: #ffffff;
+      border: 1.5px solid #3b82f6;
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.08);
+      width: 100%;
+    }
+
+    .card-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .card-badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .badge-test { background: #dbeafe; color: #1e40af; }
+    .badge-panel { background: #e0e7ff; color: #3730a3; }
+    .badge-package { background: #fef3c7; color: #92400e; }
+    .badge-booking { background: #d1fae5; color: #065f46; }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0;
+    }
+
+    .card-price-box {
+      text-align: right;
+    }
+
+    .card-price-label {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .card-price-value {
+      font-size: 19px;
+      font-weight: 800;
+      color: #059669;
+    }
+
+    .card-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .meta-item-label {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+      display: block;
+    }
+
+    .meta-item-val {
+      font-size: 13px;
+      color: #0f172a;
+      font-weight: 700;
+      margin-top: 2px;
+      display: block;
+      word-break: break-word;
+    }
+
+    /* Parameters Table */
+    .copilot-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 10px 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+
+    .copilot-table {
+      width: 100%;
+      min-width: 320px;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .copilot-table th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .copilot-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #0f172a;
+    }
+
+    .copilot-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .copilot-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .range-highlight {
+      color: #059669;
+      font-weight: 700;
+    }
+
+    /* Interpretation box */
+    .interpretation-card {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      color: #14532d;
+      line-height: 1.5;
+      margin: 10px 0;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      margin-top: 12px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .footer-hint {
+      font-size: 12px;
+      color: #64748b;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn-copilot-save {
+      background: #059669;
+      color: #ffffff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+      white-space: nowrap;
+    }
+
+    .btn-copilot-save:hover {
+      background: #047857;
+      transform: translateY(-1px);
+    }
+
+    .btn-copilot-saved {
+      background: #d1fae5 !important;
+      color: #065f46 !important;
+      border: 1px solid #a7f3d0 !important;
+      cursor: default !important;
+      transform: none !important;
+    }
+
+    /* Input Footer */
+    .copilot-input-bar {
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      padding: 10px 18px;
+      flex-shrink: 0;
+      position: sticky;
+      bottom: 0;
+      z-index: 50;
+      box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.04);
+    }
+
+    .copilot-input-wrapper {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      background: #ffffff;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 6px 10px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .copilot-input-wrapper:focus-within {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    #copilotInput {
+      flex: 1;
+      border: none;
+      background: transparent !important;
+      color: #0f172a !important;
+      font-size: 14px !important;
+      font-family: inherit;
+      resize: none;
+      outline: none !important;
+      padding: 6px 4px;
+      line-height: 1.5;
+      min-height: 38px;
+      max-height: 120px;
+    }
+
+    #copilotInput::placeholder {
+      color: #94a3b8;
+    }
+
+    .btn-send {
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      height: 38px;
+    }
+
+    .btn-send:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-send:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-mic {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      border-radius: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      height: 38px;
+      width: 38px;
+    }
+
+    .btn-mic:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .btn-mic.listening {
+      background: #ef4444 !important;
+      color: #ffffff !important;
+      border-color: #dc2626 !important;
+      animation: micPulse 1s infinite alternate;
+    }
+
+    @keyframes micPulse {
+      from { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      to { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+
+    .btn-attach {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      border-radius: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      height: 38px;
+      width: 38px;
+    }
+
+    .btn-attach:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    .attached-preview-bar {
+      display: none;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      gap: 8px;
+      align-items: center;
+      overflow-x: auto;
+    }
+
+    .image-thumb-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 3px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .image-thumb-pill img {
+      width: 24px;
+      height: 24px;
+      object-fit: cover;
+      border-radius: 3px;
+    }
+
+    .image-thumb-remove {
+      color: #94a3b8;
+      cursor: pointer;
+      margin-left: 2px;
+    }
+
+    .image-thumb-remove:hover {
+      color: #ef4444;
+    }
+
+    /* Typing Dots */
+    .typing-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      width: fit-content;
+      color: #475569;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      background: #2563eb;
+      border-radius: 50%;
+      animation: dotPulse 1.2s infinite ease-in-out;
+    }
+
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dotPulse {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* ==========================================================================
+       Responsive Breakpoints (Mobile, Tablet, Desktop)
+       ========================================================================== */
+    @media (max-width: 768px) {
+      #ai-copilot-app {
+        border-radius: 0;
+        border: none;
+        margin: 0;
+        margin-top: 20px;
+        width: 100%;
+        height: calc(100vh - 60px) !important;
+        height: calc(100dvh - 60px) !important;
+        max-height: calc(100vh - 60px) !important;
+        max-height: calc(100dvh - 60px) !important;
+      }
+
+      body:has(#ai-copilot-app) .content-box,
+      body.portal-ui-enhanced.portal-shell-admin .content-box:has(#ai-copilot-app) {
+        padding: 0 !important;
+        padding-top: 60px !important;
+        overflow-y: hidden !important;
+      }
+
+      .copilot-header {
+        padding: 8px 12px;
+      }
+
+      .copilot-avatar-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 15px;
+        border-radius: 8px;
+      }
+
+      .copilot-title-group h2 {
+        font-size: 14.5px;
+        gap: 6px;
+      }
+
+      .copilot-title-group p {
+        display: none;
+      }
+
+      .badge-gemini {
+        font-size: 10px;
+        padding: 1px 6px;
+      }
+
+      .btn-reset-chat span {
+        display: none;
+      }
+
+      .btn-reset-chat {
+        padding: 6px 9px;
+      }
+
+      .copilot-chips-bar {
+        padding: 6px 10px;
+        gap: 6px;
+      }
+
+      .chips-label {
+        display: none;
+      }
+
+      .copilot-chip {
+        font-size: 11.5px;
+        padding: 4px 10px;
+      }
+
+      .copilot-chat-body {
+        padding: 10px 10px;
+        gap: 12px;
+      }
+
+      .msg-ai-row {
+        max-width: 100%;
+        gap: 8px;
+      }
+
+      .msg-ai-avatar {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+        border-radius: 8px;
+      }
+
+      .msg-ai-bubble, .msg-user-bubble {
+        font-size: 13px;
+        padding: 10px 12px;
+      }
+
+      .msg-user-bubble {
+        max-width: 88%;
+      }
+
+      .copilot-action-card {
+        padding: 12px 10px;
+        border-radius: 10px;
+      }
+
+      .card-top-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .card-price-box {
+        text-align: left;
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+
+      .card-meta-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        padding: 8px 10px;
+      }
+
+      .meta-item-label {
+        font-size: 10px;
+      }
+
+      .meta-item-val {
+        font-size: 12px;
+      }
+
+      .copilot-table th, .copilot-table td {
+        padding: 6px 8px;
+        font-size: 11.5px;
+      }
+
+      .card-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .btn-copilot-save {
+        width: 100%;
+        justify-content: center;
+        padding: 9px 12px;
+      }
+
+      .footer-hint {
+        text-align: center;
+        font-size: 11px;
+      }
+
+      .copilot-input-bar {
+        padding: 6px 8px;
+      }
+
+      .copilot-input-wrapper {
+        padding: 4px 6px;
+        gap: 4px;
+        border-radius: 10px;
+      }
+
+      #copilotInput {
+        font-size: 13px !important;
+        min-height: 34px;
+        padding: 4px 2px;
+      }
+
+      .btn-send .btn-send-text {
+        display: none;
+      }
+
+      .btn-send {
+        padding: 7px 11px;
+        height: 34px;
+        border-radius: 8px;
+      }
+
+      .btn-mic, .btn-attach {
+        padding: 7px 9px;
+        height: 34px;
+        width: 34px;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+    }
+  </style>
+
+  <!-- Top Header -->
+  <div class="copilot-header">
+    <div class="copilot-brand">
+      <div class="copilot-avatar-icon" title="LabFlow Clinical Intelligence Engine">
+        <i class="fa-solid fa-brain"></i>
+      </div>
+      <div class="copilot-title-group">
+        <h2>
+          <span>LabFlow AI Copilot</span>
+          <span class="badge-gemini">
+            <span class="status-dot-active"></span>
+            Gemini 2.5 Flash
+          </span>
+        </h2>
+        <p>Clinical Pathology Assistant for Tests, Panels, Packages, Bookings & Database Standards</p>
+      </div>
+    </div>
+
+    <div>
+      <button id="btnClearCopilotChat" class="btn-reset-chat" title="Clear Chat History">
+        <i class="fa-solid fa-arrow-rotate-left"></i> <span>New Chat</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Quick Suggestion Chips -->
+  <div class="copilot-chips-bar">
+    <span class="chips-label"><i class="fa-solid fa-bolt text-amber-500"></i> Quick:</span>
+    <button class="copilot-chip" style="border-color: #f59e0b; color: #b45309; background: #fefce8;" data-prompt="Mera pura test database check karo ki usme kya kami hai, kaun si fields chuti hui hain aur unko standard medical data ke saath theek kardo.">
+      <i class="fa-solid fa-shield-halved" style="color: #d97706;"></i> Database Audit & Fix
+    </button>
+    <button class="copilot-chip" data-prompt="HbA1c test bana do, biochemistry category, price 350, full clinical interpretation ke saath.">
+      <i class="fa-solid fa-vial-circle-check" style="color: #2563eb;"></i> HbA1c Test (₹350)
+    </button>
+    <button class="copilot-chip" data-prompt="Vitamin D3 (25-OH) test banao, price 800, sample type Serum, complete parameters aur interpretation ke saath.">
+      <i class="fa-solid fa-capsules" style="color: #0284c7;"></i> Vitamin D3 (₹800)
+    </button>
+    <button class="copilot-chip" data-prompt="Lipid Profile panel bana do jisme Total Cholesterol, Triglycerides, HDL, LDL, VLDL tests ho, price 600.">
+      <i class="fa-solid fa-layer-group" style="color: #4f46e5;"></i> Lipid Profile Panel
+    </button>
+    <button class="copilot-chip" data-prompt="Full Body Checkup package bana do jisme CBC, LFT, KFT, Lipid Profile aur Thyroid ho, price 1499.">
+      <i class="fa-solid fa-box-archive" style="color: #7c3aed;"></i> Full Body Checkup (₹1499)
+    </button>
+    <button class="copilot-chip" data-prompt="Patient Amit Kumar, Age 32, Male, phone 9876543210 ki CBC aur HbA1c test booking laga do.">
+      <i class="fa-solid fa-calendar-check" style="color: #059669;"></i> Patient Booking
+    </button>
+  </div>
+
+  <!-- Chat Messages Stream -->
+  <div id="copilotChatStream" class="copilot-chat-body">
+    <!-- Welcome message -->
+    <div class="msg-ai-row">
+      <div class="msg-ai-avatar">
+        <i class="fa-solid fa-brain"></i>
+      </div>
+      <div class="msg-ai-content">
+        <div class="msg-ai-bubble">
+          <p><strong>नमस्ते! मैं आपका LabFlow AI Copilot हूँ।</strong></p>
+          <p style="margin-top: 6px;">आप मुझे बोलकर (Mic), लिखकर या किसी भी <strong>लैब रिपोर्ट / टेस्ट फ़ॉर्मेट की फ़ोटो अटैच (Pin)</strong> करके आसानी से काम करवा सकते हैं:</p>
+          <ul>
+            <li><strong>फ़ोटो से टेस्ट तैयार करना:</strong> किसी भी लैब रिपोर्ट की फ़ोटो या स्क्रीनशॉट अटैच करें — सारे पैरामीटर्स, यूनिट्स और रेंजेस पढ़कर टेस्ट तुरंत तैयार हो जाएगा।</li>
+            <li><strong>डेटाबेस ऑडिट और सुधार:</strong> जैसे <em>"Mera pura test database audit karo aur jo kami hai unhe theek kardo"</em> — छूटे हुए मेथड, इंस्ट्रूमेंट और क्लीनिकल स्टैंडर्ड्स ऑटो-फिक्स करें।</li>
+            <li><strong>नया टेस्ट / पैनल / पैकेज:</strong> जैसे <em>"Vitamin D3 का टेस्ट बना दो, प्राइस 800"</em> या <em>"Thyroid Panel bana do"</em>.</li>
+            <li><strong>मरीज़ की बुकिंग:</strong> जैसे <em>"Rahul Sharma, Age 28M, CBC aur HbA1c book kardo"</em>.</li>
+          </ul>
+          <p style="margin-top: 8px; font-size: 12px; color: #64748b;"><i class="fa-solid fa-paperclip"></i> फ़ोटो अपलोड करने के लिए नीचे पिन आइकॉन पर क्लिक करें या इमेज पेस्ट करें।</p>
+        </div>
+        <span class="msg-time"><i class="fa-solid fa-circle-check text-emerald-500"></i> AI Copilot • Ready</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Input Bar -->
+  <div class="copilot-input-bar">
+    <form id="copilotChatForm">
+      <div id="copilotAttachedImagesBar" class="attached-preview-bar"></div>
+      <div class="copilot-input-wrapper">
+        <textarea
+          id="copilotInput"
+          rows="1"
+          placeholder="Bolkar batane ke liye Mic, photo ke liye Pin dabayein ya type karein..."
+        ></textarea>
+        <input type="file" id="copilotFileInput" accept="image/*" style="display:none;">
+        <button type="button" id="btnCopilotAttach" class="btn-attach" title="Attach Lab Report Photo / Screenshot">
+          <i class="fa-solid fa-paperclip"></i>
+        </button>
+        <button type="button" id="btnCopilotMic" class="btn-mic" title="Click to speak (Bolkar batayein)">
+          <i class="fa-solid fa-microphone"></i>
+        </button>
+        <button type="submit" id="btnCopilotSend" class="btn-send">
+          <span class="btn-send-text">Send</span>
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

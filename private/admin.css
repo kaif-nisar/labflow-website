@@ -450,6 +450,7 @@ body {
 .options-div ul {
     display: flex;
     align-items: center;
+    margin-bottom: 0px;
 
 }
 
@@ -943,4 +944,144 @@ img[src=""] {
     #mobileMessage {
         display: flex;
     }
+}
+
+
+/* ==========================================================================
+   AI Copilot Professional Navigation Elements (Navbar & Sidebar)
+   ========================================================================== */
+
+/* Top Navbar AI Copilot Button */
+.nav-copilot-wrapper {
+    display: inline-flex;
+    align-items: center;
+    list-style: none;
+}
+
+.nav-copilot-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 15px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(79, 70, 229, 0.12) 100%);
+    border: 1px solid rgba(79, 70, 229, 0.35);
+    color: #1e40af !important;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nav-copilot-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    border-color: #3730a3;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+    transform: translateY(-1px);
+}
+
+.nav-copilot-btn .nav-copilot-icon {
+    font-size: 13px;
+    color: #4f46e5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.nav-copilot-btn:hover .nav-copilot-icon {
+    color: #ffffff !important;
+}
+
+.nav-copilot-btn .nav-copilot-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #e0e7ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+    letter-spacing: 0.5px;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+
+.nav-copilot-btn:hover .nav-copilot-badge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Sidebar AI Copilot Item */
+.sidebar-copilot-item {
+    margin: 4px 0;
+}
+
+.sidebar-copilot-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 200px;
+    height: 40px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: #ffffff !important;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    cursor: pointer;
+    background: transparent;
+}
+
+.sidebar-copilot-link .dash_icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff !important;
+    font-size: 13px;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+    flex-shrink: 0;
+    margin-left: 0 !important;
+}
+
+.sidebar-copilot-link .dash_text {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: #ffffff !important;
+    letter-spacing: 0.2px;
+    margin-left: 0 !important;
+}
+
+.sidebar-copilot-link .sidebar-copilot-badge {
+    margin-left: auto;
+    background: rgba(99, 102, 241, 0.3);
+    border: 1px solid rgba(165, 180, 252, 0.4);
+    color: #e0e7ff;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 5px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.sidebar-copilot-link:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: translateX(2px);
+}
+
+.sidebar-copilot-link:hover .sidebar-copilot-badge {
+    background: #4f46e5;
+    color: #ffffff;
+    border-color: #6366f1;
 }

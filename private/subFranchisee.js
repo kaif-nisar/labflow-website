@@ -3,6 +3,7 @@ const portalGuard = window.AppPortalGuard.configure({
     loginPath: "/franchiseelogin.html",
     homePath: "/index.html",
     useFetchGuard: true,
+    sessionType: "user",
 });
 let subscriptionServerOffsetMs = 0;
 let subscriptionCountdownInterval = null;

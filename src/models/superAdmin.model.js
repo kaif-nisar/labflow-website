@@ -38,6 +38,12 @@ const superAdminSchema = new Schema({
         type: String,
         sparse: true, // Only index non-null values
     },
+    // Hashed refresh tokens of every device/browser that is still signed in.
+    // Keeps a login on one device from signing the other devices out.
+    refreshTokenHashes: {
+        type: [String],
+        default: [],
+    },
     lastLogin: {
         type: Date,
         index: true, // For activity tracking

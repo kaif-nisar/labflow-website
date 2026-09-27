@@ -116,6 +116,61 @@ async function ensureTestDocumentsHaveMasterKeys(testRecords) {
     return testRecords;
 }
 
+// FIXED (performance): builds an in-memory resolver that maps a stored category
+// reference (ObjectId / string / category document / array of documents) to the
+// tenant's own copy of that category. This replaces 1-2 database round trips that
+// used to run for every single test/panel that was being copied.
+function buildCategoryResolver(categories = []) {
+    const byOriginalId = new Map();
+    const byName = new Map();
+
+    const register = (category) => {
+        if (!category) return;
+
+        const originalId = toIdString(category.originalCategoryId);
+        if (originalId && !byOriginalId.has(originalId)) {
+            byOriginalId.set(originalId, category);
+        }
+
+        const name = category.category == null ? "" : String(category.category);
+        if (name && !byName.has(name)) {
+            byName.set(name, category);
+        }
+    };
+
+    for (const category of Array.isArray(categories) ? categories : []) {
+        register(category);
+    }
+
+    return {
+        register,
+        resolve(reference) {
+            let entry = null;
+
+            if (Array.isArray(reference)) {
+                entry = reference.length > 0 ? reference[0] : null;
+            } else if (reference && typeof reference === "object") {
+                entry = reference;
+            }
+
+            // Primitive references are kept as-is (same behaviour as before)
+            if (!entry) {
+                return reference;
+            }
+
+            if (entry._id) {
+                return byOriginalId.get(toIdString(entry._id)) || entry;
+            }
+
+            if (entry.category) {
+                return byName.get(String(entry.category)) || entry.category;
+            }
+
+            return reference;
+        },
+    };
+}
+
 function resolveFormulaScopeId(user) {
     if (!user) return null;
     if (user.tenantId?._id) return user.tenantId._id;
@@ -187,7 +242,7 @@ async function copyScopedFormulasToTenant({
         }
     }
 
-    let copiedCount = 0;
+    const formulaUpserts = [];
 
     for (const formula of sourceFormulas) {
         const fallbackTargetMasterKey =
@@ -240,41 +295,43 @@ async function copyScopedFormulasToTenant({
             );
         }
 
-        await Formula.findOneAndUpdate(
-            {
-                tenantId: targetTenantId,
-                targetMasterKey: fallbackTargetMasterKey,
-            },
-            {
-                $set: {
+        formulaUpserts.push({
+            updateOne: {
+                filter: {
                     tenantId: targetTenantId,
-                    targetTestId: targetEntry.testId,
-                    targetParameterId: targetEntry.parameterId,
                     targetMasterKey: fallbackTargetMasterKey,
-                    targetLabel: targetEntry.label,
-                    expression: normalizedExpression,
-                    displayExpression: formula.displayExpression || formula.expression,
-                    dependencies,
-                    precision: formula.precision ?? 2,
-                    notes: formula.notes || "",
-                    isActive: formula.isActive !== false,
-                    allowManualOverride: Boolean(formula.allowManualOverride),
-                    validationStatus: formula.validationStatus || "valid",
-                    lastValidatedAt: formula.lastValidatedAt || new Date(),
-                    updatedBy: createdBy,
                 },
-                $setOnInsert: {
-                    createdBy,
+                update: {
+                    $set: {
+                        tenantId: targetTenantId,
+                        targetTestId: targetEntry.testId,
+                        targetParameterId: targetEntry.parameterId,
+                        targetMasterKey: fallbackTargetMasterKey,
+                        targetLabel: targetEntry.label,
+                        expression: normalizedExpression,
+                        displayExpression: formula.displayExpression || formula.expression,
+                        dependencies,
+                        precision: formula.precision ?? 2,
+                        notes: formula.notes || "",
+                        isActive: formula.isActive !== false,
+                        allowManualOverride: Boolean(formula.allowManualOverride),
+                        validationStatus: formula.validationStatus || "valid",
+                        lastValidatedAt: formula.lastValidatedAt || new Date(),
+                        updatedBy: createdBy,
+                    },
+                    $setOnInsert: {
+                        createdBy,
+                    },
                 },
-            },
-            {
-                new: true,
                 upsert: true,
-                session,
-            }
-        );
+            },
+        });
+    }
 
-        copiedCount += 1;
+    // PERFORMANCE: one bulk write instead of one round trip per formula
+    if (formulaUpserts.length > 0) {
+        await Formula.bulkWrite(formulaUpserts, { session, ordered: false });
+        copiedCount = formulaUpserts.length;
     }
 
     return copiedCount;
@@ -1848,30 +1905,115 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
         };
         const sourceFormulaScopeId = resolveFormulaScopeId(req.user);
 
+        // === PERFORMANCE: PREFETCH EVERY LOOKUP TABLE ONCE ===
+        // Previously this endpoint ran 1-2 queries for every test / panel / package
+        // (duplicate checks + id remapping). For a big admin that meant thousands of
+        // sequential round trips, which blew past the proxy timeout and returned a
+        // 504 gateway timeout (html) to the browser. All lookup data is now loaded
+        // once into in-memory maps and reused for every item.
+        const hasCategoryWork = Boolean((categoryIds?.length || 0) + (testIds?.length || 0) + (panelIds?.length || 0));
+        const hasTestWork = Boolean((testIds?.length || 0) + (panelIds?.length || 0) + (packageIds?.length || 0));
+        const hasPanelWork = Boolean((panelIds?.length || 0) + (packageIds?.length || 0));
+
+        const [tenantCategoryDocs, tenantTestDocs, tenantPanelDocs, tenantUnitDocs, tenantSampleDocs, tenantPackageDocs] = await Promise.all([
+            hasCategoryWork
+                ? categorydb.find({ tenantId: franchiseeId }).session(session).lean()
+                : [],
+            hasTestWork
+                ? testSchema.find({ tenantId: franchiseeId }).select("_id Name originalTestId").session(session).lean()
+                : [],
+            hasPanelWork
+                ? addPannel.find({ tenantId: franchiseeId }).select("_id name originalPanelId").session(session).lean()
+                : [],
+            (unitIds?.length || 0) > 0
+                ? unitdb.find({ tenantId: franchiseeId }).select("_id unit originalUnitId").session(session).lean()
+                : [],
+            (sampleTypeIds?.length || 0) > 0
+                ? sampleSchema.find({ tenantId: franchiseeId }).select("_id Name originalSampleId").session(session).lean()
+                : [],
+            (packageIds?.length || 0) > 0
+                ? Package.find({ tenantId: franchiseeId }).select("_id packageName originalPackageId").session(session).lean()
+                : [],
+        ]);
+
+        const categoryResolver = buildCategoryResolver(tenantCategoryDocs);
+
+        const assignedCategoryOriginalIds = new Set(
+            tenantCategoryDocs.map((category) => toIdString(category.originalCategoryId)).filter(Boolean)
+        );
+        const assignedCategoryNames = new Set(
+            tenantCategoryDocs.map((category) => (category.category == null ? "" : String(category.category))).filter(Boolean)
+        );
+
+        const testIdByOriginalId = new Map();
+        const testIdByName = new Map();
+        for (const test of tenantTestDocs) {
+            const originalId = toIdString(test.originalTestId);
+            if (originalId && !testIdByOriginalId.has(originalId)) {
+                testIdByOriginalId.set(originalId, test._id);
+            }
+
+            const testName = test.Name == null ? "" : String(test.Name);
+            if (testName && !testIdByName.has(testName)) {
+                testIdByName.set(testName, test._id);
+            }
+        }
+
+        const panelIdByOriginalId = new Map();
+        const panelIdByName = new Map();
+        for (const panel of tenantPanelDocs) {
+            const originalId = toIdString(panel.originalPanelId);
+            if (originalId && !panelIdByOriginalId.has(originalId)) {
+                panelIdByOriginalId.set(originalId, panel._id);
+            }
+
+            const panelName = panel.name == null ? "" : String(panel.name);
+            if (panelName && !panelIdByName.has(panelName)) {
+                panelIdByName.set(panelName, panel._id);
+            }
+        }
+
+        const packageIdByOriginalId = new Map();
+        const packageIdByName = new Map();
+        for (const pkg of tenantPackageDocs) {
+            const originalId = toIdString(pkg.originalPackageId);
+            if (originalId && !packageIdByOriginalId.has(originalId)) {
+                packageIdByOriginalId.set(originalId, pkg._id);
+            }
+
+            const packageName = pkg.packageName == null ? "" : String(pkg.packageName);
+            if (packageName && !packageIdByName.has(packageName)) {
+                packageIdByName.set(packageName, pkg._id);
+            }
+        }
+
+        const assignedUnitOriginalIds = new Set(
+            tenantUnitDocs.map((unit) => toIdString(unit.originalUnitId)).filter(Boolean)
+        );
+        const assignedUnitNames = new Set(
+            tenantUnitDocs.map((unit) => (unit.unit == null ? "" : String(unit.unit))).filter(Boolean)
+        );
+
+        const assignedSampleOriginalIds = new Set(
+            tenantSampleDocs.map((sample) => toIdString(sample.originalSampleId)).filter(Boolean)
+        );
+        const assignedSampleNames = new Set(
+            tenantSampleDocs.map((sample) => (sample.Name == null ? "" : String(sample.Name))).filter(Boolean)
+        );
+
         // === STEP 4: CATEGORIES ===
         if (categoryIds && categoryIds.length > 0) {
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                categorydb.find({
-                    tenantId: franchiseeId,
-                    originalCategoryId: { $in: categoryIds }
-                }).session(session).distinct('originalCategoryId'),
-
-                categorydb.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('category')
-            ]);
-
             const candidateCategories = await categorydb.find({
                 _id: { $in: categoryIds },
                 $or: [
                     { isBaseCategory: true },
                     { isBaseCategory: { $exists: false } }  // Field exist नहीं करता
                 ]
-            }).session(session);
+            }).session(session).lean();
 
             const newCategories = candidateCategories.filter(cat =>
-                !assignedByOriginalId.includes(cat._id) &&
-                !assignedByName.includes(cat.category)
+                !assignedCategoryOriginalIds.has(String(cat._id)) &&
+                !assignedCategoryNames.has(String(cat.category))
             );
 
             if (newCategories.length > 0) {
@@ -1880,12 +2022,13 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     .findOne({ tenantId: franchiseeId })
                     .sort({ orderId: -1 })
                     .select('orderId')
-                    .session(session);
+                    .session(session)
+                    .lean();
 
                 let nextCategoryOrder = lastCategory ? lastCategory.orderId + 1 : 1;
 
                 const copiedCategories = newCategories.map(cat => {
-                    const { _id, ...rest } = cat.toObject();
+                    const { _id, ...rest } = cat;
                     return {
                         ...rest,
                         _id: new mongoose.Types.ObjectId(),
@@ -1902,35 +2045,36 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
 
                 await categorydb.insertMany(copiedCategories, { session });
                 assignedCounts.categories = copiedCategories.length;
+
+                // Register the fresh copies so tests/panels copied in this same request
+                // can be mapped to them without extra database queries.
+                for (const copiedCategory of copiedCategories) {
+                    categoryResolver.register(copiedCategory);
+
+                    const copiedOriginalId = toIdString(copiedCategory.originalCategoryId);
+                    if (copiedOriginalId) {
+                        assignedCategoryOriginalIds.add(copiedOriginalId);
+                    }
+                    assignedCategoryNames.add(String(copiedCategory.category));
+                }
             }
         }
 
         // === STEP 5: UNITS ===
         if (unitIds && unitIds.length > 0) {
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                unitdb.find({
-                    tenantId: franchiseeId,
-                    originalUnitId: { $in: unitIds }
-                }).session(session).distinct('originalUnitId'),
-
-                unitdb.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('unit') // Adjust field name as per your schema
-            ]);
-
             const candidateUnits = await unitdb.find({
                 _id: { $in: unitIds },
                 isBaseUnit: true,
-            }).session(session);
+            }).session(session).lean();
 
             const newUnits = candidateUnits.filter(unit =>
-                !assignedByOriginalId.includes(unit._id) &&
-                !assignedByName.includes(unit.unit) // Adjust field name
+                !assignedUnitOriginalIds.has(String(unit._id)) &&
+                !assignedUnitNames.has(String(unit.unit))
             );
 
             if (newUnits.length > 0) {
                 const copiedUnits = newUnits.map(unit => {
-                    const { _id, ...rest } = unit.toObject();
+                    const { _id, ...rest } = unit;
                     return {
                         ...rest,
                         _id: new mongoose.Types.ObjectId(),
@@ -1946,35 +2090,32 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
 
                 await unitdb.insertMany(copiedUnits, { session });
                 assignedCounts.units = copiedUnits.length;
+
+                for (const copiedUnit of copiedUnits) {
+                    const copiedOriginalId = toIdString(copiedUnit.originalUnitId);
+                    if (copiedOriginalId) {
+                        assignedUnitOriginalIds.add(copiedOriginalId);
+                    }
+                    assignedUnitNames.add(String(copiedUnit.unit));
+                }
             }
         }
 
         // === STEP 6: SAMPLE TYPES ===
         if (sampleTypeIds && sampleTypeIds.length > 0) {
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                sampleSchema.find({
-                    tenantId: franchiseeId,
-                    originalSampleId: { $in: sampleTypeIds }
-                }).session(session).distinct('originalSampleId'),
-
-                sampleSchema.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('Name')
-            ]);
-
             const candidateSamples = await sampleSchema.find({
                 _id: { $in: sampleTypeIds },
                 isBaseSample: true,
-            }).session(session);
+            }).session(session).lean();
 
             const newSamples = candidateSamples.filter(sample =>
-                !assignedByOriginalId.includes(sample._id) &&
-                !assignedByName.includes(sample.Name)
+                !assignedSampleOriginalIds.has(String(sample._id)) &&
+                !assignedSampleNames.has(String(sample.Name))
             );
 
             if (newSamples.length > 0) {
                 const copiedSamples = newSamples.map(sample => {
-                    const { _id, ...rest } = sample.toObject();
+                    const { _id, ...rest } = sample;
                     return {
                         ...rest,
                         _id: new mongoose.Types.ObjectId(),
@@ -1990,28 +2131,23 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
 
                 await sampleSchema.insertMany(copiedSamples, { session });
                 assignedCounts.sampleTypes = copiedSamples.length;
+
+                for (const copiedSample of copiedSamples) {
+                    const copiedOriginalId = toIdString(copiedSample.originalSampleId);
+                    if (copiedOriginalId) {
+                        assignedSampleOriginalIds.add(copiedOriginalId);
+                    }
+                    assignedSampleNames.add(String(copiedSample.Name));
+                }
             }
         }
 
         // === STEP 1: TESTS (IMPROVED DUPLICATE DETECTION) ===
         if (testIds && testIds.length > 0) {
-            // Get both originalTestId and Name-based duplicates
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                testSchema.find({
-                    tenantId: franchiseeId,
-                    originalTestId: { $in: testIds }
-                }).session(session).distinct('originalTestId'),
-
-                // Get existing test names for this tenant
-                testSchema.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('Name')
-            ]);
-
-            // Get base tests that aren't already assigned
+            // Base + already-assigned candidates in a single query
             const allCandidateTests = await testSchema.find({
                 _id: { $in: testIds },
-            }).session(session);
+            }).session(session).lean();
 
             // Step 2: Split between baseTest & non-baseTest
             const candidateTests = allCandidateTests.filter(t => {
@@ -2022,75 +2158,22 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     return t.isBaseTest === false;
                 }
             });
-            //console.log(candidateTests.length)
-            // Filter out tests that would cause duplicates
-            // Normalize assigned ids/names to Sets for O(1) lookups
-            const assignedOriginalSet = new Set(assignedByOriginalId.map(id => String(id)));
-            const assignedNameSet = new Set(assignedByName.map(n => String(n)));
 
+            // Filter out tests that would cause duplicates (in-memory lookups only)
             const newTests = candidateTests.filter(test =>
-                !assignedOriginalSet.has(String(test._id)) &&
-                !assignedNameSet.has(String(test.Name))
+                !testIdByOriginalId.has(String(test._id)) &&
+                !testIdByName.has(String(test.Name))
             );
 
             if (newTests.length > 0) {
                 const copiedTests = [];
 
-                // Use for...of so we can await inside the loop
                 for (const test of newTests) {
-                    const { _id, ...rest } = test.toObject();
-                    let newCategory = test.category;
+                    const { _id, ...rest } = test;
 
-                    // Normalize incoming category which can be:
-                    // - a plain ObjectId/string
-                    // - a populated object { _id, category }
-                    // - an array containing a populated object
-                    // We want to set newCategory to the franchisee's category _id when possible,
-                    // otherwise use the original category id/string.
-                    try {
-                        // If category is an array, pick the first meaningful entry
-                        let catEntry = null;
-                        if (Array.isArray(test.category) && test.category.length > 0) {
-                            catEntry = test.category[0];
-                        } else if (test.category && typeof test.category === 'object') {
-                            catEntry = test.category;
-                        }
+                    // Map the source category to the tenant's own copy (in-memory lookup)
+                    const newCategory = categoryResolver.resolve(test.category);
 
-                        if (catEntry) {
-                            // If provided object has an _id, try to find franchisee mapping by originalCategoryId
-                            if (catEntry._id) {
-                                const franchiseeCategoryByOriginal = await categorydb.findOne({
-                                    tenantId: franchiseeId,
-                                    originalCategoryId: catEntry._id
-                                }).session(session);
-                                if (franchiseeCategoryByOriginal) {
-                                    newCategory = franchiseeCategoryByOriginal;
-                                } else {
-                                    // fallback to using the provided _id
-                                    newCategory = catEntry;
-                                }
-                            } else if (catEntry.category) {
-                                // If object has 'category' (name), try to find by name
-                                const franchiseeCategoryByName = await categorydb.findOne({
-                                    tenantId: franchiseeId,
-                                    category: catEntry.category
-                                }).session(session);
-                                if (franchiseeCategoryByName) {
-                                    newCategory = franchiseeCategoryByName;
-                                } else {
-                                    // fallback to the category name (not ideal but keeps original behavior)
-                                    newCategory = catEntry.category;
-                                }
-                            }
-                        } else {
-                            // If category is a primitive (string/ObjectId), keep as-is
-                            newCategory = test.category;
-                        }
-                    } catch (e) {
-                        // If anything goes wrong, fallback to original category value
-                        console.warn('Category normalization failed, using original value', e);
-                        newCategory = test.category;
-                    }
                     // Differentiate between SuperAdmin base-tests and admin-created tests
                     if (test.createdByRole === 'superAdmin') {
                         const copiedParameters = normalizeParameterPayload(
@@ -2139,25 +2222,42 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     }
                     // If neither condition matches we simply skip (no push)
                 }
-
                 if (copiedTests.length > 0) {
                     await testSchema.insertMany(copiedTests, { session });
                     assignedCounts.tests = copiedTests.length;
 
-                    // Update base tests with purchasedBy info
-                    await Promise.all(
-                        newTests.map(t =>
-                            testSchema.findByIdAndUpdate(t._id, {
+                    // Make the freshly created tests resolvable for the panels/packages
+                    // that are copied later in this very same request.
+                    for (const copiedTest of copiedTests) {
+                        const copiedOriginalId = toIdString(copiedTest.originalTestId);
+                        if (copiedOriginalId && !testIdByOriginalId.has(copiedOriginalId)) {
+                            testIdByOriginalId.set(copiedOriginalId, copiedTest._id);
+                        }
+
+                        const copiedName = String(copiedTest.Name);
+                        if (!testIdByName.has(copiedName)) {
+                            testIdByName.set(copiedName, copiedTest._id);
+                        }
+                    }
+
+                    // Update base tests with purchasedBy info (ONE bulk update instead of N)
+                    const sourceTestIds = [...new Set(newTests.map(t => String(t._id)))];
+                    if (sourceTestIds.length > 0) {
+                        const purchaseDate = new Date();
+                        await testSchema.updateMany(
+                            { _id: { $in: sourceTestIds } },
+                            {
                                 $push: {
                                     purchasedBy: {
                                         tenantId: franchiseeId,
                                         purchasePrice: 1,
-                                        purchaseDate: new Date()
+                                        purchaseDate
                                     }
                                 }
-                            }, { session })
-                        )
-                    );
+                            },
+                            { session }
+                        );
+                    }
                 }
 
                 const relevantMasterKeys = copiedTests.flatMap((test) =>
@@ -2183,20 +2283,9 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
 
         // === STEP 2: PANELS (IMPROVED DUPLICATE DETECTION & ID MAPPING) ===
         if (panelIds && panelIds.length > 0) {
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                addPannel.find({
-                    tenantId: franchiseeId,
-                    originalPanelId: { $in: panelIds }
-                }).session(session).distinct('originalPanelId'),
-
-                addPannel.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('name')
-            ]);
-
             const allCandidatePanels = await addPannel.find({
                 _id: { $in: panelIds },
-            }).session(session);
+            }).session(session).lean();
 
             const candidatePanels = allCandidatePanels.filter(t => {
                 if (t.createdByRole === 'admin' || t.createdByRole === 'superAdmin' || t.isBasePanel === true) {
@@ -2206,108 +2295,43 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                 }
             })
 
-            // Use sets for faster lookups
-            const assignedPanelOriginalSet = new Set(assignedByOriginalId.map(id => String(id)));
-            const assignedPanelNameSet = new Set(assignedByName.map(n => String(n)));
-
             const newPanels = candidatePanels.filter(panel =>
-                !assignedPanelOriginalSet.has(String(panel._id)) &&
-                !assignedPanelNameSet.has(String(panel.name))
+                !panelIdByOriginalId.has(String(panel._id)) &&
+                !panelIdByName.has(String(panel.name))
             );
 
             if (newPanels.length > 0) {
                 const copiedPanels = [];
 
                 for (const panel of newPanels) {
-                    const { _id, ...rest } = panel.toObject();
+                    const { _id, ...rest } = panel;
 
-                    // Map category to franchisee's category id if needed
-                    let newCategory = panel.category;
+                    // Map the source category to the tenant's own copy (in-memory lookup)
+                    const newCategory = categoryResolver.resolve(panel.category);
 
-                    // Normalize incoming category which can be:
-                    // - a plain ObjectId/string
-                    // - a populated object { _id, category }
-                    // - an array containing a populated object
-                    // We want to set newCategory to the franchisee's category _id when possible,
-                    // otherwise use the original category id/string.
-                    try {
-                        // If category is an array, pick the first meaningful entry
-                        let catEntry = null;
-                        if (Array.isArray(panel.category) && panel.category.length > 0) {
-                            catEntry = panel.category[0];
-                        } else if (panel.category && typeof panel.category === 'object') {
-                            catEntry = panel.category;
-                        }
-
-                        if (catEntry) {
-                            // If provided object has an _id, try to find franchisee mapping by originalCategoryId
-                            if (catEntry._id) {
-                                const franchiseeCategoryByOriginal = await categorydb.findOne({
-                                    tenantId: franchiseeId,
-                                    originalCategoryId: catEntry._id
-                                }).session(session);
-                                if (franchiseeCategoryByOriginal) {
-                                    newCategory = franchiseeCategoryByOriginal;
-                                } else {
-                                    // fallback to using the provided _id
-                                    newCategory = catEntry;
-                                }
-                            } else if (catEntry.category) {
-                                // If object has 'category' (name), try to find by name
-                                const franchiseeCategoryByName = await categorydb.findOne({
-                                    tenantId: franchiseeId,
-                                    category: catEntry.category
-                                }).session(session);
-                                if (franchiseeCategoryByName) {
-                                    newCategory = franchiseeCategoryByName;
-                                } else {
-                                    // fallback to the category name (not ideal but keeps original behavior)
-                                    newCategory = catEntry;
-                                }
-                            }
-                        } else {
-                            // If category is a primitive (string/ObjectId), keep as-is
-                            newCategory = test.category;
-                        }
-                    } catch (e) {
-                        // If anything goes wrong, fallback to original category value
-                        console.warn('Category normalization failed, using original value', e);
-                        newCategory = test.category;
-                    }
-
-                    // Map testsId array to tenant test ids (try by originalTestId first, then by name)
+                    // Map testsId array to tenant test ids (by originalTestId first, then by name).
+                    // Uses the prefetched test maps instead of one query per test.
                     const mappedTestIds = [];
                     const testsNames = Array.isArray(panel.tests) ? panel.tests : [];
                     const testsIdArr = Array.isArray(panel.testsId) ? panel.testsId : [];
 
                     for (let idx = 0; idx < testsIdArr.length; idx++) {
                         const srcTestId = testsIdArr[idx];
-                        let foundTest = null;
 
-                        // Try find by originalTestId
-                        try {
-                            foundTest = await testSchema.findOne({
-                                tenantId: franchiseeId,
-                                originalTestId: srcTestId
-                            }).session(session).select('_id');
-                        } catch (e) {
-                            // ignore
-                        }
+                        let foundTestId = testIdByOriginalId.get(toIdString(srcTestId));
 
                         // If not found by originalTestId, try by name (fall back to same index in tests array)
-                        if (!foundTest) {
+                        if (!foundTestId) {
                             const maybeName = testsNames[idx] || null;
                             if (maybeName) {
-                                foundTest = await testSchema.findOne({
-                                    tenantId: franchiseeId,
-                                    Name: maybeName
-                                }).session(session).select('_id');
+                                foundTestId = testIdByName.get(String(maybeName));
                             }
                         }
 
-                        if (foundTest) mappedTestIds.push(foundTest._id);
+                        if (foundTestId) mappedTestIds.push(foundTestId);
                         // else skip that test mapping; panel will have fewer testsId entries
                     }
+
                     if (panel.createdByRole === 'superAdmin') {
                         copiedPanels.push({
                             ...rest,
@@ -2345,44 +2369,50 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     }
                 }
 
-
                 if (copiedPanels.length > 0) {
                     await addPannel.insertMany(copiedPanels, { session });
                     assignedCounts.panels = copiedPanels.length;
 
-                    await Promise.all(
-                        newPanels.map(p =>
-                            addPannel.findByIdAndUpdate(p._id, {
+                    // Make the fresh panels resolvable for the packages copied later
+                    for (const copiedPanel of copiedPanels) {
+                        const copiedOriginalId = toIdString(copiedPanel.originalPanelId);
+                        if (copiedOriginalId && !panelIdByOriginalId.has(copiedOriginalId)) {
+                            panelIdByOriginalId.set(copiedOriginalId, copiedPanel._id);
+                        }
+
+                        const copiedName = String(copiedPanel.name);
+                        if (!panelIdByName.has(copiedName)) {
+                            panelIdByName.set(copiedName, copiedPanel._id);
+                        }
+                    }
+
+                    // ONE bulk update instead of N per-panel updates
+                    const sourcePanelIds = [...new Set(newPanels.map(p => String(p._id)))];
+                    if (sourcePanelIds.length > 0) {
+                        const purchaseDate = new Date();
+                        await addPannel.updateMany(
+                            { _id: { $in: sourcePanelIds } },
+                            {
                                 $push: {
                                     purchasedBy: {
                                         tenantId: franchiseeId,
                                         purchasePrice: 2,
-                                        purchaseDate: new Date()
+                                        purchaseDate
                                     }
                                 }
-                            }, { session })
-                        )
-                    );
+                            },
+                            { session }
+                        );
+                    }
                 }
             }
         }
 
         // === STEP 3: PACKAGES (IMPROVED DUPLICATE DETECTION & ID MAPPING) ===
         if (packageIds && packageIds.length > 0) {
-            const [assignedByOriginalId, assignedByName] = await Promise.all([
-                Package.find({
-                    tenantId: franchiseeId,
-                    originalPackageId: { $in: packageIds }
-                }).session(session).distinct('originalPackageId'),
-
-                Package.find({
-                    tenantId: franchiseeId
-                }).session(session).distinct('packageName')
-            ]);
-
             const allCandidatePackages = await Package.find({
                 _id: { $in: packageIds },
-            }).session(session);
+            }).session(session).lean();
 
             const candidatePackages = allCandidatePackages.filter(p => {
                 if (p.createdByRole === 'admin' || p.createdByRole === 'superAdmin' || p.isBasePackage === true) {
@@ -2393,12 +2423,9 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                 }
             })
 
-            const assignedPackageOriginalSet = new Set(assignedByOriginalId.map(id => String(id)));
-            const assignedPackageNameSet = new Set(assignedByName.map(n => String(n)));
-
             const newPackages = candidatePackages.filter(pkg =>
-                !assignedPackageOriginalSet.has(String(pkg._id)) &&
-                !assignedPackageNameSet.has(String(pkg.packageName))
+                !packageIdByOriginalId.has(String(pkg._id)) &&
+                !packageIdByName.has(String(pkg.packageName))
             );
 
             if (newPackages.length > 0) {
@@ -2406,59 +2433,46 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                 const copiedPackages = [];
 
                 for (const pkg of newPackages) {
-                    const { _id, ...rest } = pkg.toObject();
+                    const { _id, ...rest } = pkg;
 
-                    // Map testIds to tenant test ids
+                    // Map testIds to tenant test ids (in-memory lookups)
                     const mappedTestIds = [];
                     const srcTestIds = Array.isArray(pkg.testIds) ? pkg.testIds : [];
                     const srcTestNames = Array.isArray(pkg.testname) ? pkg.testname : [];
 
                     for (let i = 0; i < srcTestIds.length; i++) {
                         const srcId = srcTestIds[i];
-                        let foundTest = null;
-                        try {
-                            foundTest = await testSchema.findOne({
-                                tenantId: franchiseeId,
-                                originalTestId: srcId
-                            }).session(session).select('_id');
-                        } catch (e) { }
-                        if (!foundTest) {
+                        let foundTestId = testIdByOriginalId.get(toIdString(srcId));
+
+                        if (!foundTestId) {
                             const maybeName = srcTestNames[i] || null;
                             if (maybeName) {
-                                foundTest = await testSchema.findOne({
-                                    tenantId: franchiseeId,
-                                    Name: maybeName
-                                }).session(session).select('_id');
+                                foundTestId = testIdByName.get(String(maybeName));
                             }
                         }
-                        if (foundTest) mappedTestIds.push(foundTest._id);
+
+                        if (foundTestId) mappedTestIds.push(foundTestId);
                     }
 
-                    // Map pannelIds to tenant panel ids
+                    // Map pannelIds to tenant panel ids (in-memory lookups)
                     const mappedPanelIds = [];
                     const srcPanelIds = Array.isArray(pkg.pannelIds) ? pkg.pannelIds : [];
                     const srcPanelNames = Array.isArray(pkg.pannelname) ? pkg.pannelname : [];
 
                     for (let i = 0; i < srcPanelIds.length; i++) {
                         const srcId = srcPanelIds[i];
-                        let foundPanel = null;
-                        try {
-                            foundPanel = await addPannel.findOne({
-                                tenantId: franchiseeId,
-                                originalPanelId: srcId
-                            }).session(session).select('_id');
-                        } catch (e) { }
-                        if (!foundPanel) {
+                        let foundPanelId = panelIdByOriginalId.get(toIdString(srcId));
+
+                        if (!foundPanelId) {
                             const maybeName = srcPanelNames[i] || null;
                             if (maybeName) {
-                                foundPanel = await addPannel.findOne({
-                                    tenantId: franchiseeId,
-                                    name: maybeName
-                                }).session(session).select('_id');
+                                foundPanelId = panelIdByName.get(String(maybeName));
                             }
                         }
-                        if (foundPanel) mappedPanelIds.push(foundPanel._id);
+
+                        if (foundPanelId) mappedPanelIds.push(foundPanelId);
                     }
+
                     if (pkg.createdByRole === 'superAdmin') {
                         copiedPackages.push({
                             ...rest,
@@ -2493,24 +2507,28 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                     }
                 }
 
-
                 if (copiedPackages.length > 0) {
                     await Package.insertMany(copiedPackages, { session });
                     assignedCounts.packages = copiedPackages.length;
 
-                    await Promise.all(
-                        newPackages.map(p =>
-                            Package.findByIdAndUpdate(p._id, {
+                    // ONE bulk update instead of N per-package updates
+                    const sourcePackageIds = [...new Set(newPackages.map(p => String(p._id)))];
+                    if (sourcePackageIds.length > 0) {
+                        const purchaseDate = new Date();
+                        await Package.updateMany(
+                            { _id: { $in: sourcePackageIds } },
+                            {
                                 $push: {
                                     purchasedBy: {
                                         tenantId: franchiseeId,
                                         purchasePrice: 3,
-                                        purchaseDate: new Date()
+                                        purchaseDate
                                     }
                                 }
-                            }, { session })
-                        )
-                    );
+                            },
+                            { session }
+                        );
+                    }
                 }
             }
         }
@@ -2590,10 +2608,19 @@ const adminAssign = asyncHandler(async (req, res) => {
     try {
         const { adminId } = req.body;
 
-        // Fetch assigned tests, panels, packages for this admin
-        const assignedTests = await testSchema.find({ tenantId: adminId });
-        const assignedPanels = await addPannel.find({ tenantId: adminId });
-        const assignedPackages = await Package.find({ tenantId: adminId });
+        // Fetch assigned tests, panels, packages for this admin.
+        // FIXED (performance): the preview only needs id + name + price + createdByRole, so
+        // fetch just those fields instead of every full document (which could build a
+        // multi-MB response for a large admin and time out at the gateway with a 504).
+        const assignedTests = await testSchema.find({ tenantId: adminId })
+            .select("_id Name Price createdByRole")
+            .lean();
+        const assignedPanels = await addPannel.find({ tenantId: adminId })
+            .select("_id name price createdByRole")
+            .lean();
+        const assignedPackages = await Package.find({ tenantId: adminId })
+            .select("_id packageName packageFee createdByRole")
+            .lean();
 
         res.json({
             success: true,

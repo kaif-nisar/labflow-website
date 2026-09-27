@@ -15,9 +15,17 @@
             homePath: "/index.html",
             useFetchGuard: false,
             useGlobalErrorHandlers: true,
+            useFatalErrorPage: false,
+            // Which portal /api/session should validate ("superAdmin" | "user" | "any")
+            sessionType: "any",
+            // Retry a session lookup once when the server answers 5xx / the network drops
+            transientRetryDelayMs: 1200,
         },
         redirectScheduled: false,
+        sessionRecoveryPromise: null,
     };
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const buildSearchParams = (params) => {
         const query = new URLSearchParams();
@@ -190,8 +198,33 @@
         window.__portalFetchGuardInstalled = true;
         const originalFetch = window.fetch.bind(window);
 
+        // Several parallel API calls can fail with 401 at the same moment (the
+        // access token expired while the tab stayed open). Only one silent
+        // refresh may run - the other requests reuse its result.
+        const recoverSession = () => {
+            if (state.sessionRecoveryPromise) {
+                return state.sessionRecoveryPromise;
+            }
+
+            state.sessionRecoveryPromise = restoreSession({
+                type: state.config.sessionType || "any",
+                strict: false,
+            })
+                .catch((error) => {
+                    console.error("[PortalGuard] Session recovery failed:", error);
+                    return { authenticated: false, transient: true, error };
+                })
+                .then((session) => {
+                    state.sessionRecoveryPromise = null;
+                    return session;
+                });
+
+            return state.sessionRecoveryPromise;
+        };
+
         window.fetch = async (input, init) => {
-            const response = await originalFetch(input, init);
+            const requestInit = init || {};
+            const response = await originalFetch(input, requestInit);
 
             try {
                 const requestUrl =
@@ -201,14 +234,45 @@
 
                 const isApiRequest = requestUrl.includes("/api/");
                 const isSessionRequest = requestUrl.includes("/api/session");
+                const canReplayRequest = typeof input === "string" || !input?.body;
 
-                if (isApiRequest && !isSessionRequest && response.status === 401) {
+                if (
+                    isApiRequest &&
+                    !isSessionRequest &&
+                    response.status === 401 &&
+                    canReplayRequest &&
+                    !requestInit.__portalRetried
+                ) {
                     let payload = null;
 
                     try {
                         payload = await response.clone().json();
                     } catch (error) {
                         payload = null;
+                    }
+
+                    // A 24h access token can expire while a tab stays open. Use
+                    // the refresh cookie to restore the session and replay this
+                    // request instead of logging the user straight out.
+                    const recoveredSession = await recoverSession();
+
+                    if (recoveredSession?.authenticated) {
+                        return originalFetch(input, { ...requestInit, __portalRetried: true });
+                    }
+
+                    if (recoveredSession?.transient) {
+                        redirectToErrorPage({
+                            status: 503,
+                            title: "Server Busy",
+                            message:
+                                "We could not verify your session because the server is temporarily unavailable. Your login is still saved - please retry in a few moments.",
+                            loginPath: payload?.loginPath || state.config.loginPath,
+                            homePath: payload?.homePath || state.config.homePath,
+                            returnTo: `${window.location.pathname}${window.location.search}`,
+                            clearSession: false,
+                        });
+
+                        return response;
                     }
 
                     handleSessionFailure({
@@ -237,17 +301,15 @@
                 return;
             }
 
-            console.error(event.error);
+            console.error("[PortalGuard] Uncaught error:", event.error);
 
-            showFatalError({
-                title: "Unexpected Error",
-                message: "A page error interrupted the application. You can reload the page or login again.",
-                loginPath: state.config.loginPath,
-                homePath: state.config.homePath,
-            });
-
-            if (typeof event.preventDefault === "function") {
-                event.preventDefault();
+            if (state.config.useFatalErrorPage) {
+                showFatalError({
+                    title: "Unexpected Error",
+                    message: "A page error interrupted the application. You can reload the page or login again.",
+                    loginPath: state.config.loginPath,
+                    homePath: state.config.homePath,
+                });
             }
         });
 
@@ -258,20 +320,18 @@
                 return;
             }
 
-            console.error(reason);
+            console.error("[PortalGuard] Unhandled rejection:", reason);
 
-            showFatalError({
-                title: "Something Went Wrong",
-                message:
-                    typeof reason === "string" && reason.trim()
-                        ? reason
-                        : "We ran into an unexpected problem while processing this page.",
-                loginPath: state.config.loginPath,
-                homePath: state.config.homePath,
-            });
-
-            if (typeof event.preventDefault === "function") {
-                event.preventDefault();
+            if (state.config.useFatalErrorPage) {
+                showFatalError({
+                    title: "Something Went Wrong",
+                    message:
+                        typeof reason === "string" && reason.trim()
+                            ? reason
+                            : "We ran into an unexpected problem while processing this page.",
+                    loginPath: state.config.loginPath,
+                    homePath: state.config.homePath,
+                });
             }
         });
     };
@@ -292,17 +352,39 @@
         return api;
     };
 
-    const restoreSession = async ({ type = "any", strict = false } = {}) => {
+    const restoreSession = async ({ type = "any", strict = false, retryOnTransient = true } = {}) => {
         const query = buildSearchParams({
             type,
             strict: strict ? "true" : "false",
         });
 
-        const response = await fetch(`/api/session?${query}`, {
-            method: "GET",
-            credentials: "include",
-            cache: "no-store",
-        });
+        let response = null;
+
+        try {
+            response = await fetch(`/api/session?${query}`, {
+                method: "GET",
+                credentials: "include",
+                cache: "no-store",
+            });
+        } catch (error) {
+            // Offline / proxy / connection reset. This is NOT a logout, so the
+            // stored session is kept and the lookup is retried once.
+            console.warn("[PortalGuard] Session lookup failed (network):", error);
+
+            if (retryOnTransient) {
+                await wait(state.config.transientRetryDelayMs);
+                return restoreSession({ type, strict, retryOnTransient: false });
+            }
+
+            return {
+                authenticated: false,
+                transient: true,
+                networkError: true,
+                error,
+                response: null,
+                payload: null,
+            };
+        }
 
         let payload = null;
 
@@ -312,17 +394,37 @@
             payload = null;
         }
 
-        if (!response.ok || !payload?.authenticated) {
-            clearStoredSession();
+        if (response.ok && payload?.authenticated) {
+            syncSession(payload);
+            return payload;
+        }
+
+        // 5xx / 429 mean the server (or its database) is in trouble - not that the
+        // user's login is invalid. Never wipe the session in that case, otherwise
+        // one slow MongoDB response logs everybody out.
+        const isTransientFailure = response.status >= 500 || response.status === 429;
+
+        if (isTransientFailure) {
+            if (retryOnTransient) {
+                await wait(state.config.transientRetryDelayMs);
+                return restoreSession({ type, strict, retryOnTransient: false });
+            }
+
             return {
                 authenticated: false,
+                transient: true,
+                status: response.status,
                 response,
                 payload,
             };
         }
 
-        syncSession(payload);
-        return payload;
+        clearStoredSession();
+        return {
+            authenticated: false,
+            response,
+            payload,
+        };
     };
 
     const ensureSession = async ({
@@ -334,6 +436,24 @@
         const session = await restoreSession({ type, strict });
 
         if (!session?.authenticated) {
+            if (session?.transient) {
+                // Server (or its database) is unavailable: keep the login and
+                // offer a retry instead of destroying a valid session.
+                redirectToErrorPage({
+                    status: session?.status || 503,
+                    title: "Server Busy",
+                    message:
+                        session?.payload?.message ||
+                        "We could not verify your session because the server is temporarily unavailable. Your login is still saved - please retry in a few moments.",
+                    loginPath: loginPath || state.config.loginPath,
+                    homePath: state.config.homePath,
+                    returnTo: `${window.location.pathname}${window.location.search}`,
+                    clearSession: false,
+                });
+
+                return null;
+            }
+
             handleSessionFailure({
                 loginPath: loginPath || state.config.loginPath,
                 message: session?.payload?.message,

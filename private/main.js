@@ -6,8 +6,9 @@
 window.BASE_URL = window.location.origin;
 const portalGuard = window.AppPortalGuard.configure({
     loginPath: "/login.html",
-    homePath: "/superAdmin.html",
+    homePath: "/superAdmin/superAdmin.html",
     useFetchGuard: true,
+    sessionType: "superAdmin",
 });
 
 function loaderfunction() {

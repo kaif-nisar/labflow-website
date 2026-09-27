@@ -3158,7 +3158,7 @@ const getTestNameController = async (req, res) => {
                         if (obj.collectionName === "Package") {
                             const packageKey = `${obj.id}_${element.typeOfSample}`;
                             if (processedPackages.has(packageKey)) {
-                                return { singleTests: [], panels: [] };
+                                return { singleTests: [], panels: [], packages: [] };
                             }
                             processedPackages.add(packageKey);
 
@@ -3170,7 +3170,7 @@ const getTestNameController = async (req, res) => {
                                 ],
                                 tenantId: tid
                             })
-                                .select('testIds pannelIds')
+                                .select('packageName testIds pannelIds')
                                 .populate({
                                     path: 'testIds',
                                     match: {
@@ -3192,7 +3192,7 @@ const getTestNameController = async (req, res) => {
                                     }
                                 });
 
-                            if (!doc) return { singleTests: [], panels: [] };
+                            if (!doc) return { singleTests: [], panels: [], packages: [] };
 
                             const packageTestIds = [];
                             const packagePanelIds = [];
@@ -3246,33 +3246,80 @@ const getTestNameController = async (req, res) => {
                                 }
                             });
 
-                            return { singleTests: packageTests, panels: packagePanels };
+                            return { singleTests: packageTests, panels: packagePanels, packages: [doc] };
                         }
 
-                        return { singleTests: [], panels: [] };
+                        return { singleTests: [], panels: [], packages: [] };
                     })
                 );
 
                 // ✅ Flatten results
-                const singleTests = array.flatMap(r => r.singleTests);
-                const panels = array.flatMap(r => r.panels);
+                const singleTests = array.flatMap(r => r.singleTests || []);
+                const panels = array.flatMap(r => r.panels || []);
+                const packages = array.flatMap(r => r.packages || []);
 
-                return { barcodes, singleTests, panels };
+                return { barcodes, singleTests, panels, packages };
             })
         );
 
         // ✅ Merge all barcode results
+        const barcodesObject = barcodes.toObject ? barcodes.toObject() : barcodes;
         const mergedResult = barcodeResults.reduce(
             (acc, curr, index) => {
                 if (index === 0) {
-                    acc.barcodes = curr.barcodes;
+                    acc.barcodes = barcodesObject;
                 }
-                acc.singleTests = [...acc.singleTests, ...curr.singleTests];
-                acc.panels = [...acc.panels, ...curr.panels];
+                acc.singleTests = [...acc.singleTests, ...(curr.singleTests || [])];
+                acc.panels = [...acc.panels, ...(curr.panels || [])];
+                acc.packages = [...(acc.packages || []), ...(curr.packages || [])];
                 return acc;
             },
-            { barcodes: {}, singleTests: [], panels: [] }
+            { barcodes: barcodesObject, singleTests: [], panels: [], packages: [] }
         );
+
+        // ✅ Build dynamic ID-to-Name map to reflect latest names from DB
+        const idToNameMap = new Map();
+
+        mergedResult.singleTests.forEach((test) => {
+            const name = test?.Short_name || test?.Name;
+            if (test?._id && name) idToNameMap.set(test._id.toString(), name);
+            if (test?.originalTestId && name) idToNameMap.set(test.originalTestId.toString(), name);
+        });
+
+        mergedResult.panels.forEach((panel) => {
+            if (panel?._id && panel?.name) idToNameMap.set(panel._id.toString(), panel.name);
+            if (panel?.originalPanelId && panel?.name) idToNameMap.set(panel.originalPanelId.toString(), panel.name);
+        });
+
+        (mergedResult.packages || []).forEach((pkg) => {
+            if (pkg?._id && pkg?.packageName) idToNameMap.set(pkg._id.toString(), pkg.packageName);
+            if (pkg?.originalPackageId && pkg?.packageName) idToNameMap.set(pkg.originalPackageId.toString(), pkg.packageName);
+        });
+
+        const allResolvedInvestigations = [];
+
+        if (Array.isArray(mergedResult.barcodes?.barcodes)) {
+            mergedResult.barcodes.barcodes.forEach((element) => {
+                const resolvedNames = [];
+                if (Array.isArray(element.testIds) && element.testIds.length > 0) {
+                    element.testIds.forEach((item) => {
+                        const idKey = item?.id?.toString();
+                        if (idKey && idToNameMap.has(idKey)) {
+                            resolvedNames.push(idToNameMap.get(idKey));
+                        }
+                    });
+                }
+
+                if (resolvedNames.length > 0) {
+                    element.testandpannelArray = [...new Set(resolvedNames)];
+                    allResolvedInvestigations.push(...resolvedNames);
+                } else if (Array.isArray(element.testandpannelArray)) {
+                    allResolvedInvestigations.push(...element.testandpannelArray);
+                }
+            });
+        }
+
+        mergedResult.investigations = [...new Set(allResolvedInvestigations.filter(Boolean))];
 
         return res.status(200).json([mergedResult]);
     } catch (error) {

@@ -43,7 +43,6 @@ const subscriberSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-subscriberSchema.index({ email: 1 }, { unique: true });
 
 const Subscriber = mongoose.model('Subscriber', subscriberSchema);
 

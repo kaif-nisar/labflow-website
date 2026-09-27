@@ -18,7 +18,8 @@
     "start": "node --max-old-space-size=1024 app.js",
     "dev": "nodemon -r dotenv/config --experimental-json-modules app.js",
     "sync": "browser-sync start --proxy localhost:3000 --files 'public/index.html, app.js, src/routes/user.routes.js' --port 3001 --reload-delay 1000",
-    "prod": "node --max-old-space-size=1024 app.js"
+    "prod": "node --max-old-space-size=1024 app.js",
+    "test:session": "node tests/session-cookie-helpers.test.mjs && node tests/session-rotation.test.mjs"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -402,7 +402,20 @@ document.getElementById("assignModelsBtn").addEventListener("click", async funct
             }),
         });
 
-        const result = await assignRes.json();
+        // FIXED: a 504/gateway timeout answers with an HTML page, so assignRes.json() used to
+        // crash with "SyntaxError: Unexpected token '<'". Read the body as text and parse it
+        // defensively so the user sees a real message instead of a JSON parse error.
+        const rawBody = await assignRes.text();
+        let result = null;
+
+        try {
+            result = rawBody ? JSON.parse(rawBody) : {};
+        } catch (parseError) {
+            if ([502, 503, 504].includes(assignRes.status)) {
+                throw new Error(`Server took too long to answer (HTTP ${assignRes.status}). Nothing is duplicated - please click Assign again to continue.`);
+            }
+            throw new Error(`Unexpected server response (HTTP ${assignRes.status}). Please refresh the page and try again.`);
+        }
 
         if (result.success || assignRes.ok) {
             const assignedCounts = result.assignedCounts || {};
@@ -454,7 +467,7 @@ document.getElementById("assignModelsBtn").addEventListener("click", async funct
 
     } catch (err) {
         console.error('Assignment error:', err);
-        showMessage('error', `Network error: ${err.message}. Please check your connection and try again.`);
+        showMessage('error', err.message || 'Assignment failed. Please check your connection and try again.');
     } finally {
         this.innerHTML = originalText;
         this.disabled = false;

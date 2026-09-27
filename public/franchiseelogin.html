@@ -92,12 +92,9 @@
 
         /* ══════════════════════════════════
            LEFT VISUAL PANEL
-           Uses CSS Grid internally so every
-           section gets exactly equal space
         ══════════════════════════════════ */
         .auth-visual {
             display: grid;
-            /* 4 rows: brand | copy | lottie | metrics */
             grid-template-rows: auto auto 1fr auto;
             gap: 16px;
             padding: 20px 28px;
@@ -126,8 +123,8 @@
         .brand-header {
             display: inline-flex; align-items: center; gap: 12px;
             padding: 11px 18px; border-radius: 16px;
-                        background: rgba(255,255,255,0.97);
-border: 1px solid var(--glass-b);
+            background: rgba(255,255,255,0.97);
+            border: 1px solid var(--glass-b);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             width: fit-content;
             position: relative; z-index: 1;
@@ -415,15 +412,12 @@ border: 1px solid var(--glass-b);
 
         /* ══════════════════════════════════
            MOBILE ≤640px
-           ONLY login card, perfectly centered
-           NO left panel, NO scroll
         ══════════════════════════════════ */
         @media (max-width: 640px) {
             html { overflow: auto !important; }
             html body { overflow: auto !important; height: auto !important; }
 
             .auth-shell {
-                /* Override grid — use flex center */
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -432,12 +426,10 @@ border: 1px solid var(--glass-b);
                 padding: 24px 18px !important;
             }
 
-            /* Hide the entire left visual section */
             .auth-visual {
                 display: none !important;
             }
 
-            /* Right panel fills available width, no extra bg */
             .auth-panel {
                 width: 100% !important;
                 max-width: 420px !important;
@@ -472,7 +464,7 @@ border: 1px solid var(--glass-b);
         <div class="visual-body">
             <div class="eyebrow">Franchise Workspace</div>
             <div class="visual-copy">
-                <h1>Stay connected with bookings,<br><em>case progress,</em> reports &amp; operations.</h1>
+                <h1>Stay connected with bookings,<br><em>case progress,</em> reports & operations.</h1>
                 <p>Franchisee teams log in securely, manage daily activity faster, and keep reporting workflows smooth across every device.</p>
             </div>
         </div>
@@ -548,7 +540,7 @@ border: 1px solid var(--glass-b);
 </div>
 
 <script src="/js/device-lock-screen.js"></script>
-<script src="/js/portal-guard.js"></script>
+<script src="/js/portal-guard.js?v=2"></script>
 <script src="/js/portal-ui.js"></script>
 <script>
     const BASE_URL = window.location.origin;
@@ -556,7 +548,8 @@ border: 1px solid var(--glass-b);
     document.addEventListener('DOMContentLoaded', () => {
         const guard = window.AppPortalGuard.configure({
             loginPath: '/franchiseelogin.html',
-            homePath:  '/index.html'
+            homePath:  '/index.html',
+            sessionType: 'user'
         });
 
         lottie.loadAnimation({
@@ -578,8 +571,11 @@ border: 1px solid var(--glass-b);
         const hideError  = ()    => { errorMessage.textContent = ''; errorMessage.style.display = 'none'; };
         const setLoading = (v)   => { submitButton.disabled = v; submitButton.textContent = v ? 'Signing in…' : 'Sign In to Portal'; };
 
+        // Industry-standard role isolation: strict:true ensures ONLY a user
+        // (admin/franchisee) session can auto-login here. A superAdmin session
+        // will NOT satisfy this and will NOT redirect to the superAdmin portal.
         guard.autoLoginFromSession({
-            type: 'user', strict: false,
+            type: 'user', strict: true,
             onSuccess: (s) => window.location.replace(s.redirectTo || '/admin/admin.html')
         });
 
@@ -635,8 +631,4 @@ border: 1px solid var(--glass-b);
     });
 </script>
 </body>
-<<<<<<< ours
 </html>
-=======
-</html>
->>>>>>> theirs

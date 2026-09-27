@@ -5,6 +5,12 @@ import { SuperAdmin } from "../src/models/superAdmin.model.js";
 import { User } from "../src/models/user.model.js";
 import { asyncHandler } from "../src/utils/asyncHandler.js";
 import { ApiError } from "../src/utils/apiError.js";
+import {
+  isRefreshTokenTracked,
+  readRotatedRefreshToken,
+  registerRefreshToken,
+  rememberRotatedRefreshToken,
+} from "../src/utils/refreshTokenRegistry.js";
 
 const ACCESS_TOKEN_COOKIE = "accessToken";
 const REFRESH_TOKEN_COOKIE = "refreshToken";
@@ -120,6 +126,25 @@ const buildForbiddenError = (message, code = "FORBIDDEN") => {
   const error = new ApiError(403, message);
   error.code = code;
   return error;
+};
+
+/**
+ * True only for problems caused by the presented JWT itself (expired, malformed,
+ * wrong secret). Anything else - MongoDB timeouts, replica set elections, DNS
+ * hiccups - must never be reported as "session expired", because the client
+ * reacts to a 401 by clearing the cookies and sending the user back to login.
+ */
+export const isTokenValidationError = (error) => {
+  const name = String(error?.name || "");
+
+  return (
+    error instanceof jwt.JsonWebTokenError ||
+    error instanceof jwt.TokenExpiredError ||
+    error instanceof jwt.NotBeforeError ||
+    name === "JsonWebTokenError" ||
+    name === "TokenExpiredError" ||
+    name === "NotBeforeError"
+  );
 };
 
 const extractBearerToken = (authorizationHeader = "") => {
@@ -515,6 +540,43 @@ export const trimUserDeviceSessionsToLimit = async (userId, limit) => {
 export const getSessionTokenHash = (sessionToken) => hashDeviceSessionToken(sessionToken);
 export const resolveLocationDataFromRequest = (req) => getLocationDataFromRequest(req);
 
+const DEFAULT_ACCESS_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_REFRESH_TOKEN_EXPIRY_MS = 10 * 24 * 60 * 60 * 1000;
+
+/**
+ * Converts a JWT style duration ("1d", "12h", "30m", "900s") into milliseconds
+ * so the auth cookies expire together with the tokens they carry. Without a
+ * maxAge the browser treated the portal login as a session cookie, and every
+ * browser restart / mobile tab cleanup silently logged the user out.
+ */
+export const parseTokenDurationToMs = (value, fallbackMs) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 0 ? value * 1000 : fallbackMs;
+  }
+
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)?$/i);
+
+  if (!match) {
+    return fallbackMs;
+  }
+
+  const unitMs = {
+    ms: 1,
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+    w: 7 * 24 * 60 * 60 * 1000,
+  };
+
+  const amount = Number.parseFloat(match[1]);
+  const resolved = amount * (unitMs[String(match[2] || "ms").toLowerCase()] || 1);
+
+  return Number.isFinite(resolved) && resolved > 0 ? Math.floor(resolved) : fallbackMs;
+};
+
 export const getAuthCookieOptions = () => {
   return {
     httpOnly: true,
@@ -524,32 +586,54 @@ export const getAuthCookieOptions = () => {
   };
 };
 
-export const clearAuthCookies = (res) => {
-  const cookieOptions = getAuthCookieOptions();
+export const getAccessTokenCookieOptions = () => ({
+  ...getAuthCookieOptions(),
+  maxAge: parseTokenDurationToMs(
+    process.env.ACCESS_TOKEN_EXPIRY,
+    DEFAULT_ACCESS_TOKEN_EXPIRY_MS
+  ),
+});
 
-  res.clearCookie(ACCESS_TOKEN_COOKIE, cookieOptions);
-  res.clearCookie(REFRESH_TOKEN_COOKIE, cookieOptions);
+export const getRefreshTokenCookieOptions = () => ({
+  ...getAuthCookieOptions(),
+  maxAge: parseTokenDurationToMs(
+    process.env.REFRESH_TOKEN_EXPIRY,
+    DEFAULT_REFRESH_TOKEN_EXPIRY_MS
+  ),
+});
 
-  return res;
-};
-
-const setAuthCookies = (res, tokens) => {
+export const applyAuthCookiesToResponse = (res, tokens) => {
   if (!tokens?.accessToken && !tokens?.refreshToken) {
     return res;
   }
 
-  const cookieOptions = getAuthCookieOptions();
-
   if (tokens.accessToken) {
-    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, cookieOptions);
+    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, getAccessTokenCookieOptions());
   }
 
   if (tokens.refreshToken) {
-    res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, cookieOptions);
+    res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, getRefreshTokenCookieOptions());
   }
 
   return res;
 };
+
+export const clearAuthCookies = (res) => {
+  res.clearCookie(ACCESS_TOKEN_COOKIE, {
+    ...getAccessTokenCookieOptions(),
+    maxAge: 0,
+    expires: new Date(0),
+  });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, {
+    ...getRefreshTokenCookieOptions(),
+    maxAge: 0,
+    expires: new Date(0),
+  });
+
+  return res;
+};
+
+const setAuthCookies = (res, tokens) => applyAuthCookiesToResponse(res, tokens);
 
 const loadUserSession = async (userId) => {
   return User.findById(userId)
@@ -566,6 +650,20 @@ const loadUserSession = async (userId) => {
 
 const loadSuperAdminSession = async (superAdminId) => {
   return SuperAdmin.findById(superAdminId).select(SUPER_ADMIN_SAFE_SELECT);
+};
+
+// Session rotation needs the stored refresh token, which the "safe" selects
+// above strip out. Rotating with the safe loader compared `undefined` against
+// the presented token, so a refresh could never succeed and every portal died
+// with "session expired" as soon as its 24h access token expired.
+// These documents stay server side - the payload sent to the browser is always
+// re-read with the safe loaders.
+const loadUserSessionForRotation = async (userId) => {
+  return User.findById(userId).select("-password");
+};
+
+const loadSuperAdminSessionForRotation = async (superAdminId) => {
+  return SuperAdmin.findById(superAdminId).select("-password");
 };
 
 const buildPortalRedirectPath = (kind, principal) => {
@@ -599,11 +697,20 @@ const resolveAccessSession = async (accessToken, type, strict) => {
     );
 
     const accessKind = decodedToken?.role === "superAdmin" ? "superAdmin" : "user";
-    const candidates = strict
-      ? [type]
-      : accessKind === "superAdmin"
-        ? ["superAdmin"]
-        : ["user"];
+
+    // Industry-standard role isolation: a superAdmin token can ONLY resolve a
+    // superAdmin session, and a user token can ONLY resolve a user session.
+    // `strict: false` only permits fallback when `type` is "any", never across roles.
+    let candidates = [];
+
+    if (type === "superAdmin") {
+      candidates = ["superAdmin"];
+    } else if (type === "user") {
+      candidates = ["user"];
+    } else {
+      // type === "any"
+      candidates = [accessKind];
+    }
 
     for (const candidate of candidates) {
       if (candidate === "any") {
@@ -611,10 +718,6 @@ const resolveAccessSession = async (accessToken, type, strict) => {
       }
 
       if (candidate === "superAdmin") {
-        if (type === "user" && strict) {
-          continue;
-        }
-
         const superAdmin = await loadSuperAdminSession(decodedToken?._id);
         if (superAdmin) {
           return {
@@ -629,10 +732,6 @@ const resolveAccessSession = async (accessToken, type, strict) => {
       }
 
       if (candidate === "user") {
-        if (type === "superAdmin" && strict) {
-          continue;
-        }
-
         const user = await loadUserSession(decodedToken?._id);
         if (user) {
           const deviceSessionResult = await validateUserDeviceSession(
@@ -677,7 +776,14 @@ const resolveAccessSession = async (accessToken, type, strict) => {
       }
     }
   } catch (error) {
-    return null;
+    if (isTokenValidationError(error)) {
+      // Expired / malformed access token: no access session, but the refresh
+      // cookie may still restore this portal session.
+      return null;
+    }
+
+    // A database outage or timeout must never be reported as "session expired".
+    throw error;
   }
 
   return null;
@@ -689,21 +795,34 @@ const rotateUserSessionFromRefreshToken = async (refreshToken) => {
     process.env.SUPER_ADMIN_REFRESH_TOKEN_SECRET
   );
 
-  const user = await loadUserSession(decodedToken?._id);
+  const user = await loadUserSessionForRotation(decodedToken?._id);
 
-  if (!user || user.refreshToken !== refreshToken) {
+  if (!user) {
+    return null;
+  }
+
+  // Two tabs (or one retried request) can present the same refresh token at the
+  // same moment. Replaying the already rotated session keeps both tabs signed
+  // in instead of invalidating the cookie of the losing request.
+  const replayedSession = readRotatedRefreshToken(refreshToken);
+
+  if (replayedSession) {
+    return replayedSession;
+  }
+
+  if (!isRefreshTokenTracked(user, refreshToken)) {
     return null;
   }
 
   const accessToken = user.generateAccessToken();
   const nextRefreshToken = user.generateRefreshToken();
 
-  user.refreshToken = nextRefreshToken;
+  registerRefreshToken(user, nextRefreshToken);
   await user.save({ validateBeforeSave: false });
 
   const refreshedUser = await loadUserSession(user._id);
 
-  return {
+  const session = {
     kind: "user",
     principal: refreshedUser,
     user: refreshedUser,
@@ -714,6 +833,10 @@ const rotateUserSessionFromRefreshToken = async (refreshToken) => {
       refreshToken: nextRefreshToken,
     },
   };
+
+  rememberRotatedRefreshToken(refreshToken, session);
+
+  return session;
 };
 
 const rotateSuperAdminSessionFromRefreshToken = async (refreshToken) => {
@@ -722,21 +845,31 @@ const rotateSuperAdminSessionFromRefreshToken = async (refreshToken) => {
     process.env.SUPER_ADMIN_REFRESH_TOKEN_SECRET
   );
 
-  const superAdmin = await loadSuperAdminSession(decodedToken?._id);
+  const superAdmin = await loadSuperAdminSessionForRotation(decodedToken?._id);
 
-  if (!superAdmin || superAdmin.refreshToken !== refreshToken) {
+  if (!superAdmin) {
+    return null;
+  }
+
+  const replayedSession = readRotatedRefreshToken(refreshToken);
+
+  if (replayedSession) {
+    return replayedSession;
+  }
+
+  if (!isRefreshTokenTracked(superAdmin, refreshToken)) {
     return null;
   }
 
   const accessToken = superAdmin.generateAccessToken();
   const nextRefreshToken = superAdmin.generateRefreshToken();
 
-  superAdmin.refreshToken = nextRefreshToken;
+  registerRefreshToken(superAdmin, nextRefreshToken);
   await superAdmin.save({ validateBeforeSave: false });
 
   const refreshedSuperAdmin = await loadSuperAdminSession(superAdmin._id);
 
-  return {
+  const session = {
     kind: "superAdmin",
     principal: refreshedSuperAdmin,
     superAdmin: refreshedSuperAdmin,
@@ -747,6 +880,10 @@ const rotateSuperAdminSessionFromRefreshToken = async (refreshToken) => {
       refreshToken: nextRefreshToken,
     },
   };
+
+  rememberRotatedRefreshToken(refreshToken, session);
+
+  return session;
 };
 
 const resolveRefreshSession = async (refreshToken, type, strict) => {
@@ -754,20 +891,19 @@ const resolveRefreshSession = async (refreshToken, type, strict) => {
     return null;
   }
 
-  const candidates = [];
+  // Same role-isolation rule as resolveAccessSession: a "user" request is never
+  // satisfied by a superAdmin refresh token and vice versa. Attempting to
+  // decrypt a superAdmin refresh token with the user's path would throw anyway,
+  // so we only try the matching role for the requested type.
+  let candidates = [];
 
   if (type === "superAdmin") {
-    candidates.push("superAdmin");
-    if (!strict) {
-      candidates.push("user");
-    }
+    candidates = ["superAdmin"];
   } else if (type === "user") {
-    candidates.push("user");
-    if (!strict) {
-      candidates.push("superAdmin");
-    }
+    candidates = ["user"];
   } else {
-    candidates.push("user", "superAdmin");
+    // type === "any": try user first (most common), then superAdmin.
+    candidates = ["user", "superAdmin"];
   }
 
   for (const candidate of candidates) {
@@ -787,6 +923,10 @@ const resolveRefreshSession = async (refreshToken, type, strict) => {
         }
       }
     } catch (error) {
+      if (!isTokenValidationError(error)) {
+        throw error;
+      }
+
       continue;
     }
   }

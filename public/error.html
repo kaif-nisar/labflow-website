@@ -249,6 +249,24 @@
                 message: "We hit an unexpected error while processing your request.",
                 help: "Please try again in a moment. If the issue continues, login again or return home.",
             },
+            502: {
+                eyebrow: "Server Unreachable",
+                title: "The server is restarting (502 Bad Gateway)",
+                message: "The portal could not reach the application server. This normally means the app is restarting or temporarily overloaded.",
+                help: "Wait a few seconds and reload. Your login is usually still valid - the session restores itself when the refresh cookie is still alive.",
+            },
+            503: {
+                eyebrow: "Service Busy",
+                title: "The service is temporarily unavailable (503)",
+                message: "The portal is busy, under maintenance, or its database is not answering right now.",
+                help: "Retry in a few seconds. Use Reload first so your existing session can be restored.",
+            },
+            504: {
+                eyebrow: "Server Timeout",
+                title: "The server took too long to answer (504 Gateway Timeout)",
+                message: "A heavy operation (for example generating a PDF report) did not finish in time.",
+                help: "Reload the page and retry the action. If it repeats, share the time of the attempt with support.",
+            },
         };
 
         const fallback = defaults[statusLabel] || defaults[500];

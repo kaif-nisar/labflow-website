@@ -1470,22 +1470,85 @@ async function loadfunction() {
 
     // this is for testArray2
     async function getallpptfromrelatedbarcode(barcodes) {
-        const bookingByBarcode = new Map();
-        booking.tableData.forEach((entry) => {
-            const key = (entry.barcodeId || "").trim();
-            if (!key) return;
-            bookingByBarcode.set(key, entry);
+        const idToNameMap = new Map();
+
+        (testpanels?.singleTests || []).forEach(test => {
+            const name = test?.Short_name || test?.Name;
+            if (test?._id && name) idToNameMap.set(String(test._id), name);
+            if (test?.originalTestId && name) idToNameMap.set(String(test.originalTestId), name);
         });
 
-        for (const object of barcodes) {
-            const match = bookingByBarcode.get((object.barcode || "").trim());
-            if (match?.testName) testArray2.push(...match.testName.split(","));
+        (testpanels?.panels || []).forEach(panel => {
+            if (panel?._id && panel?.name) idToNameMap.set(String(panel._id), panel.name);
+            if (panel?.originalPanelId && panel?.name) idToNameMap.set(String(panel.originalPanelId), panel.name);
+        });
+
+        (testpanels?.packages || []).forEach(pkg => {
+            if (pkg?._id && pkg?.packageName) idToNameMap.set(String(pkg._id), pkg.packageName);
+            if (pkg?.originalPackageId && pkg?.packageName) idToNameMap.set(String(pkg.originalPackageId), pkg.packageName);
+        });
+
+        const bookingByBarcode = new Map();
+        if (Array.isArray(booking?.tableData)) {
+            booking.tableData.forEach((entry) => {
+                const key = (entry.barcodeId || entry.confirmBarcodeId || "").trim();
+                if (!key) return;
+                bookingByBarcode.set(key, entry);
+            });
+        }
+
+        for (const object of (barcodes || [])) {
+            const barcodeKey = (object?.barcode || "").trim();
+            const match = bookingByBarcode.get(barcodeKey);
+            const resolvedForBarcode = [];
+
+            // 1. Resolve by object.testIds (from database acceptedBarcode)
+            if (Array.isArray(object?.testIds) && object.testIds.length > 0) {
+                object.testIds.forEach(item => {
+                    const idKey = item?.id ? String(item.id) : "";
+                    if (idKey && idToNameMap.has(idKey)) {
+                        resolvedForBarcode.push(idToNameMap.get(idKey));
+                    }
+                });
+            }
+
+            // 2. Resolve by match.ids (from booking.tableData)
+            if (resolvedForBarcode.length === 0 && Array.isArray(match?.ids) && match.ids.length > 0) {
+                match.ids.forEach(item => {
+                    const idKey = item?.id ? String(item.id) : "";
+                    if (idKey && idToNameMap.has(idKey)) {
+                        resolvedForBarcode.push(idToNameMap.get(idKey));
+                    }
+                });
+            }
+
+            // 3. If object.testandpannelArray has updated items from API
+            if (resolvedForBarcode.length === 0 && Array.isArray(object?.testandpannelArray) && object.testandpannelArray.length > 0) {
+                resolvedForBarcode.push(...object.testandpannelArray);
+            }
+
+            // 4. Fallback to match.testName string if legacy booking without IDs
+            if (resolvedForBarcode.length === 0 && match?.testName) {
+                resolvedForBarcode.push(...match.testName.split(",").map(t => t.trim()).filter(Boolean));
+            }
+
+            if (resolvedForBarcode.length > 0) {
+                testArray2.push(...resolvedForBarcode);
+                if (match) {
+                    match.testName = [...new Set(resolvedForBarcode)].join(", ");
+                }
+            }
+        }
+
+        // If testArray2 is still empty but testpanels.investigations exists, use that
+        if (testArray2.length === 0 && Array.isArray(testpanels?.investigations) && testpanels.investigations.length > 0) {
+            testArray2.push(...testpanels.investigations);
         }
     }
 
     // for removing duplicacy
-    let uniquetestArray2 = [...new Set(testArray2)];
-    let uniquetestArray = [...new Set(testArray)];
+    let uniquetestArray2 = [...new Set(testArray2.map(s => String(s).trim()).filter(Boolean))];
+    let uniquetestArray = [...new Set(testArray.map(s => String(s).trim()).filter(Boolean))];
 
     function parseDateInput(value, fallbackTime = "") {
         if (!value) return null;
@@ -3292,6 +3355,81 @@ async function loadfunction() {
 
             singleTestsByCategoryMap.get(key).tests.push(test);
         });
+
+        // Ensure panels are reflected in uniqueTestArray2 with their latest names from DB
+        if (panels && panels.length > 0) {
+            panels.forEach((panel) => {
+                if (!panel?.name) return;
+                const panelId = String(panel._id || "");
+                const origId = String(panel.originalPanelId || "");
+
+                // Check if any booking row had this panel ID
+                (booking?.tableData || []).forEach(row => {
+                    const matches = (row.ids || []).some(t => String(t?.id) === panelId || String(t?.id) === origId);
+                    if (matches && row.testName) {
+                        row.testName.split(",").map(s => s.trim()).filter(Boolean).forEach(oldName => {
+                            const oldIndex = uniquetestArray2.indexOf(oldName);
+                            if (oldIndex > -1 && oldName !== panel.name) {
+                                uniquetestArray2.splice(oldIndex, 1);
+                                if (!uniquetestArray2.includes(panel.name)) {
+                                    uniquetestArray2.push(panel.name);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                if (!uniquetestArray2.includes(panel.name)) {
+                    const isBooked = (testpanels?.barcodes?.barcodes || []).some(b => 
+                        (b.testIds || []).some(t => String(t?.id) === panelId || String(t?.id) === origId)
+                    ) || (booking?.tableData || []).some(row => 
+                        (row.ids || []).some(t => String(t?.id) === panelId || String(t?.id) === origId)
+                    );
+
+                    if (isBooked) {
+                        uniquetestArray2.push(panel.name);
+                    }
+                }
+            });
+        }
+
+        // Ensure packages are reflected in uniqueTestArray2 with their latest names from DB
+        if (Array.isArray(testpanels?.packages) && testpanels.packages.length > 0) {
+            testpanels.packages.forEach((pkg) => {
+                if (!pkg?.packageName) return;
+                const pkgId = String(pkg._id || "");
+                const origId = String(pkg.originalPackageId || "");
+
+                (booking?.tableData || []).forEach(row => {
+                    const matches = (row.ids || []).some(t => String(t?.id) === pkgId || String(t?.id) === origId);
+                    if (matches && row.testName) {
+                        row.testName.split(",").map(s => s.trim()).filter(Boolean).forEach(oldName => {
+                            const oldIndex = uniquetestArray2.indexOf(oldName);
+                            if (oldIndex > -1 && oldName !== pkg.packageName) {
+                                uniquetestArray2.splice(oldIndex, 1);
+                                if (!uniquetestArray2.includes(pkg.packageName)) {
+                                    uniquetestArray2.push(pkg.packageName);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                if (!uniquetestArray2.includes(pkg.packageName)) {
+                    const isBooked = (testpanels?.barcodes?.barcodes || []).some(b => 
+                        (b.testIds || []).some(t => String(t?.id) === pkgId || String(t?.id) === origId)
+                    ) || (booking?.tableData || []).some(row => 
+                        (row.ids || []).some(t => String(t?.id) === pkgId || String(t?.id) === origId)
+                    );
+
+                    if (isBooked) {
+                        uniquetestArray2.push(pkg.packageName);
+                    }
+                }
+            });
+        }
+
+        uniquetestArray2 = [...new Set(uniquetestArray2.map(s => String(s).trim()).filter(Boolean))];
         const singleTestsByCategory = Array.from(singleTestsByCategoryMap.values());
 
 
@@ -3530,7 +3668,7 @@ async function loadfunction() {
                 <div class="infor-div"><div class="tags">Age / Sex:</div> <div class="value-header">${booking.year} / ${booking.gender}</div></div>
                 <div class="infor-div"><div class="tags">Referred By:</div> <div class="value-header">${booking.doctorName}</div></div>
                 <div class="infor-div"><div class="tags">Lab Name:</div> <div class="value-header">${booking.labName}</div></div>
-                <div class="infor-div"><div class="tags">Investigations:</div> <div class="value-header">${uniquetestArray2}</div></div>
+                <div class="infor-div"><div class="tags">Investigations:</div> <div class="value-header">${Array.isArray(uniquetestArray2) ? uniquetestArray2.join(", ") : uniquetestArray2}</div></div>
             </div>
             <div class="right2">
                 <div class="registered-div2">

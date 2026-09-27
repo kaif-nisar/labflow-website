@@ -249,6 +249,12 @@
             line-height: 1.6;
         }
 
+        .error-message.is-info {
+            border-color: rgba(26, 110, 245, 0.2);
+            background: rgba(233, 241, 255, 0.96);
+            color: #14459b;
+        }
+
         .support-note {
             margin-top: 22px;
             padding: 14px 16px;
@@ -461,13 +467,13 @@
     </div>
 
     <script src="/js/device-lock-screen.js"></script>
-    <script src="/js/portal-guard.js"></script>
+    <script src="/js/portal-guard.js?v=2"></script>
     <script src="/js/portal-ui.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const guard = window.AppPortalGuard.configure({
                 loginPath: '/login.html',
-                homePath: '/superAdmin.html'
+                homePath: '/superAdmin/superAdmin.html'
             });
 
             const loginForm = document.getElementById('loginForm');
@@ -480,9 +486,11 @@
             const resetErrorMessage = document.getElementById('resetErrorMessage');
             const urlParams = new URLSearchParams(window.location.search);
             const forceLogin = urlParams.get('forceLogin') === '1';
+            const sessionExpired = urlParams.get('sessionExpired') === '1';
 
-            const showError = (message) => {
+            const showError = (message, { info = false } = {}) => {
                 errorMessage.textContent = message;
+                errorMessage.classList.toggle('is-info', info);
                 errorMessage.style.display = 'block';
             };
 
@@ -511,6 +519,68 @@
                 }
             };
 
+            // Gateway / infrastructure answers (nginx, load balancer, a PM2
+            // restart or a database outage) arrive as HTML error pages, so they
+            // have to be translated into something an operator can act on.
+            const STATUS_MESSAGES = {
+                400: 'The login request was rejected. Please check the details and try again.',
+                401: 'Invalid username/email or password.',
+                403: 'This account is not allowed to use the super admin portal.',
+                408: 'The server took too long to respond. Please try again.',
+                429: 'Too many attempts from this network. Please wait a minute and try again.',
+                500: 'The server hit an unexpected error (500). Please try again in a moment.',
+                502: 'The server is restarting or temporarily unreachable (502 Bad Gateway). Please retry in a few seconds.',
+                503: 'The service is busy or under maintenance (503). Please retry in a few seconds.',
+                504: 'The server took too long to answer (504 Gateway Timeout). Please retry, and contact support if it keeps happening.'
+            };
+
+            const describeHttpFailure = (response, payload) => {
+                if (payload?.message) {
+                    return payload.message;
+                }
+
+                if (STATUS_MESSAGES[response.status]) {
+                    return STATUS_MESSAGES[response.status];
+                }
+
+                return `Login failed (HTTP ${response.status}). Please try again.`;
+            };
+
+            // Only same-origin, relative paths may be used as a return target so
+            // ?returnTo= can never be turned into an open redirect.
+            const resolveReturnTo = () => {
+                const raw = urlParams.get('returnTo') || '';
+                let decoded = raw;
+
+                try {
+                    decoded = decodeURIComponent(raw);
+                } catch (error) {
+                    decoded = raw;
+                }
+
+                const candidate = String(decoded || '').trim();
+
+                if (!candidate.startsWith('/') || candidate.startsWith('//') || candidate.startsWith('/\\')) {
+                    return '';
+                }
+
+                try {
+                    const resolved = new URL(candidate, window.location.origin);
+
+                    if (resolved.origin !== window.location.origin || resolved.pathname.startsWith('/api/')) {
+                        return '';
+                    }
+
+                    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+                } catch (error) {
+                    return '';
+                }
+            };
+
+            const returnTo = resolveReturnTo();
+            const resolveDestination = (session) =>
+                returnTo || session?.redirectTo || '/superAdmin/superAdmin.html';
+
             if (forceLogin) {
                 guard.clearStoredSession();
             } else {
@@ -518,7 +588,20 @@
                     type: 'superAdmin',
                     strict: true,
                     onSuccess: (session) => {
-                        window.location.replace(session.redirectTo || '/superAdmin.html');
+                        window.location.replace(resolveDestination(session));
+                    },
+                    onFailure: (session) => {
+                        if (session?.transient) {
+                            showError(
+                                'The server could not verify your session right now (temporary problem). Please retry in a few seconds.',
+                                { info: true }
+                            );
+                            return;
+                        }
+
+                        if (sessionExpired) {
+                            showError('Your previous session expired. Please sign in again to continue.', { info: true });
+                        }
                     }
                 });
             }
@@ -537,6 +620,9 @@
                     return;
                 }
 
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+
                 try {
                     const response = await fetch(`${window.location.origin}/api/v1/user/login`, {
                         method: 'POST',
@@ -544,13 +630,14 @@
                             'Content-Type': 'application/json'
                         },
                         credentials: 'include',
+                        signal: controller.signal,
                         body: JSON.stringify({ username, email: username, password })
                     });
 
                     const data = await parseApiPayload(response);
 
                     if (!response.ok) {
-                        showError(data?.message || 'Invalid username or password.');
+                        showError(describeHttpFailure(response, data));
                         return;
                     }
 
@@ -560,15 +647,28 @@
                     });
 
                     if (!session?.authenticated) {
-                        showError('Login completed but your session could not be restored. Please try again.');
+                        showError(
+                            session?.transient
+                                ? 'You are signed in, but the server could not confirm the session yet (temporary problem). Please retry in a few seconds.'
+                                : 'Login completed but your session could not be restored. Please try again.'
+                        );
                         return;
                     }
 
-                    window.location.replace(session.redirectTo || '/superAdmin.html');
+                    window.location.replace(resolveDestination(session));
                 } catch (error) {
                     console.error('Login error:', error);
-                    showError('An error occurred. Please try again later.');
+
+                    if (error?.name === 'AbortError') {
+                        showError(
+                            'The server did not answer within 30 seconds (timeout, similar to error 504). Please try again.'
+                        );
+                        return;
+                    }
+
+                    showError('Could not reach the server. Please check your connection and try again.');
                 } finally {
+                    clearTimeout(timeoutId);
                     setSubmitting(false);
                 }
             });
@@ -607,7 +707,10 @@
                     const data = await parseApiPayload(response);
 
                     if (!response.ok) {
-                        resetErrorMessage.textContent = data?.message || 'Failed to send reset link.';
+                        resetErrorMessage.textContent =
+                            data?.message ||
+                            STATUS_MESSAGES[response.status] ||
+                            'Failed to send reset link.';
                         return;
                     }
 

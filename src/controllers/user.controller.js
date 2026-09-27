@@ -7,11 +7,14 @@ import jwt from "jsonwebtoken";
 import { unitdb } from "../models/category.model.js";
 import { User } from "../models/user.model.js";
 import { Tenant } from "../models/tenant.model.js";
+import { registerRefreshToken } from "../utils/refreshTokenRegistry.js";
 import {
   prepareUserDeviceSession,
   removeUserDeviceSession,
   replaceUserDeviceSessionToken,
   getSessionTokenHash,
+  applyAuthCookiesToResponse,
+  clearAuthCookies,
   resolveLocationDataFromRequest,
 } from "../../middlewares/auth.middleware.js";
 
@@ -39,9 +42,9 @@ const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
-    // save refresh token in data base
+    // save refresh token in data base (multi-device safe list)
 
-    user.refreshToken = refreshToken;
+    registerRefreshToken(user, refreshToken);
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
@@ -213,6 +216,10 @@ const loginUser = asyncHandler(async (req, res) => {
   ).trim();
   const userAgent = String(req.headers?.["user-agent"] || "").trim();
 
+  // Track this device's refresh token so signing in here does not sign the other
+  // devices out.
+  registerRefreshToken(user, refreshToken);
+
   await prepareUserDeviceSession(user, {
     accessToken,
     deviceFingerprint,
@@ -222,6 +229,7 @@ const loginUser = asyncHandler(async (req, res) => {
     location: locationData,
     setFields: {
       refreshToken,
+      refreshTokenHashes: user.refreshTokenHashes,
     },
   });
 
@@ -251,17 +259,9 @@ const loginUser = asyncHandler(async (req, res) => {
     },
   };
 
-  // Cookie options for production
-  const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Only HTTPS in production
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  };
-
-  // Set cookies
-  res.cookie("refreshToken", refreshToken, options);
-  res.cookie("accessToken", accessToken, options);
+  // Same cookie options as /api/session so a login never fights the session
+  // cookie (httpOnly + path "/" + a maxAge that matches the token lifetime).
+  applyAuthCookiesToResponse(res, { accessToken, refreshToken });
 
   // Send response with subscription warning if needed
   const response = {
@@ -329,21 +329,19 @@ const logOutUser = asyncHandler(async (req, res) => {
     req.user._id,
     {
       $set: {
-        refreshToken: undefined,
+        refreshToken: null,
+        refreshTokenHashes: [],
       },
     },
     {
       new: true,
     }
   );
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
+
+  clearAuthCookies(res);
+
   return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "User logged Out"));
 });
 
@@ -461,18 +459,16 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       });
     }
 
-    user.refreshToken = newRefreshToken;
+    registerRefreshToken(user, newRefreshToken);
     await user.save({ validateBeforeSave: false });
 
-    const options = {
-      httpOnly: true,
-      secure: true,
-    };
+    applyAuthCookiesToResponse(res, {
+      accessToken,
+      refreshToken: newRefreshToken,
+    });
 
     return res
       .status(200)
-      .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", newRefreshToken, options)
       .json(
         new ApiResponse(
           200,

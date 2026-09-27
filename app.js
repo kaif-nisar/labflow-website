@@ -17,7 +17,8 @@ import {
     verifySuperAdmin,
     resolvePortalSession,
     applyPortalSessionCookies,
-    clearAuthCookies
+    clearAuthCookies,
+    isTokenValidationError
 } from "./middlewares/auth.middleware.js";
 import { initializeSchedulers } from "./src/utils/subscriptionScheduler.js";
 import { cleanupCustomizationsOnStartup } from "./src/utils/customizationCleanup.js";
@@ -48,8 +49,11 @@ if (process.env.NODE_ENV === "production") {
     });
 
     process.on('unhandledRejection', (reason) => {
+        // A single stray rejected promise must not take the whole portal down.
+        // process.exit(1) here made PM2 restart the process, and every connected
+        // user saw "502 Bad Gateway" + a lost session. Log it and keep serving;
+        // uncaughtException below still performs the hard restart.
         console.error('UNHANDLED REJECTION', reason);
-        process.exit(1);
     });
 }
 
@@ -452,7 +456,9 @@ app.use((error, req, res, next) => {
 // ========================
 
 import targetRouter from "./src/routes/target.routes.js";
+import copilotRouter from "./src/copilot/copilot.routes.js";
 
+app.use("/api/v1/copilot", copilotRouter);
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/qr-reports", qrReportRouter);
 app.use("/api/v1/offline-reports", offlineReportRouter);
@@ -468,6 +474,17 @@ app.use(express.static("public", {
             res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
             res.setHeader("Pragma", "no-cache");
             res.setHeader("Expires", "0");
+            return;
+        }
+        // Portal shell files must always be revalidated. They contain the session
+        // guard / auth bootstrap logic, and a 7 day cached copy meant users kept
+        // running an old guard (and kept getting logged out) after a deploy.
+        if (/[/\\]public[/\\]js[/\\][^/\\]+\.js$/i.test(filePath)) {
+            res.setHeader("Cache-Control", "no-cache, must-revalidate");
+            return;
+        }
+        if (/[/\\]public[/\\][^/\\]+\.html$/i.test(filePath)) {
+            res.setHeader("Cache-Control", "no-cache, must-revalidate");
             return;
         }
         if (/\.(png|jpe?g|gif|svg|webp|avif|css|js|woff2?)$/i.test(filePath)) {
@@ -508,25 +525,51 @@ app.get('/api/verify-token', verifyJWT, (req, res) => {
     res.json({ isAuthorized: true, user: req.user });
 });
 
+const SESSION_LOOKUP_TIMEOUT_MS = Number.parseInt(process.env.SESSION_LOOKUP_TIMEOUT_MS || "15000", 10);
+
+const withTimeout = (promise, timeoutMs, message) => {
+    let timer = null;
+
+    return Promise.race([
+        promise,
+        new Promise((resolve, reject) => {
+            timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+        })
+    ]).finally(() => {
+        if (timer) {
+            clearTimeout(timer);
+        }
+    });
+};
+
 app.get('/api/session', async (req, res) => {
     const requestedType = req.query?.type || 'any';
     const strict = String(req.query?.strict || 'false').toLowerCase() === 'true';
 
+    const buildSessionResponse = (message, extra = {}) => ({
+        authenticated: false,
+        message,
+        loginPath: requestedType === 'superAdmin' ? '/login.html' : '/franchiseelogin.html',
+        homePath: requestedType === 'superAdmin' ? '/login.html' : '/index.html',
+        ...extra
+    });
+
     try {
-        const session = await resolvePortalSession(req, {
-            type: requestedType,
-            strict,
-            allowRefresh: true
-        });
+        const session = await withTimeout(
+            resolvePortalSession(req, {
+                type: requestedType,
+                strict,
+                allowRefresh: true
+            }),
+            SESSION_LOOKUP_TIMEOUT_MS,
+            'Session lookup timed out'
+        );
 
         if (!session) {
             clearAuthCookies(res);
-            return res.status(401).json({
-                authenticated: false,
-                message: 'Your session could not be restored. Please login again.',
-                loginPath: requestedType === 'superAdmin' ? '/login.html' : '/franchiseelogin.html',
-                homePath: requestedType === 'superAdmin' ? '/login.html' : '/index.html'
-            });
+            return res.status(401).json(
+                buildSessionResponse('Your session could not be restored. Please login again.')
+            );
         }
 
         applyPortalSessionCookies(res, session);
@@ -542,13 +585,24 @@ app.get('/api/session', async (req, res) => {
         });
     } catch (error) {
         console.error('Session restore failed:', error);
+
+        // A transient problem (MongoDB slow or unreachable, proxy timeout, ...)
+        // is NOT a logout. Keep the cookies intact and answer with 503 so the
+        // client can retry, instead of wiping a perfectly valid login.
+        if (!isTokenValidationError(error)) {
+            res.setHeader('Retry-After', '5');
+            return res.status(503).json(
+                buildSessionResponse(
+                    'Session service is temporarily unavailable. Please retry in a few seconds.',
+                    { transient: true, retryable: true }
+                )
+            );
+        }
+
         clearAuthCookies(res);
-        return res.status(401).json({
-            authenticated: false,
-            message: 'Your session is no longer valid. Please login again.',
-            loginPath: requestedType === 'superAdmin' ? '/login.html' : '/franchiseelogin.html',
-            homePath: requestedType === 'superAdmin' ? '/login.html' : '/index.html'
-        });
+        return res.status(401).json(
+            buildSessionResponse('Your session is no longer valid. Please login again.')
+        );
     }
 });
 
@@ -559,6 +613,13 @@ app.get('/api/session', async (req, res) => {
 const protectedStatic = (directory) => {
     return express.static(directory, {
         setHeaders: (res, path) => {
+            // Root level portal scripts (main.js, franchisee.js, ...) carry the
+            // session guard configuration and must never be served from a stale
+            // cache after a deploy.
+            if (/[/\\]private[/\\][^/\\]+\.(js|html)$/i.test(path)) {
+                res.setHeader("Cache-Control", "no-cache, must-revalidate");
+            }
+
             if (path.endsWith('.js')) {
                 res.setHeader('Content-Type', 'application/javascript');
             } else if (path.endsWith('.css')) {
@@ -626,6 +687,52 @@ app.use('/superAdmin', verifySuperAdmin, (req, res, next) => {
 }, protectedStatic('private'));
 
 // ========================
+// 🧭 PORTAL PAGE AUTH FAILURES
+// ========================
+
+// Protected page routes (e.g. /superAdmin/superAdmin.html) used to answer an
+// expired or invalid access token with raw JSON, which the browser rendered as a
+// broken JSON page and the user had to log in again - even though the refresh
+// cookie was still perfectly valid.
+// For HTML navigations we now send the visitor to the matching login page. That
+// page silently restores the session through /api/session (refresh token) and
+// bounces straight back to the requested dashboard.
+const PORTAL_LOGIN_PATHS = [
+    { prefix: '/superAdmin', loginPath: '/login.html' },
+    { prefix: '/admin', loginPath: '/franchiseelogin.html' },
+    { prefix: '/superFranchisee', loginPath: '/franchiseelogin.html' },
+    { prefix: '/franchisee', loginPath: '/franchiseelogin.html' },
+    { prefix: '/subFranchisee', loginPath: '/franchiseelogin.html' }
+];
+
+const isHtmlPageRequest = (req) => {
+    if (String(req.path || '').startsWith('/api/')) {
+        return false;
+    }
+
+    const accept = String(req.headers?.accept || '');
+    return accept.includes('text/html') || /\.html?$/i.test(req.path || '');
+};
+
+app.use((error, req, res, next) => {
+    const statusCode = Number(error?.statusCode || error?.status || 0);
+
+    if (statusCode !== 401 || !isHtmlPageRequest(req)) {
+        return next(error);
+    }
+
+    const matchedPortal = PORTAL_LOGIN_PATHS.find((portal) => req.path.startsWith(portal.prefix));
+    const loginPath = matchedPortal?.loginPath || '/login.html';
+    const returnTo = encodeURIComponent(req.originalUrl || '/');
+
+    console.warn(`↩️  Portal page needs a fresh session, redirecting to login: ${req.originalUrl}`);
+
+    // Cookies are intentionally kept: the refresh token may still be valid and
+    // the login page uses it to restore the session silently.
+    return res.redirect(302, `${loginPath}?sessionExpired=1&returnTo=${returnTo}`);
+});
+
+// ========================
 // 🎯 ERROR HANDLERS
 // ========================
 
@@ -676,6 +783,12 @@ Connect_DB()
 
             initializeSchedulers();
         });
+
+        // Keep Node's socket timeouts above the reverse proxy (nginx / ALB) idle
+        // timeout. Node's 5s default keep-alive races with proxied keep-alive
+        // connections and shows up as intermittent "502 Bad Gateway".
+        server.keepAliveTimeout = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT_MS || '65000', 10);
+        server.headersTimeout = Number.parseInt(process.env.HEADERS_TIMEOUT_MS || '66000', 10);
 
         const gracefulShutdown = () => {
             console.log('🛑 Received shutdown signal, closing server gracefully...');

@@ -7,7 +7,13 @@ import { ApiError } from "../utils/apiError.js";
 import { Ledger } from "../models/ledger.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import {
+  clearRefreshTokens,
+  registerRefreshToken,
+} from "../utils/refreshTokenRegistry.js";
+import {
   purgeUserDeviceSessions,
+  applyAuthCookiesToResponse,
+  clearAuthCookies,
   trimUserDeviceSessionsToLimit,
 } from "../../middlewares/auth.middleware.js";
 
@@ -389,22 +395,20 @@ export const loginSuperAdmin = asyncHandler(async (req, res) => {
   const accessToken = superAdmin.generateAccessToken();
   const refreshToken = superAdmin.generateRefreshToken();
 
-  // Update refresh token in database
-  superAdmin.refreshToken = refreshToken;
+  // Track this browser's refresh token (multi-device safe) and remember the last one
+  registerRefreshToken(superAdmin, refreshToken);
   superAdmin.lastLogin = new Date();
   await superAdmin.save({ validateBeforeSave: false });
 
   console.log(`✅ Login successful for user: ${superAdmin.username}`);
 
-  const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-  };
+  // Same cookie options as the session restore path (httpOnly, path "/", maxAge
+  // that matches the token lifetime) so a login never fights the session cookie
+  // written by /api/session.
+  applyAuthCookiesToResponse(res, { accessToken, refreshToken });
 
   return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
     .json({
       success: true,
       message: "Super Admin logged in successfully",
@@ -1320,15 +1324,17 @@ const addSuperStaff = asyncHandler(async (req, res) => {
 });
 
 const logOutSuperAdmin = asyncHandler(async (req, res) => {
-  // Clear cookies and remove refresh token from DB if needed
+  // Revoke the stored refresh tokens of this account and clear the cookies with
+  // the exact same options they were written with.
   const user = req.user;
   if (user) {
-    // Remove refreshToken from DB (optional, if you store it)
-    user.refreshToken = null;
+    clearRefreshTokens(user);
     await user.save({ validateBeforeSave: false });
   }
 
-  res.clearCookie("accessToken").clearCookie("refreshToken").status(200).json({
+  clearAuthCookies(res);
+
+  return res.status(200).json({
     success: true,
     message: "Logged out successfully",
   });
