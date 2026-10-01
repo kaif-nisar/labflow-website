@@ -1,3 +1,4 @@
+import "dotenv/config";
 import crypto from "crypto";
 import fs from "fs";
 import fsPromises from "fs/promises";
@@ -26,31 +27,42 @@ const sanitizeSegment = (value, fallback = "file") => {
     return sanitized || fallback;
 };
 
-const CLOUDINARY_CONFIG = Object.freeze({
+export const getCloudinaryConfig = () => ({
     cloud_name: String(process.env.CLOUDINARY_NAME || "").trim(),
     api_key: String(process.env.CLOUD_API_KEY || process.env.CLOUDINARY_API_KEY || "").trim(),
     api_secret: String(process.env.CLOUD_API_SECRET || process.env.CLOUDINARY_API_SECRET || "").trim(),
 });
 
-const CLOUDINARY_ENABLED = Boolean(
-    CLOUDINARY_CONFIG.cloud_name
-    && CLOUDINARY_CONFIG.api_key
-    && CLOUDINARY_CONFIG.api_secret
-);
+export const isCloudinaryEnabled = () => {
+    const config = getCloudinaryConfig();
+    return Boolean(config.cloud_name && config.api_key && config.api_secret);
+};
 
-const CLOUDINARY_ROOT_FOLDER = sanitizeSegment(
+export const getCloudinaryRootFolder = () => sanitizeSegment(
     process.env.CLOUDINARY_ROOT_FOLDER || "labflow",
     "labflow"
 );
 
-if (CLOUDINARY_ENABLED) {
+export const ensureCloudinaryConfigured = () => {
+    if (!isCloudinaryEnabled()) {
+        return false;
+    }
+    const config = getCloudinaryConfig();
     cloudinary.config({
-        cloud_name: CLOUDINARY_CONFIG.cloud_name,
-        api_key: CLOUDINARY_CONFIG.api_key,
-        api_secret: CLOUDINARY_CONFIG.api_secret,
+        cloud_name: config.cloud_name,
+        api_key: config.api_key,
+        api_secret: config.api_secret,
         secure: true,
     });
-}
+    return true;
+};
+
+// Backward-compatible constant getter
+export const CLOUDINARY_CONFIG = new Proxy({}, {
+    get: (_, prop) => getCloudinaryConfig()[prop]
+});
+export const getCLOUDINARY_ENABLED = () => isCloudinaryEnabled();
+const isCloudinaryActive = () => ensureCloudinaryConfigured();
 
 const normalizeCategory = (category = "documents") => {
     return UPLOAD_SUBDIRECTORIES.includes(category) ? category : "documents";
@@ -97,7 +109,8 @@ const isHttpUrl = (value) => /^https?:\/\//i.test(String(value || "").trim());
 
 const isCloudinaryPublicId = (value) => {
     const normalizedValue = String(value || "").trim().replace(/\\/g, "/");
-    return Boolean(normalizedValue && normalizedValue.startsWith(`${CLOUDINARY_ROOT_FOLDER}/`));
+    const rootFolder = getCloudinaryRootFolder();
+    return Boolean(normalizedValue && (normalizedValue.startsWith(`${rootFolder}/`) || normalizedValue.startsWith("labflow/")));
 };
 
 const stripCloudinaryFileExtension = (value) => String(value || "").replace(/\.[a-z0-9]{1,8}$/i, "");
@@ -117,11 +130,19 @@ const inferCloudinaryResourceType = (value) => {
 
     if (imageExtensions.has(extension)) return "image";
     if (videoExtensions.has(extension)) return "video";
-    return "raw";
+    if (
+        normalizedValue.includes("signature") ||
+        normalizedValue.includes("logo") ||
+        normalizedValue.includes("profile") ||
+        normalizedValue.includes("template")
+    ) {
+        return "image";
+    }
+    return "image";
 };
 
 const buildCloudinaryUrl = (publicId, resourceType = inferCloudinaryResourceType(publicId)) => {
-    if (!CLOUDINARY_ENABLED || !publicId) {
+    if (!ensureCloudinaryConfigured() || !publicId) {
         return "";
     }
 
@@ -254,9 +275,16 @@ export const normalizeStoredUploadUrl = (identifier) => {
         return rawValue;
     }
 
-    const cleanBase64 = rawValue.replace(/\s+/g, "");
-    if (cleanBase64.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(cleanBase64)) {
-        return rawValue;
+    // Only treat as an already-valid data value (e.g. a raw base64 blob) when
+    // it clearly cannot be a Cloudinary public_id or a local file path. Cloudinary
+    // public IDs look like "labflow/signatures/abc-123" — they would match the
+    // base64 character set, so we explicitly skip them here and let the
+    // isCloudinaryPublicId() branch below handle them.
+    if (!isCloudinaryPublicId(rawValue) && !rawValue.startsWith("/")) {
+        const cleanBase64 = rawValue.replace(/\s+/g, "");
+        if (cleanBase64.length > 100 && /^[A-Za-z0-9+/=_-]+$/.test(cleanBase64)) {
+            return rawValue;
+        }
     }
 
     if (isCloudinaryPublicId(rawValue)) {
@@ -322,12 +350,16 @@ export const storeLocalFile = async (localFilePath, options = {}) => {
         : path.extname(sourcePath);
     const generatedBaseName = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${safeBaseName}`;
 
-    if (CLOUDINARY_ENABLED) {
+    if (ensureCloudinaryConfigured()) {
         try {
+            const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].includes(safeExtension.toLowerCase())
+                || ["signatures", "logos", "profiles"].includes(category);
+            const resolvedResourceType = isImage ? "image" : "auto";
+
             const uploadResult = await cloudinary.uploader.upload(sourcePath, {
-                folder: `${CLOUDINARY_ROOT_FOLDER}/${category}`,
+                folder: `${getCloudinaryRootFolder()}/${category}`,
                 public_id: generatedBaseName,
-                resource_type: "auto",
+                resource_type: resolvedResourceType,
                 use_filename: false,
                 unique_filename: false,
                 overwrite: false,
@@ -360,7 +392,7 @@ export const storeLocalFile = async (localFilePath, options = {}) => {
 export const deleteLocalFile = async (identifier) => {
     const normalizedPublicId = normalizeStoredUploadPublicId(identifier);
 
-    if (CLOUDINARY_ENABLED && isCloudinaryPublicId(normalizedPublicId)) {
+    if (ensureCloudinaryConfigured() && isCloudinaryPublicId(normalizedPublicId)) {
         const preferredResourceType = inferCloudinaryResourceType(identifier || normalizedPublicId);
         const resourceTypes = [preferredResourceType, "image", "raw", "video"]
             .filter((value, index, array) => value && array.indexOf(value) === index);

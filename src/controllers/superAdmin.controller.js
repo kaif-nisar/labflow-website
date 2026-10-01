@@ -566,18 +566,36 @@ export const createTenant = asyncHandler(async (req, res) => {
               yearly: { price: resolvedPrices.yearly || 0 },
               currency: subscriptionPlan.currency || "INR",
             },
+            deviceRestriction: {
+              isEnabled: req.body.deviceRestriction?.isEnabled !== undefined
+                ? Boolean(req.body.deviceRestriction.isEnabled)
+                : req.body.is_device_restriction_enabled !== undefined
+                  ? (req.body.is_device_restriction_enabled === true || req.body.is_device_restriction_enabled === "true")
+                  : true,
+              maxAllowedDevices: Math.min(4, Math.max(1, Number(req.body.deviceRestriction?.maxAllowedDevices ?? req.body.max_allowed_devices ?? 1) || 1)),
+            },
           },
         ],
         { session }
       );
 
       // ✅ FIXED: Create admin user data with proper validation
+      const isDeviceRestrictionEnabled = req.body.deviceRestriction?.isEnabled !== undefined
+        ? Boolean(req.body.deviceRestriction.isEnabled)
+        : req.body.is_device_restriction_enabled !== undefined
+          ? (req.body.is_device_restriction_enabled === true || req.body.is_device_restriction_enabled === "true")
+          : true;
+
+      const maxAllowedDevices = Math.min(4, Math.max(1, Number(req.body.deviceRestriction?.maxAllowedDevices ?? req.body.max_allowed_devices ?? 1) || 1));
+
       const adminUserData = {
         username: adminDetails.username.toLowerCase().trim(),
         email: adminDetails.email.toLowerCase().trim(),
         fullName: addressDetails.fullName.toLowerCase().trim(),
         password: adminDetails.password,
         role: "admin",
+        is_device_restriction_enabled: isDeviceRestrictionEnabled,
+        max_allowed_devices: maxAllowedDevices,
         bookingWallet: 100000,
         commissionWallet: 0,
         phoneNo: addressDetails.phoneNo ? parseInt(addressDetails.phoneNo) : null,
@@ -1020,13 +1038,21 @@ const updateAdminById = async (req, res) => {
       showRandomBtn: req.body.showRandomBtn,
     };
 
+    // Handle Password Update if provided
+    if (req.body.password && typeof req.body.password === "string" && req.body.password.trim().length > 0) {
+      const bcrypt = (await import("bcrypt")).default;
+      userUpdate.password = await bcrypt.hash(req.body.password.trim(), 10);
+    }
+
     const currentDeviceLimit = Number.isFinite(Number(adminUser.max_allowed_devices))
       ? Math.min(4, Math.max(1, Number(adminUser.max_allowed_devices)))
       : 1;
-    const requestedDeviceLimit = Number.isFinite(Number(req.body.max_allowed_devices ?? req.body.maxAllowedDevices))
-      ? Math.min(4, Math.max(1, Number(req.body.max_allowed_devices ?? req.body.maxAllowedDevices)))
+    const requestedDeviceLimit = Number.isFinite(Number(req.body.deviceRestriction?.maxAllowedDevices ?? req.body.max_allowed_devices ?? req.body.maxAllowedDevices))
+      ? Math.min(4, Math.max(1, Number(req.body.deviceRestriction?.maxAllowedDevices ?? req.body.max_allowed_devices ?? req.body.maxAllowedDevices)))
       : currentDeviceLimit;
-    const requestedDeviceRestriction = req.body.is_device_restriction_enabled;
+    const requestedDeviceRestriction = req.body.deviceRestriction?.isEnabled !== undefined
+      ? req.body.deviceRestriction.isEnabled
+      : req.body.is_device_restriction_enabled;
     const shouldEnableDeviceRestriction = requestedDeviceRestriction === undefined
       ? adminUser.is_device_restriction_enabled !== false
       : requestedDeviceRestriction === true || requestedDeviceRestriction === "true";
@@ -1069,6 +1095,10 @@ const updateAdminById = async (req, res) => {
       status: req.body.isActive,
       "adminDetails.email": req.body.email,
       "adminDetails.username": req.body.username,
+      deviceRestriction: {
+        isEnabled: shouldEnableDeviceRestriction,
+        maxAllowedDevices: requestedDeviceLimit,
+      },
     };
 
     // 3. Apply updates to User

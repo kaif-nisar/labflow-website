@@ -1,1088 +1,2038 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Print Settings</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Settings & PDF Customizer</title>
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #ffffff;
+        :root {
+            --ps-primary: #0f766e;
+            --ps-primary-hover: #0d9488;
+            --ps-primary-light: #f0fdfa;
+            --ps-accent: #2563eb;
+            --ps-bg: #f8fafc;
+            --ps-card-bg: #ffffff;
+            --ps-border: #e2e8f0;
+            --ps-border-focus: #0f766e;
+            --ps-text: #0f172a;
+            --ps-text-muted: #64748b;
+            --ps-radius: 10px;
+            --ps-radius-sm: 6px;
+            --ps-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+            --ps-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+            --ps-shadow-lg: 0 12px 30px rgba(15, 23, 42, 0.12);
+            --preview-scale: 1;
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            height: 100vh;
         }
 
-        .editorDiv {
-            height: 100%;
-            display: flex;
-        }
-
-        .container8989 {
-            width: 30%;
-            height: 100%;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            margin-top: 20px;
-            position: fixed;
-            top: 2rem;
-        }
-
-        .header {
-            /* position: fixed; */
-            /* position: fixed; */
-            display: flex;
-            align-items: center;
-            padding: 10px 1.5%;
-            border-bottom: 1px solid #e0e0e0;
-            background-color: #f9f9f9;
-            position: fixed;
-            top: 0px;
-            left: 0px;
-            width: 97%;
-            height: 2rem;
-            z-index: 1000;
-        }
-
-        .header .close-btn {
-            font-size: 20px;
-            margin-right: 20px;
-            cursor: pointer;
-            color: #333;
-            border: 1px solid #e0e0e0;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-        }
-
-        .header .title {
-            font-size: 16px;
-            font-weight: bold;
-            flex-grow: 1;
-        }
-
-        .header .watch-video-btn {
-            background-color: #e0e7ff;
-            color: #1a73e8;
-            border: none;
-            border-radius: 4px;
-            padding: 5px 10px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-
-        .accordion {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 20px;
-            scrollbar-width: none;
-        }
-
-        .accordion-item {
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .accordion-item button {
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--ps-bg);
+            color: var(--ps-text);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
             width: 100%;
-            background: none;
-            border: none;
-            padding: 15px;
-            text-align: left;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            outline: none;
+            max-width: 100vw;
+            overflow-x: hidden;
+        }
+
+        /* Top Header Bar */
+        .ps-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
-        }
-
-        .accordion-item button .icon {
-            transition: transform 0.3s;
-        }
-
-        .accordion-item button.active .icon {
-            transform: rotate(180deg);
-        }
-
-        .accordion-content {
-            display: none;
-            padding: 0 15px 15px;
-            font-size: 14px;
-            color: #666;
-        }
-
-        /* .accordion-content.show {
-            display: block;
-        } */
-
-        .accordion-content.show {
-            display: block;
+            padding: 12px 24px;
+            background: #ffffff;
+            border-bottom: 1px solid var(--ps-border);
+            box-shadow: var(--ps-shadow-sm);
             width: 100%;
-            /* margin: 0px; */
-            padding: 0px;
-        }
-
-        .showChangesDiv {
-            margin-top: calc(2rem + 10px);
-            width: 70%;
-            height: auto;
-            /* background-color: #666; */
-            margin-left: 30%;
-        }
-
-        .previewpdfcontainer {
-            width: 100%;
-            margin-top: 2rem;
-            padding-bottom: 4rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        #pdf-preview-div {
-            width: 485px;
-            height: 680px;
-            border: 1px solid rgb(86, 86, 86);
-            overflow: hidden;
-            position: relative;
-        }
-
-        #pdf-preview-div iframe {
-            position: absolute;
-            right: -7px;
-            top: -3px;
-            width: 101%;
-            height: 200vh;
-            margin-top: -3.7rem;
-        }
-
-        .outerCheckBox {
-            width: 30.5rem;
-            margin-bottom: 0.2rem;
-            letter-spacing: 1px;
-        }
-
-        img {
-            margin: 10px;
-            border: 1px solid rgb(90, 90, 90);
-        }
-
-        .container278 {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .file-upload {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 20px;
-        }
-
-        .file-upload img {
-            width: 70px;
-            height: 80px;
-            margin-bottom: 10px;
-        }
-
-        /* .file-upload input[type="file"] {
-            display: none;
-        } */
-
-        .file-upload label {
-            background-color: #f0f0f0;
-            border: 1px solid #ccc;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 20px;
-        }
-
-        .input-group label {
-            margin-bottom: 5px;
-        }
-
-        .input-group .input-wrapper {
-            display: flex;
-            align-items: center;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            overflow: hidden;
-            width: 120px;
-        }
-
-        .input-group input {
-            width: 70px;
-            padding: 5px;
-            border: none;
-            text-align: left;
-        }
-
-        .input-group span {
-            padding: 5px 10px;
-            background-color: #f0f0f0;
-            border-left: 1px solid #ccc;
-            text-align: center;
-            width: 30px;
-        }
-
-        .more-settings {
-            color: #007bff;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }
-
-        .update-button {
-            background-color: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 2rem;
-        }
-
-        .row {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .column {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .container-sign {
-            margin: 20px;
-        }
-
-        .form-group2 {
-            margin-bottom: 15px;
-        }
-
-        .form-group2 label {
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        .form-group2 input[type="text"] {
-            width: 50%;
-            padding: 8px;
+            max-width: 100vw;
             box-sizing: border-box;
-        }
-
-        .form-group2 input[type="file"] {
-            display: inline-block;
-            margin-top: 10px;
-        }
-
-        .form-group2 .file-info {
-            display: inline-block;
-            margin-left: 10px;
-        }
-
-        .form-group2 textarea {
-            width: auto;
-            padding: 8px;
-            box-sizing: border-box;
-            height: 50px;
-        }
-
-        .form-group2 .checkbox-label {
-            display: inline-block;
-            margin-left: 5px;
-        }
-
-        .form-group2 .btn {
-            background-color: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            cursor: pointer;
-        }
-
-        .form-group2 .btn:hover {
-            background-color: #0056b3;
-        }
-
-        .form-row2 {
-            display: flex;
-            /* justify-content: space-between; */
-        }
-
-        .form-row2 .form-group2 {
-            flex: 1;
-            margin-right: 10px;
-        }
-
-        .form-row .form-group2:last-child {
-            margin-right: 0;
-        }
-
-        .btn {
-            background-color: #007bff;
-        }
-
-        .fromgroup21 {
-            width: fit-content;
-            background-color: #007bff;
-            border-radius: 0.5rem;
-            height: auto;
-        }
-
-        .signUpdatebtn {
-            width: fit-content;
-            text-align: center;
-        }
-
-        /* container 3 css  */
-        .container3 {
-            /* max-width: 400px; */
-            margin: 20px;
-        }
-
-        h2 {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        .form-group select {
-            width: 100px;
-            padding: 5px;
-            font-size: 16px;
-        }
-
-        .form-group.font-family-group select {
-            width: 180px;
-        }
-
-        .checkbox-group {
-            margin-bottom: 10px;
-        }
-
-        .checkbox-group input {
-            margin-right: 10px;
-        }
-
-        .checkbox-group label {
-            font-weight: normal;
-        }
-
-        .general {
-            width: fit-content;
-            text-align: center;
-            background-color: #1a73e8;
-            color: #ffffff;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-
-        /* for tat css  */
-        .container4 {
-            margin: 20px;
-        }
-
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .checkbox-label input {
-            margin-right: 10px;
-        }
-
-        .tatbtn {
-            width: fit-content;
-        }
-
-        .previewpdfcontainer {
-            height: 120vh;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            /* flex-direction: column; */
-        }
-
-        #message {
-            color: rgb(0, 55, 32);
-        }
-
-        .selected {
-            border: 2px solid red;
-        }
-
-        .image-container {
-            position: relative;
-            display: inline-block;
-        }
-
-        .image-container .delete-icon {
-            position: absolute;
-            top: 12px;
-            /* Adjust for spacing */
-            right: 12px;
-            /* Adjust for spacing */
-            background: red;
-            color: white;
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 50%;
-            cursor: pointer;
-            z-index: 10;
-            opacity: 0.5;
-            /* Slight transparency */
-            transition: opacity 0.2s ease;
-        }
-
-        .image-container .delete-icon:hover {
-            opacity: 1;
-            /* Fully visible on hover */
-            background: darkred;
-        }
-
-        .update-button[disabled] {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        .signDiv {
-            position: relative;
-            display: flex;
-            align-items: center;
-            /* justify-content: center; */
-        }
-
-        .signDiv div {
-            padding-left: 5px;
-        }
-
-        .signDiv img {
-            border: 1px solid rgb(255, 141, 141);
-        }
-
-        .deleteIcon {
-            position: absolute;
-            top: 12px;
-            /* Adjust for spacing */
-            right: 12px;
-            /* Adjust for spacing */
-            background: red;
-            color: white;
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 50%;
-            cursor: pointer;
-            z-index: 10;
-            opacity: 0.5;
-            /* Slight transparency */
-            transition: opacity 0.2s ease;
-        }
-
-        .fontsizeandspacing {
-            display: flex;
-            justify-content: space-evenly;
-            align-items: flex-start;
-            flex-wrap: wrap;
             gap: 12px;
         }
 
-        .font-preview-sample {
-            border: 1px solid #d9d9d9;
-            border-radius: 6px;
-            background: #fafafa;
-            color: #444;
-            font-size: 13px;
-            line-height: 1.4;
-            padding: 8px 10px;
-            margin-bottom: 12px;
+        .ps-title-short {
+            display: none;
+        }
+        .ps-btn-text-short {
+            display: none;
         }
 
-        /* #pdf-preview-div {
-            position: relative;
-        } */
-
-        .loaderDiv {
-            width: 100%;
-            height: 100%;
-            background-color: #ffffff;
-            position: absolute;
-            z-index: 0;
+        .ps-topbar-left {
             display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .ps-back-btn {
+            display: inline-flex;
+            align-items: center;
             justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--ps-border);
+            background: #ffffff;
+            color: var(--ps-text);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .ps-back-btn:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
         }
 
-        .loaderInnerDiv {
-            margin-top: 4rem;
-        }
-
-        .measure-outer-div {
-            display: flex;
-            /* position: absolute; */
-            margin-top: 2rem;
-            padding: 0px 5px;
-            top: 3.1%;
-            height: 96%;
-            left: 0px;
-            z-index: 10;
-        }
-
-        /* arrow  */
-        .big-box {
-            /* position: absolute; */
-            height: 10%;
-            right: 0px;
-            top: 2px;
-            width: 100px;
+        .ps-title-wrap h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ps-text);
             display: flex;
             align-items: center;
+            gap: 10px;
         }
 
-        .numberlinebox {
-            width: 70%;
-            border-bottom: 2px solid red;
-            text-align: center;
-            background-color: white;
+        .ps-badge-pro {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #ccfbf1;
+            color: #0f766e;
+            text-transform: uppercase;
         }
 
-        .blankbox {
-            width: 40%;
-            height: 100%;
-            border: 2px solid red;
-            border-top-left-radius: 5px;
-            border-bottom-left-radius: 5px;
-            border-right: none;
-        }
-
-        #footermeasurescalebigbox {
-            /* position: absolute; */
-            right: 0px;
-            height: 2.2cm;
-            right: 0px;
-            bottom: 2px;
-            width: 100px;
+        .ps-topbar-right {
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
-        .scale-heading-div {
+        .ps-save-status {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ps-text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ps-save-status i {
+            font-size: 12px;
+        }
+
+        .ps-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .ps-btn-primary {
+            background: var(--ps-primary);
+            color: #ffffff;
+        }
+        .ps-btn-primary:hover:not(:disabled) {
+            background: var(--ps-primary-hover);
+            box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
+        }
+        .ps-btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .ps-btn-secondary {
+            background: #ffffff;
+            color: var(--ps-text);
+            border-color: var(--ps-border);
+        }
+        .ps-btn-secondary:hover {
+            background: #f1f5f9;
+        }
+
+        .ps-btn-tutorial {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+        .ps-btn-tutorial:hover {
+            background: #dbeafe;
+        }
+
+        /* Workspace Grid (Two Columns) */
+        .ps-workspace {
+            display: grid;
+            grid-template-columns: 460px 1fr;
+            min-height: calc(100vh - 65px);
+            max-width: 1920px;
+            margin: 0 auto;
+        }
+
+        @media (min-width: 2560px) {
+            .ps-workspace {
+                grid-template-columns: 520px 1fr;
+            }
+        }
+
+        /* Left Controls Panel */
+        .ps-controls-panel {
+            background: #ffffff;
+            border-right: 1px solid var(--ps-border);
+            overflow-y: auto;
+            max-height: calc(100vh - 65px);
+            padding: 20px 16px 60px;
+            scrollbar-width: thin;
+        }
+
+        /* Accordion Structure */
+        .ps-accordion-group {
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            gap: 12px;
         }
 
-        .headerinformation,
-        .footerinformation,
-        .middleinformation {
-            width: 4.5rem;
-            font-size: 0.75rem;
-            padding-left: 1rem;
-            color: #666;
+        .ps-card {
+            border: 1px solid var(--ps-border);
+            border-radius: var(--ps-radius);
+            background: #ffffff;
+            box-shadow: var(--ps-shadow-sm);
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .ps-card:hover {
+            border-color: #cbd5e1;
+        }
+        .ps-card.is-open {
+            border-color: #cbd5e1;
+            box-shadow: var(--ps-shadow);
         }
 
-        /* .middleinformation {
-            position: absolute;
-            top: 50%;
-            font-size: large;
-        } */
-
-        /* .footerinformation {
-            position: absolute;
-            bottom: 0px;
-        } */
-
-        #errormessage {
-            padding: 5px 10px;
-            border-radius: 5px;
-            background-color: rgb(255, 167, 167);
-            border: 1px solid red;
-            position: fixed;
-            top: 60px;
-            left: 50%;
-            z-index: 100;
-            display: none;
-        }
-
-        .printspinnerbox {
-            display: none;
-            justify-content: center;
+        .ps-card-header {
+            display: flex;
             align-items: center;
-            height: 100vh;
-            background-color: #f3f3f3;
-            position: fixed;
-            top: 0px;
-            left: 0px;
-            width: 100%;
-            z-index: 1000;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: #ffffff;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.15s ease;
+        }
+        .ps-card-header:hover {
+            background-color: #f8fafc;
         }
 
-        .printspinner {
+        .ps-card-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .ps-card-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--ps-primary-light);
+            color: var(--ps-primary);
+            font-size: 14px;
+        }
+
+        .ps-card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ps-text);
+        }
+
+        .ps-card-subtitle {
+            font-size: 12px;
+            color: var(--ps-text-muted);
+            margin-top: 1px;
+        }
+
+        .ps-card-chevron {
+            font-size: 13px;
+            color: var(--ps-text-muted);
+            transition: transform 0.25s ease;
+        }
+        .ps-card.is-open .ps-card-chevron {
+            transform: rotate(180deg);
+        }
+
+        .ps-card-body {
+            display: none;
+            padding: 16px 18px 20px;
+            border-top: 1px solid #f1f5f9;
+            background: #ffffff;
+        }
+        .ps-card.is-open .ps-card-body {
+            display: block;
+        }
+
+        /* Form Controls & Layouts */
+        .ps-form-group {
+            margin-bottom: 16px;
+        }
+        .ps-form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .ps-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ps-text);
+            margin-bottom: 6px;
+        }
+        .ps-hint {
+            font-size: 11px;
+            color: var(--ps-text-muted);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .ps-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .ps-grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        .ps-input,
+        .ps-select,
+        .ps-textarea {
+            width: 100%;
+            padding: 8px 12px;
+            font-size: 13px;
+            border: 1px solid var(--ps-border);
+            border-radius: var(--ps-radius-sm);
+            background: #ffffff;
+            color: var(--ps-text);
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .ps-input:focus,
+        .ps-select:focus,
+        .ps-textarea:focus {
+            border-color: var(--ps-border-focus);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+        }
+
+        .ps-input-unit-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .ps-input-unit-wrapper .ps-input {
+            padding-right: 42px;
+        }
+        .ps-input-unit-badge {
+            position: absolute;
+            right: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--ps-text-muted);
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        /* Toggle Switches */
+        .ps-switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dashed #f1f5f9;
+        }
+        .ps-switch-row:last-child {
+            border-bottom: none;
+        }
+
+        .ps-switch-info {
+            display: flex;
+            flex-direction: column;
+            padding-right: 12px;
+        }
+        .ps-switch-label {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--ps-text);
+            cursor: pointer;
+        }
+        .ps-switch-desc {
+            font-size: 11px;
+            color: var(--ps-text-muted);
+            line-height: 1.3;
+            margin-top: 1px;
+        }
+
+        .ps-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+        .ps-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .ps-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #cbd5e1;
+            transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 34px;
+        }
+        .ps-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .ps-switch input:checked + .ps-slider {
+            background-color: var(--ps-primary);
+        }
+        .ps-switch input:checked + .ps-slider:before {
+            transform: translateX(18px);
+        }
+
+        /* Segmented Radio Tabs */
+        .ps-segmented-tabs {
+            display: flex;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 8px;
+            gap: 4px;
+            margin-bottom: 14px;
+        }
+        .ps-tab-item {
+            flex: 1;
+            text-align: center;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--ps-text-muted);
+            transition: all 0.2s ease;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .ps-tab-item.is-active {
+            background: #ffffff;
+            color: var(--ps-text);
+            box-shadow: var(--ps-shadow-sm);
+        }
+
+        /* Drag & Drop Upload Zone */
+        .ps-dropzone {
+            position: relative;
+            border: 2px dashed #cbd5e1;
+            border-radius: var(--ps-radius);
+            padding: 20px 14px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .ps-dropzone:hover,
+        .ps-dropzone.is-dragover {
+            border-color: var(--ps-primary);
+            background: #f0fdfa;
+        }
+        .ps-dropzone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .ps-dropzone-icon {
+            font-size: 24px;
+            color: var(--ps-primary);
+            margin-bottom: 6px;
+        }
+        .ps-dropzone-text {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--ps-text);
+        }
+        .ps-dropzone-sub {
+            font-size: 11px;
+            color: var(--ps-text-muted);
+            margin-top: 3px;
+        }
+
+        /* Uploaded Image Preview Box */
+        .ps-preview-thumb-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8fafc;
+            border: 1px solid var(--ps-border);
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        .ps-thumb-details {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .ps-thumb-img {
             width: 50px;
             height: 50px;
-            border: 5px solid #ccc;
-            border-top: 5px solid #3498db;
-            border-radius: 50%;
-            animation: spin 0.5s linear infinite;
+            object-fit: contain;
+            border-radius: 4px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
         }
-
-        .scale-div {
+        .ps-thumb-meta {
             display: flex;
-            gap: 5px;
             flex-direction: column;
         }
+        .ps-thumb-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ps-text);
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ps-thumb-size {
+            font-size: 11px;
+            color: var(--ps-text-muted);
+        }
+        .ps-btn-icon-danger {
+            background: transparent;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            transition: background-color 0.15s;
+        }
+        .ps-btn-icon-danger:hover {
+            background: #fee2e2;
+        }
 
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
+        /* Template Gallery */
+        .ps-template-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .ps-template-item {
+            position: relative;
+            border: 2px solid var(--ps-border);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            aspect-ratio: 210 / 297;
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+        .ps-template-item:hover {
+            border-color: #94a3b8;
+            transform: translateY(-2px);
+        }
+        .ps-template-item.is-selected {
+            border-color: var(--ps-primary);
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.25);
+        }
+        .ps-template-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .ps-template-delete {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .ps-template-item:hover .ps-template-delete {
+            opacity: 1;
+        }
+
+        /* Preset Chips */
+        .ps-preset-chips {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .ps-chip {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1px solid var(--ps-border);
+            background: #ffffff;
+            color: var(--ps-text-muted);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .ps-chip:hover {
+            background: #f1f5f9;
+            color: var(--ps-text);
+        }
+        .ps-chip.is-active {
+            background: var(--ps-primary-light);
+            border-color: var(--ps-primary);
+            color: var(--ps-primary);
+        }
+
+        /* Signature Slots Configuration Card */
+        .ps-sig-slot-box {
+            border: 1px solid var(--ps-border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+        .ps-sig-slot-box:last-child {
+            margin-bottom: 0;
+        }
+        .ps-sig-slot-box.is-disabled {
+            opacity: 0.6;
+            background: #fafafa;
+        }
+        .ps-sig-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .ps-sig-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ps-text);
+        }
+        .ps-sig-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .ps-btn-tool {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--ps-border);
+            background: #ffffff;
+            color: var(--ps-text);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+        .ps-btn-tool:hover {
+            background: #f1f5f9;
+        }
+        .ps-btn-tool.is-active {
+            background: var(--ps-primary);
+            color: #ffffff;
+            border-color: var(--ps-primary);
+        }
+
+        /* Right Panel: Live Interactive Preview Canvas */
+        .ps-preview-panel {
+            background: #f1f5f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+            position: relative;
+            padding: 24px 20px 80px;
+            max-height: calc(100vh - 65px);
+        }
+
+        .ps-canvas-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 8px 18px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--ps-border);
+            border-radius: 999px;
+            box-shadow: var(--ps-shadow);
+            margin-bottom: 24px;
+        }
+
+        .ps-canvas-mode-toggle {
+            display: flex;
+            background: #f1f5f9;
+            padding: 3px;
+            border-radius: 999px;
+            gap: 2px;
+        }
+        .ps-mode-btn {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 14px;
+            border-radius: 999px;
+            border: none;
+            background: transparent;
+            color: var(--ps-text-muted);
+            cursor: pointer;
+            transition: all 0.18s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ps-mode-btn.is-active {
+            background: #ffffff;
+            color: var(--ps-text);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .ps-zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ps-zoom-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid var(--ps-border);
+            background: #ffffff;
+            color: var(--ps-text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: all 0.15s ease;
+        }
+        .ps-zoom-btn:hover {
+            background: #f8fafc;
+        }
+        .ps-zoom-val {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ps-text);
+            min-width: 44px;
+            text-align: center;
+        }
+
+        /* A4 Viewport Wrapper & Aspect Ratio Maintainer */
+        .ps-a4-viewport-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .ps-a4-scaler {
+            transform-origin: top center;
+            transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Standard A4 Sheet: 210mm x 297mm (scaled to 794px x 1123px at 96 DPI) */
+        .ps-a4-sheet {
+            width: 794px;
+            min-height: 1123px;
+            background: #ffffff;
+            border-radius: 2px;
+            box-shadow: 0 15px 45px rgba(15, 23, 42, 0.15), 0 2px 8px rgba(0, 0, 0, 0.05);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+        }
+
+        /* Letterhead Layer */
+        .ps-a4-letterhead-overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+            background-size: cover;
+            background-position: center top;
+            background-repeat: no-repeat;
+            opacity: 1;
+            display: none;
+        }
+        .ps-a4-letterhead-overlay.is-active {
+            display: block;
+        }
+
+        /* Pre-printed Header Guideline Zone */
+        .ps-preprinted-header-guide {
+            width: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(241, 245, 249, 0.6),
+                rgba(241, 245, 249, 0.6) 10px,
+                rgba(226, 232, 240, 0.6) 10px,
+                rgba(226, 232, 240, 0.6) 20px
+            );
+            border-bottom: 2px dashed #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            position: relative;
+            z-index: 2;
+            transition: height 0.15s ease;
+        }
+
+        .ps-preprinted-footer-guide {
+            width: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(241, 245, 249, 0.6),
+                rgba(241, 245, 249, 0.6) 10px,
+                rgba(226, 232, 240, 0.6) 10px,
+                rgba(226, 232, 240, 0.6) 20px
+            );
+            border-top: 2px dashed #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            position: relative;
+            z-index: 2;
+            transition: height 0.15s ease;
+            margin-top: auto;
+        }
+
+        /* Live Report Document Body */
+        .ps-a4-body {
+            position: relative;
+            z-index: 5;
+            padding: 15px 35px 25px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            transition: padding 0.15s ease;
+        }
+
+        /* Patient Header Card on Document */
+        .ps-doc-patient-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            background: #ffffff;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px 16px;
+            font-size: 11px;
+        }
+        .ps-doc-info-item {
+            display: flex;
+            gap: 6px;
+        }
+        .ps-doc-info-label {
+            font-weight: 700;
+            color: #475467;
+            min-width: 65px;
+        }
+        .ps-doc-info-val {
+            color: #111827;
+            font-weight: 500;
+        }
+
+        /* Report Table */
+        .ps-doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-bottom: 16px;
+        }
+        .ps-doc-table th {
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 7px 10px;
+            text-align: left;
+            border-top: 1.5px solid #cbd5e1;
+            border-bottom: 1.5px solid #cbd5e1;
+        }
+        .ps-doc-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+        .ps-doc-category-row td {
+            background: #f8fafc;
+            font-weight: 700;
+            color: var(--ps-primary);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #cbd5e1;
+        }
+
+        .ps-result-abnormal {
+            color: #dc2626 !important;
+            font-weight: 700;
+        }
+        .ps-result-flag {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: #fee2e2;
+            color: #dc2626;
+            margin-left: 4px;
+        }
+
+        /* Signatures Section on Report */
+        .ps-doc-signatures-wrap {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px dashed #cbd5e1;
+            width: 100%;
+        }
+
+        .ps-doc-signatures-grid {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .ps-doc-sig-block {
+            display: flex;
+            flex-direction: column;
+            min-width: 130px;
+            max-width: 220px;
+        }
+        .ps-doc-sig-block.align-left {
+            align-items: flex-start;
+            text-align: left;
+        }
+        .ps-doc-sig-block.align-center {
+            align-items: center;
+            text-align: center;
+        }
+        .ps-doc-sig-block.align-right {
+            align-items: flex-end;
+            text-align: right;
+        }
+
+        .ps-doc-sig-img-wrap {
+            height: 48px;
+            display: flex;
+            align-items: flex-end;
+            margin-bottom: 6px;
+        }
+        .ps-doc-sig-img {
+            max-height: 48px;
+            max-width: 140px;
+            object-fit: contain;
+        }
+
+        .ps-doc-digital-signature {
+            font-family: 'Brush Script MT', 'Segoe Script', cursive, sans-serif;
+            font-size: 20px;
+            color: #1e3a8a;
+            line-height: 1;
+            padding-bottom: 4px;
+            white-space: nowrap;
+        }
+
+        .ps-doc-sig-designation {
+            font-size: 11px;
+            color: #1e293b;
+            line-height: 1.35;
+            white-space: pre-line;
+            border-top: 1px solid #94a3b8;
+            padding-top: 4px;
+            width: 100%;
+        }
+
+        /* Document End / Verification Note */
+        .ps-doc-end-note {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 9.5px;
+            color: #64748b;
+            margin-top: 14px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        /* PDF Iframe Mode */
+        .ps-pdf-iframe-container {
+            width: 794px;
+            height: 1123px;
+            background: #ffffff;
+            box-shadow: 0 15px 45px rgba(15, 23, 42, 0.15);
+            display: none;
+            position: relative;
+        }
+        .ps-pdf-iframe-container.is-active {
+            display: block;
+        }
+        .ps-pdf-iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .ps-iframe-loader {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 10;
+        }
+        .ps-spinner {
+            width: 36px;
+            height: 36px;
+            border: 3.5px solid #cbd5e1;
+            border-top-color: var(--ps-primary);
+            border-radius: 50%;
+            animation: ps-spin 0.7s linear infinite;
+        }
+        @keyframes ps-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast Notifications */
+        .ps-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background: #0f172a;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: all 0.25s ease;
+            pointer-events: none;
+        }
+        .ps-toast.is-show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .ps-toast.success { background: #059669; }
+        .ps-toast.error { background: #dc2626; }
+        .ps-toast.warning { background: #d97706; }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 1024px) {
+            .ps-topbar {
+                padding: 10px 16px;
             }
+            .ps-workspace {
+                grid-template-columns: 100%;
+                min-height: auto;
+                width: 100%;
+            }
+            .ps-controls-panel {
+                max-height: none;
+                border-right: none;
+                border-bottom: 1px solid var(--ps-border);
+                width: 100%;
+                box-sizing: border-box;
+                padding: 16px 14px 30px;
+            }
+            .ps-preview-panel {
+                max-height: none;
+                padding: 20px 10px 60px;
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
+                box-sizing: border-box;
+            }
+        }
 
-            100% {
-                transform: rotate(360deg);
+        @media (max-width: 768px) {
+            .ps-topbar {
+                padding: 10px 14px;
+                gap: 8px;
+            }
+            .ps-topbar-left {
+                gap: 10px;
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+            .ps-back-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 13px;
+                flex-shrink: 0;
+            }
+            .ps-title-wrap {
+                min-width: 0;
+                overflow: hidden;
+            }
+            .ps-title-wrap h1 {
+                font-size: 15px;
+                margin: 0;
+                gap: 6px;
+            }
+            .ps-title-text {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .ps-badge-pro {
+                font-size: 10px;
+                padding: 2px 6px;
+                flex-shrink: 0;
+            }
+            .ps-topbar-right {
+                gap: 8px;
+                flex-shrink: 0;
+            }
+            .ps-btn {
+                padding: 7px 12px;
+                font-size: 12px;
+                gap: 6px;
+                border-radius: 6px;
+            }
+            .ps-save-status {
+                font-size: 12px;
+                gap: 4px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .ps-topbar {
+                padding: 8px 10px;
+                gap: 6px;
+                position: sticky;
+                top: 0;
+            }
+            .ps-topbar-left {
+                gap: 8px;
+                min-width: 0;
+                flex: 1 1 auto;
+            }
+            .ps-back-btn {
+                width: 30px;
+                height: 30px;
+                font-size: 12px;
+            }
+            .ps-title-wrap h1 {
+                font-size: 14px;
+                display: block;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .ps-title-full {
+                display: none !important;
+            }
+            .ps-title-short {
+                display: inline !important;
+            }
+            .ps-badge-pro {
+                display: none !important;
+            }
+            .ps-topbar-right {
+                gap: 6px;
+            }
+            .ps-save-status {
+                gap: 0;
+                padding: 0 2px;
+            }
+            .ps-save-status span {
+                display: none !important;
+            }
+            .ps-save-status i {
+                font-size: 13px;
+            }
+            #watchVideoBtn {
+                padding: 6px 9px;
+                font-size: 12px;
+            }
+            #watchVideoBtn .ps-btn-text {
+                display: none !important;
+            }
+            #btnSaveAllSettings {
+                padding: 6px 11px;
+                font-size: 12px;
+                gap: 5px;
+            }
+            .ps-btn-text-full {
+                display: none !important;
+            }
+            .ps-btn-text-short {
+                display: inline !important;
+            }
+            #btnSaveAllSettings > span:not(.ps-btn-text-full):not(.ps-btn-text-short) {
+                font-size: 0;
+            }
+            #btnSaveAllSettings > span:not(.ps-btn-text-full):not(.ps-btn-text-short)::after {
+                content: "Save";
+                font-size: 12px;
+            }
+            .ps-controls-panel {
+                padding: 12px 8px 24px;
+            }
+            .ps-card-header {
+                padding: 12px 14px;
+            }
+            .ps-card-body {
+                padding: 14px 12px;
+            }
+            .ps-canvas-toolbar {
+                border-radius: 12px;
+                padding: 6px 10px;
+                gap: 8px;
+                margin-bottom: 16px;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            .ps-preview-panel {
+                padding: 16px 6px 40px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .ps-grid-3,
+            .ps-grid-2 {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .ps-topbar {
+                padding: 6px 8px;
+                gap: 4px;
+            }
+            .ps-topbar-left {
+                gap: 6px;
+            }
+            .ps-title-wrap h1 {
+                font-size: 13px;
+            }
+            #btnSaveAllSettings {
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+            .ps-switch-row {
+                padding: 10px 0;
+            }
+            .ps-switch-label {
+                font-size: 12px;
             }
         }
     </style>
 </head>
-
 <body>
-    <div class="printspinnerbox">
-        <div class="printspinner"></div>
-    </div>
-    <div class="header">
-        <span class="close-btn" id="close-btn" title="Go Back">
-            &times;
-        </span>
-        <a href="/admin/admin.html?page=addvideo">
-            <button class="watch-video-btn"><i class="fas fa-play"></i> WATCH VIDEO</button>
-        </a>
-    </div>
-    <div id="errormessage">
-        hello my dear
-    </div>
-    <div class="editorDiv" id="editorDiv">
-        <div class="container8989">
-            <div class="accordion">
-                <div class="accordion-item">
-                    <button onclick="toggleAccordion(this)">
-                        Letterhead
-                        <i class="fas fa-chevron-down icon"></i>
-                    </button>
-                    <div class="accordion-content">
-                        <div class="container278">
-                            <div class="file-upload">
-                                <div id="images-div">
-                                </div>
-                                <!-- Delete button (initially hidden) -->
-                                <button id="delete-button" style="display: none;">Delete</button>
-                                <input type="file" id="fileInput" name="template" accept="image/*" />
-                                <div>
-                                    <p id="message"></p>
-                                </div>
+
+    <!-- Top Sticky Header -->
+    <header class="ps-topbar">
+        <div class="ps-topbar-left">
+            <button type="button" class="ps-back-btn" id="close-btn" title="Back to Reports">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="ps-title-wrap">
+                <h1>
+                    <span class="ps-title-text ps-title-full">Print Settings & PDF Customizer</span>
+                    <span class="ps-title-text ps-title-short">Print Settings</span>
+                    <span class="ps-badge-pro">Enterprise LIS</span>
+                </h1>
+            </div>
+        </div>
+        <div class="ps-topbar-right">
+            <div class="ps-save-status" id="saveStatusIndicator" title="System Ready">
+                <i class="fa-solid fa-circle-check" style="color: #10b981;"></i>
+                <span class="ps-status-text">Ready</span>
+            </div>
+            <a href="/admin/admin.html?page=addvideo" class="ps-btn ps-btn-tutorial" id="watchVideoBtn" title="Video Guide">
+                <i class="fa-solid fa-play"></i>
+                <span class="ps-btn-text">Video Guide</span>
+            </a>
+            <button type="button" class="ps-btn ps-btn-primary" id="btnSaveAllSettings" title="Save Settings">
+                <i class="fa-solid fa-floppy-disk"></i>
+                <span class="ps-btn-text ps-btn-text-full">Save Settings</span>
+                <span class="ps-btn-text ps-btn-text-short">Save</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Workspace Main Grid -->
+    <div class="ps-workspace" id="editorDiv">
+
+        <!-- Left Controls Accordion -->
+        <aside class="ps-controls-panel">
+            <div class="ps-accordion-group">
+
+                <!-- 1. Header & Letterhead Card -->
+                <div class="ps-card is-open" id="cardLetterhead">
+                    <div class="ps-card-header" onclick="togglePsCard('cardLetterhead')">
+                        <div class="ps-card-header-left">
+                            <div class="ps-card-icon"><i class="fa-solid fa-file-invoice"></i></div>
+                            <div>
+                                <div class="ps-card-title">Header & Letterhead</div>
+                                <div class="ps-card-subtitle">Digital stationary & pre-printed margins</div>
                             </div>
-                            <div class="row">
-                                <div class="column">
-                                    <div class="input-group">
-                                        <label for="header-height">
-                                            Header height
-                                        </label>
-                                        <div class="input-wrapper">
-                                            <input id="header" type="text" />
-                                            <!-- <input id="header" type="text" oninput="validateField(this, 1, 10)" /> -->
-                                            <span>
-                                                cm
-                                            </span>
-                                        </div>
-                                        <p class="error-message" id="header-error"></p>
-                                    </div>
-                                </div>
-                                <div class="column">
-                                    <div class="input-group">
-                                        <label for="footer-height">
-                                            Footer height
-                                        </label>
-                                        <div class="input-wrapper">
-                                            <input id="footer" type="text" />
-                                            <!-- <input id="footer" type="text" oninput="validateField(this, 0, 5)" /> -->
-                                            <span>
-                                                cm
-                                            </span>
-                                        </div>
-                                        <p class="error-message" id="footer-error"></p>
-                                    </div>
-                                </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
+                    </div>
+                    <div class="ps-card-body">
+                        <!-- Mode Selector Tabs -->
+                        <div class="ps-segmented-tabs">
+                            <div class="ps-tab-item is-active" id="tabModeDigital" onclick="setLetterheadMode('digital')">
+                                <i class="fa-solid fa-image"></i> Digital Letterhead
                             </div>
-                            <div class="more-settings" onclick="toggleAccordion(this)">
-                                More setting
-                                <i class="fas fa-chevron-down icon"></i>
+                            <div class="ps-tab-item" id="tabModePreprinted" onclick="setLetterheadMode('preprinted')">
+                                <i class="fa-solid fa-print"></i> Pre-Printed Paper
                             </div>
-                            <div class="accordion-content">
-                                <div class="row">
-                                    <div class="column">
-                                        <div class="input-group">
-                                            <label for="header-height">
-                                                Margin right
-                                            </label>
-                                            <div class="input-wrapper">
-                                                <input id="margin-right" type="text" />
-                                                <!-- <input id="margin-right" type="text" value="10"oninput="validateField(this, 0, 4)" /> -->
-                                                <span>
-                                                    cm
-                                                </span>
-                                            </div>
-                                            <p class="error-message" id="margin-right-error"></p>
+                        </div>
+
+                        <!-- Drag & Drop Zone for Letterhead -->
+                        <div id="digitalLetterheadControls">
+                            <div class="ps-form-group">
+                                <label class="ps-label">Upload Letterhead Template (A4 Background)</label>
+                                <div class="ps-dropzone" id="letterheadDropzone">
+                                    <input type="file" id="fileInput" name="template" accept="image/png,image/jpeg,image/webp">
+                                    <div class="ps-dropzone-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                                    <div class="ps-dropzone-text">Drag & drop letterhead image here, or browse</div>
+                                    <div class="ps-dropzone-sub">Supports PNG, JPG, WEBP (Recommended: 2480 x 3508 px at 300 DPI)</div>
+                                </div>
+
+                                <!-- Current Uploaded Thumbnail Preview -->
+                                <div class="ps-preview-thumb-box" id="letterheadThumbBox" style="display: none;">
+                                    <div class="ps-thumb-details">
+                                        <img src="" id="letterheadThumbImg" class="ps-thumb-img" alt="Letterhead preview">
+                                        <div class="ps-thumb-meta">
+                                            <span class="ps-thumb-name" id="letterheadThumbName">template.png</span>
+                                            <span class="ps-thumb-size" id="letterheadThumbSize">Active template</span>
                                         </div>
                                     </div>
-                                    <div class="column">
-                                        <div class="input-group">
-                                            <label for="footer-height">
-                                                Margin left
-                                            </label>
-                                            <div class="input-wrapper">
-                                                <input id="margin-left" type="text" />
-                                                <!-- <input id="margin-left" type="text" value="10" oninput="validateField(this, 0, 4)" /> -->
-                                                <span>
-                                                    cm
-                                                </span>
-                                            </div>
-                                            <p class="error-message" id="margin-left-error"></p>
-                                        </div>
-                                    </div>
+                                    <button type="button" class="ps-btn-icon-danger" id="btnRemoveTemplate" title="Delete template">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="update-button" id="uploadTemplate">
-                                Update
+
+                            <!-- Saved Templates Gallery -->
+                            <div class="ps-form-group" id="templateGalleryGroup" style="display: none;">
+                                <label class="ps-label">Saved Template Gallery</label>
+                                <div class="ps-template-gallery" id="images-div"></div>
+                            </div>
+                        </div>
+
+                        <!-- Margin Offsets -->
+                        <div class="ps-grid-2">
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="header">Header Height / Top Margin</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="header" class="ps-input" step="0.1" min="0" max="15" value="2.5">
+                                    <span class="ps-input-unit-badge">cm</span>
+                                </div>
+                                <div class="ps-hint">Reserved for logo / clinic banner</div>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="footer">Footer Height / Bottom Margin</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="footer" class="ps-input" step="0.1" min="0" max="10" value="1.8">
+                                    <span class="ps-input-unit-badge">cm</span>
+                                </div>
+                                <div class="ps-hint">Reserved for signatures & address</div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Margin Presets -->
+                        <div class="ps-form-group">
+                            <label class="ps-label">Header Preset Presets</label>
+                            <div class="ps-preset-chips">
+                                <span class="ps-chip" onclick="applyHeaderPreset(0, 0.5)">Full Digital (0cm)</span>
+                                <span class="ps-chip is-active" onclick="applyHeaderPreset(2.5, 1.8)">Standard (2.5cm)</span>
+                                <span class="ps-chip" onclick="applyHeaderPreset(4.0, 2.0)">Pad Header (4.0cm)</span>
+                                <span class="ps-chip" onclick="applyHeaderPreset(5.5, 2.5)">Large Pad (5.5cm)</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="accordion-item">
-                    <button onclick="toggleAccordion(this)">
-                        Signatures
-                        <i class="fas fa-chevron-down icon"></i>
-                    </button>
 
-                    <div class="accordion-content">
-                        <div class="container-sign">
-                            <div class="row">
-                                <div class="column">
-                                    <div class="input-group">
-                                        <label for="padding-left">
-                                            Padding left
-                                        </label>
-                                        <div class="input-wrapper">
-                                            <input id="padding-left" type="text" />
-                                            <span>
-                                                cm
-                                            </span>
-                                        </div>
-                                        <p class="error-message" id="padding-left-error"></p>
-                                    </div>
-                                </div>
-                                <div class="column">
-                                    <div class="input-group">
-                                        <label for="padding-right">
-                                            Padding right
-                                        </label>
-                                        <div class="input-wrapper">
-                                            <input id="padding-right" type="text" />
-                                            <span>
-                                                cm
-                                            </span>
-                                        </div>
-                                        <p class="error-message" id="padding-right-error"></p>
-                                    </div>
+                <!-- 2. Margins & Page Dimensions -->
+                <div class="ps-card" id="cardMargins">
+                    <div class="ps-card-header" onclick="togglePsCard('cardMargins')">
+                        <div class="ps-card-header-left">
+                            <div class="ps-card-icon"><i class="fa-solid fa-ruler-combined"></i></div>
+                            <div>
+                                <div class="ps-card-title">Margins & Page Dimensions</div>
+                                <div class="ps-card-subtitle">Left, right & printable content padding</div>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
+                    </div>
+                    <div class="ps-card-body">
+                        <div class="ps-grid-2">
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="margin-left">Left Margin</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="margin-left" class="ps-input" step="0.1" min="0" max="5" value="1.0">
+                                    <span class="ps-input-unit-badge">cm</span>
                                 </div>
                             </div>
-                            <div class="form-group2">
-                                <input type="checkbox" id="show-lab">
-                                <label for="show-signatures" class="checkbox-label">Show lab incharge signatures</label>
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="margin-right">Right Margin</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="margin-right" class="ps-input" step="0.1" min="0" max="5" value="1.0">
+                                    <span class="ps-input-unit-badge">cm</span>
+                                </div>
                             </div>
-                            <div class="signaturediv">
-                                <div class="form-group2">
-                                    <label for="lab-info">Lab incharge sign</label>
-                                    <div class="signDiv">
-                                        <textarea id="lab-info" placeholder="Enter here" maxlength="75"></textarea>
+                        </div>
+                        <div class="ps-grid-2">
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="padding-left">Signature Left Offset</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="padding-left" class="ps-input" step="0.1" min="0" max="10" value="0.5">
+                                    <span class="ps-input-unit-badge">cm</span>
+                                </div>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="padding-right">Signature Right Offset</label>
+                                <div class="ps-input-unit-wrapper">
+                                    <input type="number" id="padding-right" class="ps-input" step="0.1" min="0" max="10" value="0.5">
+                                    <span class="ps-input-unit-badge">cm</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Typography & Theme Colors -->
+                <div class="ps-card" id="cardTypography">
+                    <div class="ps-card-header" onclick="togglePsCard('cardTypography')">
+                        <div class="ps-card-header-left">
+                            <div class="ps-card-icon"><i class="fa-solid fa-font"></i></div>
+                            <div>
+                                <div class="ps-card-title">Typography & Report Formatting</div>
+                                <div class="ps-card-subtitle">Fonts, sizes, line spacing & test styling</div>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
+                    </div>
+                    <div class="ps-card-body">
+                        <div class="ps-grid-3">
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="pdf-font-family">Font Family</label>
+                                <select id="pdf-font-family" class="ps-select">
+                                    <option value="Arial">Arial (Clean)</option>
+                                    <option value="Segoe UI">Segoe UI (Modern)</option>
+                                    <option value="Calibri">Calibri (Classic)</option>
+                                    <option value="Verdana">Verdana</option>
+                                    <option value="Tahoma">Tahoma</option>
+                                    <option value="Trebuchet MS">Trebuchet MS</option>
+                                    <option value="Georgia">Georgia (Serif)</option>
+                                    <option value="Times New Roman">Times New Roman</option>
+                                    <option value="Garamond">Garamond</option>
+                                </select>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="pdf-font-size">Font Size</label>
+                                <select id="pdf-font-size" class="ps-select">
+                                    <option value="8">8 pt</option>
+                                    <option value="9">9 pt</option>
+                                    <option value="10">10 pt</option>
+                                    <option value="11">11 pt</option>
+                                    <option value="12" selected>12 pt</option>
+                                    <option value="13">13 pt</option>
+                                    <option value="14">14 pt</option>
+                                    <option value="16">16 pt</option>
+                                </select>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label" for="spacing">Row Spacing</label>
+                                <select id="spacing" class="ps-select">
+                                    <option value="1" selected>1 (Compact)</option>
+                                    <option value="2">2 (Normal)</option>
+                                    <option value="3">3 (Relaxed)</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Report Toggles -->
+                        <div class="ps-form-group" style="margin-top: 12px;">
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="high-low-marker">Abnormal Result Flag (H / L)</label>
+                                    <span class="ps-switch-desc">Displays bold [H] or [L] tags for values out of range</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="high-low-marker" checked>
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="abnormal-results-red">Highlight Abnormal Values in Red</label>
+                                    <span class="ps-switch-desc">Values out of range will be rendered in crimson red</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="abnormal-results-red" checked>
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="abnormal-results-bold">Bold Abnormal Values</label>
+                                    <span class="ps-switch-desc">Makes out-of-range figures visually prominent</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="abnormal-results-bold" checked>
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="show-investigations">Show Investigations in Header</label>
+                                    <span class="ps-switch-desc">Displays test list in patient summary box</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="show-investigations" checked>
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="hide-categories">Hide Test Categories</label>
+                                    <span class="ps-switch-desc">Omits department/category grouping headers</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="hide-categories">
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="ps-switch-row">
+                                <div class="ps-switch-info">
+                                    <label class="ps-switch-label" for="hide-table-headings">Hide Table Column Headings</label>
+                                    <span class="ps-switch-desc">Omits 'Test Name', 'Result', 'Ref Value' row</span>
+                                </div>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="hide-table-headings">
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Advanced Signature Customization Engine -->
+                <div class="ps-card" id="cardSignatures">
+                    <div class="ps-card-header" onclick="togglePsCard('cardSignatures')">
+                        <div class="ps-card-header-left">
+                            <div class="ps-card-icon"><i class="fa-solid fa-signature"></i></div>
+                            <div>
+                                <div class="ps-card-title">Doctor & Technician Signatures</div>
+                                <div class="ps-card-subtitle">Upload signatures, alignment & doctor titles</div>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
+                    </div>
+                    <div class="ps-card-body">
+                        <!-- Global Alignment Matrix -->
+                        <div class="ps-form-group">
+                            <label class="ps-label">Global Signature Placement</label>
+                            <div class="ps-segmented-tabs" id="sigGlobalAlignmentTabs">
+                                <div class="ps-tab-item is-active" data-align="space-between" onclick="setSigGlobalAlignment('space-between')">
+                                    <i class="fa-solid fa-arrows-left-right"></i> Justified
+                                </div>
+                                <div class="ps-tab-item" data-align="flex-start" onclick="setSigGlobalAlignment('flex-start')">
+                                    <i class="fa-solid fa-align-left"></i> Left
+                                </div>
+                                <div class="ps-tab-item" data-align="center" onclick="setSigGlobalAlignment('center')">
+                                    <i class="fa-solid fa-align-center"></i> Center
+                                </div>
+                                <div class="ps-tab-item" data-align="flex-end" onclick="setSigGlobalAlignment('flex-end')">
+                                    <i class="fa-solid fa-align-right"></i> Right
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Signature Slot 1: Lab Incharge -->
+                        <div class="ps-sig-slot-box" id="sigSlotBoxLab">
+                            <div class="ps-sig-header">
+                                <span class="ps-sig-title">Slot 1: Lab Technician / Incharge</span>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="show-lab" checked onchange="handleSigSlotToggle('lab')">
+                                    <span class="ps-slider"></span>
+                                </label>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Designation & Qualifications (Max 75 Chars)</label>
+                                <textarea id="lab-info" class="ps-textarea" rows="2" maxlength="75" placeholder="e.g. Lab Technician&#10;B.Sc. MLT"></textarea>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Signature Image (PNG / Transparent)</label>
+                                <div class="ps-dropzone" id="dropzoneLabSign">
+                                    <input type="file" id="lab-sign-file" accept="image/*">
+                                    <div class="ps-dropzone-icon"><i class="fa-solid fa-pen-nib"></i></div>
+                                    <div class="ps-dropzone-text">Click to browse or drop PNG signature</div>
+                                </div>
+                                <div class="ps-preview-thumb-box" id="labSignThumbBox" style="display: none;">
+                                    <div class="ps-thumb-details">
                                         <div id="labSignImgdiv"></div>
+                                        <div class="ps-thumb-meta">
+                                            <span class="ps-thumb-name">Lab Incharge Signature</span>
+                                            <span class="ps-thumb-size">Attached</span>
+                                        </div>
                                     </div>
-                                    <input type="file" id="lab-sign-file">
-                                    <!-- <span class="file-info">No file chosen</span> -->
+                                    <button type="button" class="ps-btn-icon-danger" id="btnDeleteLabSign" title="Remove Signature">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="form-group2">
-                                <input type="checkbox" id="show-doctor1">
-                                <label for="show-signatures" class="checkbox-label">Show Doctor 1 signatures</label>
+                        </div>
+
+                        <!-- Signature Slot 2: Doctor 1 -->
+                        <div class="ps-sig-slot-box" id="sigSlotBoxDoc1">
+                            <div class="ps-sig-header">
+                                <span class="ps-sig-title">Slot 2: Pathologist / Doctor 1</span>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="show-doctor1" checked onchange="handleSigSlotToggle('doctor1')">
+                                    <span class="ps-slider"></span>
+                                </label>
                             </div>
-                            <div class="signaturediv">
-                                <div class="form-group2">
-                                    <label for="firstdoctor-info" placeholder="Enter here">Doctor sign</label>
-                                    <div class="signDiv">
-                                        <textarea id="firstdoctor-info" placeholder="Enter here"
-                                            maxlength="75"></textarea>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Doctor Name & Qualifications (Max 75 Chars)</label>
+                                <textarea id="firstdoctor-info" class="ps-textarea" rows="2" maxlength="75" placeholder="e.g. Dr. A. Sharma&#10;MBBS, MD (Pathology)"></textarea>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Signature Image (PNG / Transparent)</label>
+                                <div class="ps-dropzone" id="dropzoneDoc1Sign">
+                                    <input type="file" id="doctor-left-file" accept="image/*">
+                                    <div class="ps-dropzone-icon"><i class="fa-solid fa-pen-nib"></i></div>
+                                    <div class="ps-dropzone-text">Click to browse or drop PNG signature</div>
+                                </div>
+                                <div class="ps-preview-thumb-box" id="firstSignThumbBox" style="display: none;">
+                                    <div class="ps-thumb-details">
                                         <div id="firstSignImgdiv"></div>
+                                        <div class="ps-thumb-meta">
+                                            <span class="ps-thumb-name">Doctor 1 Signature</span>
+                                            <span class="ps-thumb-size">Attached</span>
+                                        </div>
                                     </div>
-                                    <input type="file" id="doctor-left-file">
-                                    <!-- <span class="file-info">No file chosen</span> -->
+                                    <button type="button" class="ps-btn-icon-danger" id="btnDeleteDoc1Sign" title="Remove Signature">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="form-group2">
-                                <input type="checkbox" id="show-doctor2">
-                                <label for="show-signatures" class="checkbox-label">Show Doctor 2 signatures</label>
+                        </div>
+
+                        <!-- Signature Slot 3: Doctor 2 -->
+                        <div class="ps-sig-slot-box" id="sigSlotBoxDoc2">
+                            <div class="ps-sig-header">
+                                <span class="ps-sig-title">Slot 3: Chief Pathologist / Doctor 2</span>
+                                <label class="ps-switch">
+                                    <input type="checkbox" id="show-doctor2" checked onchange="handleSigSlotToggle('doctor2')">
+                                    <span class="ps-slider"></span>
+                                </label>
                             </div>
-                            <div class="signaturediv">
-                                <div class="form-group2">
-                                    <label for="seconddoctor-info">Doctor sign</label>
-                                    <div class="signDiv">
-                                        <textarea id="seconddoctor-info" placeholder="Enter here"
-                                            maxlength="75"></textarea>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Doctor Name & Qualifications (Max 75 Chars)</label>
+                                <textarea id="seconddoctor-info" class="ps-textarea" rows="2" maxlength="75" placeholder="e.g. Dr. R. Mehta&#10;Consultant Biochemist"></textarea>
+                            </div>
+                            <div class="ps-form-group">
+                                <label class="ps-label">Signature Image (PNG / Transparent)</label>
+                                <div class="ps-dropzone" id="dropzoneDoc2Sign">
+                                    <input type="file" id="Doctor-Right-file" accept="image/*">
+                                    <div class="ps-dropzone-icon"><i class="fa-solid fa-pen-nib"></i></div>
+                                    <div class="ps-dropzone-text">Click to browse or drop PNG signature</div>
+                                </div>
+                                <div class="ps-preview-thumb-box" id="secondSignThumbBox" style="display: none;">
+                                    <div class="ps-thumb-details">
                                         <div id="secondSignImgdiv"></div>
+                                        <div class="ps-thumb-meta">
+                                            <span class="ps-thumb-name">Doctor 2 Signature</span>
+                                            <span class="ps-thumb-size">Attached</span>
+                                        </div>
                                     </div>
-                                    <input type="file" id="Doctor-Right-file">
-                                    <!-- <span class="file-info">No file chosen</span> -->
+                                    <button type="button" class="ps-btn-icon-danger" id="btnDeleteDoc2Sign" title="Remove Signature">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="update-button signUpdatebtn" id="updateSign">
-                                Update
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="accordion-item">
-                    <button onclick="toggleAccordion(this)">
-                        General
-                        <i class="fas fa-chevron-down icon"></i>
-                    </button>
-                    <div class="accordion-content">
-                        <div class="container3">
-                            <div class="fontsizeandspacing">
-                                <div class="form-group font-family-group">
-                                    <label for="pdf-font-family">Font style</label>
-                                    <select id="pdf-font-family">
-                                        <option value="Arial">Arial</option>
-                                        <option value="Segoe UI">Segoe UI</option>
-                                        <option value="Calibri">Calibri</option>
-                                        <option value="Verdana">Verdana</option>
-                                        <option value="Tahoma">Tahoma</option>
-                                        <option value="Trebuchet MS">Trebuchet MS</option>
-                                        <option value="Georgia">Georgia</option>
-                                        <option value="Times New Roman">Times New Roman</option>
-                                        <option value="Garamond">Garamond</option>
-                                        <option value="Courier New">Courier New</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pdf-font-size">PDF font size</label>
-                                    <select id="pdf-font-size">
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="14">14</option>
-                                        <option value="15">15</option>
-                                        <option value="16">16</option>
-                                        <option value="17">17</option>
-                                        <option value="18">18</option>
-                                        <option value="19">19</option>
-                                        <option value="20">20</option>
-                                        <option value="21">21</option>
-                                        <option value="22">22</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="spacing">Spacing</label>
-                                    <select id="spacing">
-                                        <option value="1">1</option>
-                                        <option value="2">2</option>
-                                        <option value="3">3</option>
-                                        <option value="4">4</option>
-                                        <option value="5">5</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="font-preview-sample" id="font-preview-sample">
-                                Header, report content, and footer PDF text will use the selected font.
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="high-low-marker" checked>
-                                <label for="high-low-marker">Use high (H), low (L) marker for numeric test
-                                    results.</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="abnormal-results-red">
-                                <label for="abnormal-results-red">Show abnormal results in red.</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="abnormal-results-bold" checked>
-                                <label for="abnormal-results-bold">Show abnormal results in bold.</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="show-tests-ordered" checked>
-                                <label for="show-tests-ordered">Show tests ordered.</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="show-investigations" checked>
-                                <label for="show-investigations">Show Investigations in Header</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="hide-categories">
-                                <label for="hide-categories">Hide categories</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="hide-table-headings">
-                                <label for="hide-table-headings">Hide table headings</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="enable-print-categories" checked>
-                                <label for="enable-print-categories">Enable print categories from new page option by
-                                    default.</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="use-nabl-report-format" checked>
-                                <label for="use-nabl-report-format">Use nabl report format (Not applicable for Lab
-                                    Report V2).</label>
-                            </div>
-                            <div class=".update-button general" id="updateGeneral">Update</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="accordion-item">
-                    <button onclick="toggleAccordion(this)">
-                        TAT info
-                        <i class="fas fa-chevron-down icon"></i>
-                    </button>
-                    <div class="accordion-content">
-                        <div class="container4">
-                            <div class="checkbox-label">
-                                <input type="checkbox" checked>
-                                <label>Use sample collected on (not applicable for NABL format).</label>
-                            </div>
-                            <div class="checkbox-label">
-                                <input type="checkbox" checked>
-                                <label>Use reported on (not applicable for NABL format)</label>
-                            </div>
-                            <div class="checkbox-label">
-                                <input type="checkbox" checked>
-                                <label>Show registered on</label>
-                            </div>
-                            <div class="update-button tatbtn" id="update-button" disabled>Update</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- </div> -->
-
-        <div class="showChangesDiv">
-            <div class="previewpdfcontainer">
-                <div class="measure-outer-div" id="outermeasurebox">
-                    <div class="scale-heading-div">
-                        <div class="headerinformation">
-                            <div class="headermargininfo">
-                                <strong>Header margin :</strong>
-                                <span id="headermargininfospan"></span>
-                            </div>
-                            <div class="iconinfo"> + </div>
-                            <div class="contentareainfo">
-                                <strong>Header content :</strong>
-                                <span>3.2cm</span>
-                            </div>
-                        </div>
-                        <div class="middleinformation">
-                            <div class="contentareainfo">
-                                <strong>Main content</strong>
-                            </div>
-                        </div>
-                        <div class="footerinformation">
-                            <div class="headermargininfo">
-                                <strong>footer margin :</strong>
-                                <span id="footermargininfospan"></span>
-                            </div>
-                            <div class="iconinfo"> + </div>
-                            <div class="contentareainfo">
-                                <strong>footer content :</strong>
-                                <span>1.8cm</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="scale-div">
-                        <div class="big-box" id="headermeasurescalebigbox">
-                            <div class="numberlinebox" id="headermeasurescale">
-                            </div>
-                            <div class="blankbox"></div>
-                        </div>
-                        <div class="big-box" id="middlemeasurescalebigbox">
-                            <div class="numberlinebox" id="middlemeasurescale">
-                                10 cm
-                            </div>
-                            <div class="blankbox"></div>
-                        </div>
-                        <div id="footermeasurescalebigbox">
-                            <div class="numberlinebox" id="footermeasurescale">
-                                2 cm
-                            </div>
-                            <div class="blankbox"></div>
                         </div>
                     </div>
                 </div>
 
-                <div class="iframe-withorwithout">
-                    <div class="outerCheckBox">
-                        <div class="checkBox">
-                            <input type="checkbox" id="check1" name="check1">
-                            <span>without letterhead pdf</span>
-                            <i class="fa-solid fa-circle-info" title="This Field is for PDF only"></i>
-                        </div>
-                    </div>
-                    <div id="pdf-preview-div">
-                        <div class="loaderDiv">
-                            <div class="loaderInnerDiv">
-                                <label for="loader">Loading Pdf...</label> <br>
-                                <progress id="loader"></progress>
+                <!-- 5. QR Code & Footer Configurations -->
+                <div class="ps-card" id="cardFooter">
+                    <div class="ps-card-header" onclick="togglePsCard('cardFooter')">
+                        <div class="ps-card-header-left">
+                            <div class="ps-card-icon"><i class="fa-solid fa-qrcode"></i></div>
+                            <div>
+                                <div class="ps-card-title">Barcode, QR Code & Footer</div>
+                                <div class="ps-card-subtitle">TAT tracking & report verification labels</div>
                             </div>
                         </div>
-                        <iframe id="pdf-preview" title="PDF Preview"></iframe>
+                        <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
+                    </div>
+                    <div class="ps-card-body">
+                        <div class="ps-switch-row">
+                            <div class="ps-switch-info">
+                                <label class="ps-switch-label" for="tat-collected">Sample Collected On</label>
+                                <span class="ps-switch-desc">Prints sample collection timestamp</span>
+                            </div>
+                            <label class="ps-switch">
+                                <input type="checkbox" id="tat-collected" checked>
+                                <span class="ps-slider"></span>
+                            </label>
+                        </div>
+                        <div class="ps-switch-row">
+                            <div class="ps-switch-info">
+                                <label class="ps-switch-label" for="tat-reported">Sample Reported On</label>
+                                <span class="ps-switch-desc">Prints result authorization timestamp</span>
+                            </div>
+                            <label class="ps-switch">
+                                <input type="checkbox" id="tat-reported" checked>
+                                <span class="ps-slider"></span>
+                            </label>
+                        </div>
+                        <div class="ps-switch-row">
+                            <div class="ps-switch-info">
+                                <label class="ps-switch-label" for="tat-registered">Registered On</label>
+                                <span class="ps-switch-desc">Prints patient registration timestamp</span>
+                            </div>
+                            <label class="ps-switch">
+                                <input type="checkbox" id="tat-registered" checked>
+                                <span class="ps-slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
+
             </div>
-        </div>
+        </aside>
+
+        <!-- Right Live Interactive Preview Canvas -->
+        <main class="ps-preview-panel">
+
+            <!-- Canvas Top Toolbar -->
+            <div class="ps-canvas-toolbar">
+                <div class="ps-canvas-mode-toggle">
+                    <button type="button" class="ps-mode-btn is-active" id="btnModeCanvas" onclick="switchPreviewMode('canvas')">
+                        <i class="fa-solid fa-eye"></i> Live Canvas
+                    </button>
+                    <button type="button" class="ps-mode-btn" id="btnModePdf" onclick="switchPreviewMode('pdf')">
+                        <i class="fa-solid fa-file-pdf"></i> Official PDF
+                    </button>
+                </div>
+
+                <div class="ps-zoom-controls">
+                    <button type="button" class="ps-zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+                    <span class="ps-zoom-val" id="zoomPercentage">100%</span>
+                    <button type="button" class="ps-zoom-btn" onclick="adjustZoom(0.1)" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+                    <button type="button" class="ps-btn ps-btn-secondary" style="padding: 4px 10px; font-size: 11px;" onclick="fitPreviewToWindow()">
+                        <i class="fa-solid fa-expand"></i> Fit
+                    </button>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="checkbox" id="check1">
+                        <span>Without letterhead</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Scaled A4 Sheet Container -->
+            <div class="ps-a4-viewport-container" id="a4ViewportContainer">
+                <div class="ps-a4-scaler" id="a4Scaler">
+
+                    <!-- Live DOM A4 Sheet (Instantaneous 0ms Updates) -->
+                    <div class="ps-a4-sheet" id="liveA4Sheet">
+
+                        <!-- Digital Letterhead Background Overlay -->
+                        <div class="ps-a4-letterhead-overlay" id="letterheadBgOverlay"></div>
+
+                        <!-- Pre-printed Header Spacer Guideline -->
+                        <div class="ps-preprinted-header-guide" id="preprintedHeaderGuide" style="height: 94px;">
+                            <span>Pre-Printed Header Zone (<span id="headerGuideLabel">2.5 cm</span>)</span>
+                        </div>
+
+                        <!-- Report Document Body -->
+                        <div class="ps-a4-body" id="docReportBody" style="padding-left: 38px; padding-right: 38px;">
+
+                            <!-- Patient Info Header Box -->
+                            <div class="ps-doc-patient-card">
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Patient:</span>
+                                    <span class="ps-doc-info-val">Mr. Rajesh Sharma (45 Y / M)</span>
+                                </div>
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Booking ID:</span>
+                                    <span class="ps-doc-info-val">#LAB-2026-8942</span>
+                                </div>
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Ref. By:</span>
+                                    <span class="ps-doc-info-val">Dr. P. K. Verma, MD</span>
+                                </div>
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Barcode:</span>
+                                    <span class="ps-doc-info-val">||| | ||||| | || 89274</span>
+                                </div>
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Collected:</span>
+                                    <span class="ps-doc-info-val" id="docCollectedTime">02-Oct-2026 09:30 AM</span>
+                                </div>
+                                <div class="ps-doc-info-item">
+                                    <span class="ps-doc-info-label">Reported:</span>
+                                    <span class="ps-doc-info-val" id="docReportedTime">02-Oct-2026 01:15 PM</span>
+                                </div>
+                            </div>
+
+                            <!-- Sample Investigation Banner -->
+                            <div id="docInvestigationBanner" style="font-size: 11px; font-weight: 700; color: #1e293b; margin-bottom: 8px; border-bottom: 1.5px solid #0f766e; padding-bottom: 4px;">
+                                COMPLETE BLOOD COUNT (CBC) & DIABETIC PROFILE
+                            </div>
+
+                            <!-- Test Parameters Table -->
+                            <table class="ps-doc-table" id="docParametersTable">
+                                <thead id="docTableHead">
+                                    <tr>
+                                        <th style="width: 38%;">Investigation / Parameter</th>
+                                        <th style="width: 22%;">Observed Value</th>
+                                        <th style="width: 20%;">Biological Ref. Range</th>
+                                        <th style="width: 20%;">Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="ps-doc-category-row" id="rowCatHematology">
+                                        <td colspan="4">Hematology & Complete Hemogram</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Hemoglobin (Hb)</td>
+                                        <td><strong>14.2</strong></td>
+                                        <td>13.0 - 17.0</td>
+                                        <td>g/dL</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Total Leukocyte Count (TLC)</td>
+                                        <td class="ps-val-abnormal ps-result-abnormal">
+                                            <strong>11,800</strong>
+                                            <span class="ps-result-flag">HIGH</span>
+                                        </td>
+                                        <td>4,000 - 10,000</td>
+                                        <td>/cumm</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Platelet Count</td>
+                                        <td><strong>245,000</strong></td>
+                                        <td>150,000 - 450,000</td>
+                                        <td>/cumm</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Packed Cell Volume (PCV)</td>
+                                        <td><strong>42.5</strong></td>
+                                        <td>40.0 - 50.0</td>
+                                        <td>%</td>
+                                    </tr>
+                                    <tr class="ps-doc-category-row" id="rowCatBiochemistry">
+                                        <td colspan="4">Clinical Biochemistry</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Fasting Blood Sugar (Glucose)</td>
+                                        <td class="ps-val-abnormal ps-result-abnormal">
+                                            <strong>138.0</strong>
+                                            <span class="ps-result-flag">HIGH</span>
+                                        </td>
+                                        <td>70.0 - 99.0</td>
+                                        <td>mg/dL</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Serum Creatinine</td>
+                                        <td><strong>0.92</strong></td>
+                                        <td>0.70 - 1.20</td>
+                                        <td>mg/dL</td>
+                                    </tr>
+                                    <tr class="doc-table-row">
+                                        <td>Serum Uric Acid</td>
+                                        <td><strong>5.4</strong></td>
+                                        <td>3.5 - 7.2</td>
+                                        <td>mg/dL</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <!-- Signatures Section Live Container -->
+                            <div class="ps-doc-signatures-wrap" id="docSignaturesContainer">
+                                <div class="ps-doc-signatures-grid" id="docSignaturesGrid">
+
+                                    <!-- Slot 1: Lab Technician -->
+                                    <div class="ps-doc-sig-block align-left" id="docSigSlot1">
+                                        <div class="ps-doc-sig-img-wrap" id="docSigImgWrap1">
+                                            <div class="ps-doc-digital-signature">M. Verma</div>
+                                        </div>
+                                        <div class="ps-doc-sig-designation" id="docSigText1">Medical Lab Technologist
+B.Sc. MLT, DMLT</div>
+                                    </div>
+
+                                    <!-- Slot 2: Quality Manager / Doctor 1 -->
+                                    <div class="ps-doc-sig-block align-center" id="docSigSlot2">
+                                        <div class="ps-doc-sig-img-wrap" id="docSigImgWrap2">
+                                            <div class="ps-doc-digital-signature">Dr. A. Sharma</div>
+                                        </div>
+                                        <div class="ps-doc-sig-designation" id="docSigText2">Dr. A. Sharma
+MBBS, MD (Pathology)</div>
+                                    </div>
+
+                                    <!-- Slot 3: Pathologist / Doctor 2 -->
+                                    <div class="ps-doc-sig-block align-right" id="docSigSlot3">
+                                        <div class="ps-doc-sig-img-wrap" id="docSigImgWrap3">
+                                            <div class="ps-doc-digital-signature">Dr. R. Mehta</div>
+                                        </div>
+                                        <div class="ps-doc-sig-designation" id="docSigText3">Dr. R. Mehta
+Consultant Pathologist</div>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <!-- End of Report Verification Note -->
+                            <div class="ps-doc-end-note">
+                                <div><i class="fa-solid fa-qrcode" style="margin-right: 4px;"></i> Scan QR on header to verify authentic NABL report</div>
+                                <div style="font-weight: 700; letter-spacing: 0.5px;">*** END OF REPORT ***</div>
+                                <div>Page 1 of 1</div>
+                            </div>
+
+                        </div>
+
+                        <!-- Pre-printed Footer Spacer Guideline -->
+                        <div class="ps-preprinted-footer-guide" id="preprintedFooterGuide" style="height: 68px;">
+                            <span>Pre-Printed Footer Zone (<span id="footerGuideLabel">1.8 cm</span>)</span>
+                        </div>
+
+                    </div>
+
+                    <!-- Official PDF Mode (Iframe for True Engine Preview) -->
+                    <div class="ps-pdf-iframe-container" id="pdfPreviewIframeBox">
+                        <div class="ps-iframe-loader" id="pdfIframeLoader">
+                            <div class="ps-spinner"></div>
+                            <span style="font-size: 13px; font-weight: 600; color: #475467;">Compiling PDF Engine Output...</span>
+                        </div>
+                        <iframe id="pdf-preview" title="Official PDF Engine Output"></iframe>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+
     </div>
+
+    <!-- Hidden compatibility elements to support legacy handlers -->
+    <div style="display:none;" aria-hidden="true">
+        <div id="outermeasurebox"><div id="headermeasurescale"></div><div id="footermeasurescale"></div><div id="middlemeasurescale"></div><div id="headermeasurescalebigbox"></div><div id="footermeasurescalebigbox"></div><div id="middlemeasurescalebigbox"></div><span id="headermargininfospan"></span><span id="footermargininfospan"></span></div>
+        <div class="loaderDiv"><progress id="loader"></progress></div>
+        <div class="printspinnerbox"><div class="printspinner"></div></div>
+        <p id="message"></p>
+        <div id="errormessage"></div>
+        <button id="uploadTemplate"></button>
+        <button id="updateSign"></button>
+        <button id="updateGeneral"></button>
+        <button id="update-button"></button>
+    </div>
+
+    <!-- Floating Global Toast -->
+    <div class="ps-toast" id="psToast">
+        <i class="fa-solid fa-circle-check" id="psToastIcon"></i>
+        <span id="psToastMsg">Settings updated successfully</span>
+    </div>
+
     <script src="printsetting.js"></script>
 </body>
-
 </html>

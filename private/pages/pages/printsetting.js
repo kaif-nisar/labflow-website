@@ -1,755 +1,1185 @@
-const BASE_URL = window.location.origin;
-function toggleAccordion(button) {
-    const content = button.nextElementSibling;
-    const icon = button.querySelector('.icon');
-    content.classList.toggle('show');
-    button.classList.toggle('active');
-}
-(async function () {
+/**
+ * Enterprise Print Settings & PDF Customizer Engine
+ * Medical Diagnostics & LIS Systems
+ * Zero-jank, 0ms live-canvas synchronization & fault-tolerant backend persistence.
+ */
 
-    const pageloader = document.querySelector(".printspinnerbox");
-    const value1 = localStorage.getItem('myKey');
-    const updateFontPreview = (fontFamily = document.getElementById('pdf-font-family')?.value || 'Arial') => {
-        const fontPreviewSample = document.getElementById('font-preview-sample');
-        if (!fontPreviewSample) return;
-        fontPreviewSample.style.fontFamily = fontFamily;
-        fontPreviewSample.textContent = `${fontFamily} will be used for header, report content, and footer PDF text.`;
+(function () {
+    'use strict';
+
+    const BASE_URL = window.location.origin;
+    const CM_TO_PX = 37.8; // 96 DPI conversion constant (1cm = 37.8px)
+
+    // Central Application State
+    const state = {
+        letterheadMode: 'digital', // 'digital' | 'preprinted'
+        activeLetterheadUrl: '',
+        activeLetterheadPublicId: '',
+        activeLetterheadId: '',
+        pendingTemplateFile: null,
+
+        sigGlobalAlignment: 'space-between',
+        pendingLabSignFile: null,
+        pendingDoc1SignFile: null,
+        pendingDoc2SignFile: null,
+
+        labSignUrl: '',
+        labSignPublicId: '',
+        doc1SignUrl: '',
+        doc1SignPublicId: '',
+        doc2SignUrl: '',
+        doc2SignPublicId: '',
+        docSignRecordId: '',
+
+        currentZoom: 1.0,
+        isPdfLoading: false,
+        isSaving: false
     };
 
-    const fetchDataAndSetInputs = async () => {
-        pageloader.style.display = "flex";
-        try {
-            // Send a POST request to the API with value1 in the request body
-            const response = await fetch(`${BASE_URL}/api/v1/user/getting-pdf-data`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ reportId: value1 }),
-            });
+    // Helper: Toast notification
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('psToast');
+        const icon = document.getElementById('psToastIcon');
+        const msg = document.getElementById('psToastMsg');
+        if (!toast || !msg) return;
 
-            // Check if the response is okay
-            if (!response.ok) {
-                throw new Error('Failed to fetch data from API');
-            }
+        toast.className = `ps-toast ${type} is-show`;
+        msg.textContent = message;
 
-            // Parse the response JSON
-            const data = await response.json();
-
-            const headermargin = (Number(data.headermargin) - (Number(data.headermargin) * 0.35)) + 1.8;
-            const footermargin = (Number(data.footermargin) + 1.2) - (Number(data.footermargin) === 1 ? 0 : Number(data.footermargin) * 0.3);
-            const middledivconatiner = document.getElementById('outermeasurebox');
-            const middlescaleheight = (Number(middledivconatiner.offsetHeight) / 37.8).toFixed(2);
-            console.log("middledivconatiner:", middlescaleheight);
-            // Base height calculation
-            const baseHeight = middlescaleheight - (headermargin + footermargin + 0.5);
-
-            // Centimeter (cm) format
-            const middleDivHeightInCm = `${parseFloat(baseHeight.toFixed(2))}cm`;
-
-            console.log(`headermargin: ${headermargin}cm, footermargin: ${footermargin}cm, middleDivHeight: ${middleDivHeightInCm}`);
-            // Percentage (%) format (adding 50% as per your logic)
-            const middleDivHeightInPercent = `${parseFloat(baseHeight.toFixed(2)) + 48}%`;
-            document.getElementById('header').value = data.headermargin || '';
-            document.getElementById('headermeasurescale').innerText = `${Number(data.headermargin) + 3.2}cm` || '';
-            document.getElementById('headermargininfospan').innerText = `${data.headermargin}cm` || '';
-            document.getElementById('headermeasurescalebigbox').style.height = `${headermargin + 21}%`;
-            document.getElementById('footermeasurescale').innerText = `${Number(data.footermargin) + 1.8}cm` || '';
-            document.getElementById('footermargininfospan').innerText = `${data.footermargin}cm` || '';
-            document.getElementById('footermeasurescalebigbox').style.height = `${footermargin + 10}%`;
-            document.getElementById('middlemeasurescale').innerText = middleDivHeightInCm || '';
-            document.getElementById('middlemeasurescalebigbox').style.height = middleDivHeightInPercent;
-            document.getElementById('middlemeasurescalebigbox').style.top = `${headermargin + 21.22}%`;
-            document.getElementById('footer').value = data.footermargin || '';
-            document.getElementById('margin-right').value = data.marginRight || '';
-            document.getElementById('margin-left').value = data.marginLeft || '';
-            document.getElementById('show-lab').checked = data.labinchargesign || false;
-            document.getElementById('pdf-font-family').value = data.selectedFontFamily || 'Arial';
-            document.getElementById('pdf-font-size').value = data.selectedFontSize || 12;
-            document.getElementById('spacing').value = data.RowSpacing || 1;
-            document.getElementById('high-low-marker').checked = data.HighLow;
-            document.getElementById('abnormal-results-red').checked = data.HLinred;
-            document.getElementById('abnormal-results-bold').checked = data.BoldRow;
-            document.getElementById('show-investigations').checked = data.showInvest;
-            document.getElementById('hide-categories').checked = data.hideCategories || false;
-            document.getElementById('hide-table-headings').checked = data.hideTableHeadings || false;
-            document.getElementById('padding-left').value = data.LeftsignPd || '';
-            document.getElementById('padding-right').value = data.Rightsignpd || '';
-            updateFontPreview(data.selectedFontFamily || 'Arial');
-
-            console.log('Input fields updated successfully');
-        } catch (error) {
-            console.error('Error fetching data and setting inputs:', error.message);
-        } finally {
-            pageloader.style.display = "none";
+        if (icon) {
+            icon.className = type === 'success' ? 'fa-solid fa-circle-check' :
+                             type === 'error' ? 'fa-solid fa-circle-exclamation' :
+                             'fa-solid fa-triangle-exclamation';
         }
-    };
 
-    const fetchLabSignAndSetInputs = async () => {
-        pageloader.style.display = "flex";
-
-        try {
-            // Send a POST request to the API with value1 in the request body
-            const response = await fetch(`${BASE_URL}/api/v1/user/getDoctorsSign`);
-
-            // Check if the response is okay
-            if (!response.ok) {
-                throw new Error('Failed to fetch data from API');
-            }
-
-            // Parse the response JSON
-            const data = await response.json();
-            console.log(data);
-            if (data) {
-                const buildSignatureMarkup = ({ url, fieldName, publicFieldName, publicId, altText }) => {
-                    if (!url) {
-                        return '';
-                    }
-
-                    return `
-                    <img src="${url}" data-srcfeild="${fieldName}" id="${fieldName}" data-publicfeild="${publicFieldName}" data-asset="${publicId || ''}" alt="${altText}" height="50"; width="100";>
-                    <span class="deleteIcon" title="Delete signature">&#x2715;</span>`;
-                };
-
-                document.getElementById('lab-info').value = data.labinchargeinfo || '';
-                document.getElementById('firstdoctor-info').value = data.firstdoctorsigninfo || '';
-                document.getElementById('seconddoctor-info').value = data.seconddoctorsigninfo || '';
-                document.getElementById('show-lab').checked = data.showlabinchargesign;
-                document.getElementById('show-doctor1').checked = data.showfirstdoctorsign;
-                document.getElementById('show-doctor2').checked = data.showseconddoctorsign;
-
-                const labSignImgdiv = document.getElementById('labSignImgdiv');
-                labSignImgdiv.innerHTML = '';
-                if (data.labinchargesign) {
-                    labSignImgdiv.setAttribute("data-id", data._id);
-                    labSignImgdiv.innerHTML = buildSignatureMarkup({
-                        url: data.labinchargesign,
-                        fieldName: 'labinchargesign',
-                        publicFieldName: 'labinchargesignpublicid',
-                        publicId: data.labinchargesignpublicid,
-                        altText: 'Lab Incharge Sign'
-                    });
-                }
-
-                const firstSignImgdiv = document.getElementById('firstSignImgdiv');
-                firstSignImgdiv.innerHTML = '';
-                if (data.firstdoctorsign) {
-                    firstSignImgdiv.setAttribute("data-id", data._id);
-                    firstSignImgdiv.innerHTML = buildSignatureMarkup({
-                        url: data.firstdoctorsign,
-                        fieldName: 'firstdoctorsign',
-                        publicFieldName: 'firstdoctorsignpublicid',
-                        publicId: data.firstdoctorsignpublicid,
-                        altText: 'Doctor 1 Sign'
-                    });
-                }
-
-                const seconddoctorinfo = document.getElementById('secondSignImgdiv');
-                seconddoctorinfo.innerHTML = '';
-                if (data.seconddoctorsign) {
-                    seconddoctorinfo.setAttribute("data-id", data._id);
-                    seconddoctorinfo.innerHTML = buildSignatureMarkup({
-                        url: data.seconddoctorsign,
-                        fieldName: 'seconddoctorsign',
-                        publicFieldName: 'seconddoctorsignpublicid',
-                        publicId: data.seconddoctorsignpublicid,
-                        altText: 'Doctor 2 Sign'
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching data and setting inputs:', error.message);
-        } finally {
-            pageloader.style.display = "none";
-        }
-    };
-
-    async function selectionimage() {
-        const images = document.querySelectorAll('#images-div > .image');
-
-        images.forEach(originalImage => {
-            // Create a container for each image with a delete icon
-            const container = document.createElement('div');
-            container.classList.add('image-container');
-
-            const deleteIcon = document.createElement('span');
-            deleteIcon.classList.add('delete-icon');
-            deleteIcon.innerHTML = '&#x2715;'; // Unicode for the "X" symbol (close)
-
-            const image = originalImage.cloneNode(true);
-
-            // Wrap the image with the container and append the delete icon
-            container.appendChild(image);
-            container.appendChild(deleteIcon);
-            originalImage.replaceWith(container); // Replace the original image with the container
-
-            deleteIcon.addEventListener('click', async (e) => {
-                e.stopPropagation(); // Prevent triggering image selection
-
-                const imageUrl = image.getAttribute('src') || image.src;
-                const public_id = image.getAttribute('data-asset');
-                const templateId = image.getAttribute('data-template-id');
-
-                if (imageUrl || templateId) {
-                    pageloader.style.display = "flex";
-
-                    try {
-                        // Send a request to delete the image by its URL
-                        const response = await fetch(`${BASE_URL}/api/v1/user/delete-image`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ templateId, url: imageUrl, public_id }),
-                        });
-                        const result = await response.json();
-
-                        if (response.ok) {
-                            // Remove the image container from the DOM
-                            container.remove();
-                            const headermargin = document.getElementById("header").value;
-                            const footermargin = document.getElementById("footer").value;
-                            const marginRight = document.getElementById("margin-right").value;
-                            const marginLeft = document.getElementById("margin-left").value;
-                            const nextSelectedImage = document.querySelector('.image.selected') || document.querySelector('.image');
-                            await autogeneratingpdf({
-                                backgroundImageUrl: nextSelectedImage?.src || "",
-                                headermargin,
-                                footermargin,
-                                marginRight,
-                                marginLeft
-                            });
-                            alert('template deleted successfully')
-                        } else {
-                            alert(`Failed to delete the image: ${result.message}`);
-                        }
-                    } catch (error) {
-                        console.error('Error deleting image:', error);
-                        alert('Error deleting the image.');
-                    } finally {
-                        pageloader.style.display = "none";
-                    }
-                }
-            });
-
-
-            // Handle image selection and deselection (click event)
-            image.addEventListener('click', () => {
-                const selectedImage = document.querySelector('.image.selected');
-                if (selectedImage) {
-                    selectedImage.classList.remove('selected');
-                }
-                image.classList.add('selected');
-            });
-        });
+        clearTimeout(toast._timeout);
+        toast._timeout = setTimeout(() => {
+            toast.classList.remove('is-show');
+        }, 3500);
     }
 
-    async function imagedeletion() {
+    // Helper: Update Top Status Indicator
+    function updateStatusIndicator(status, text) {
+        const el = document.getElementById('saveStatusIndicator');
+        if (!el) return;
 
-        document.querySelectorAll('.deleteIcon').forEach((icon) => {
-            icon.addEventListener('click', async function (e) {
+        let icon = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i>';
+        if (status === 'saving') {
+            icon = '<i class="fa-solid fa-spinner fa-spin" style="color: #2563eb;"></i>';
+        } else if (status === 'unsaved') {
+            icon = '<i class="fa-solid fa-circle-dot" style="color: #f59e0b;"></i>';
+        } else if (status === 'error') {
+            icon = '<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444;"></i>';
+        }
+
+        el.innerHTML = `${icon} <span>${text}</span>`;
+    }
+
+    // Helper: Format bytes
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Helper: URL sanitizer
+    function sanitizeUrl(url) {
+        if (!url || typeof url !== 'string') return '';
+        const trimmed = url.trim();
+        if (['null', 'undefined', '[object object]'].includes(trimmed.toLowerCase())) return '';
+        return trimmed;
+    }
+
+    // Extract doctor display name from designation lines for digital signature
+    function extractDoctorDisplayName(text, fallback) {
+        if (!text || typeof text !== 'string') return fallback;
+        const firstLine = text.split('\n')[0].trim();
+        return firstLine.length > 0 ? firstLine : fallback;
+    }
+
+    // --- ACCORDION SYSTEM ---
+    window.togglePsCard = function (cardId) {
+        const card = document.getElementById(cardId);
+        if (card) {
+            card.classList.toggle('is-open');
+        }
+    };
+
+    // --- ZOOM & FIT ENGINE ---
+    window.adjustZoom = function (delta) {
+        state.currentZoom = Math.min(1.4, Math.max(0.35, +(state.currentZoom + delta).toFixed(2)));
+        applyZoom();
+    };
+
+    window.fitPreviewToWindow = function () {
+        const container = document.querySelector('.ps-preview-panel');
+        if (!container) return;
+        const isMobile = window.innerWidth <= 640;
+        const availableWidth = container.clientWidth - (isMobile ? 16 : 48); // accounting for padding
+        const targetScale = Math.min(1.0, Math.max(0.20, availableWidth / 794));
+        state.currentZoom = +(targetScale.toFixed(2));
+        applyZoom();
+    };
+
+    function applyZoom() {
+        const scaler = document.getElementById('a4Scaler');
+        const zoomVal = document.getElementById('zoomPercentage');
+        const viewport = document.getElementById('a4ViewportContainer');
+
+        if (scaler) {
+            scaler.style.transform = `scale(${state.currentZoom})`;
+            scaler.style.transformOrigin = 'top center';
+        }
+        if (viewport) {
+            viewport.style.height = `${Math.ceil(1123 * state.currentZoom) + 30}px`;
+        }
+        if (zoomVal) {
+            zoomVal.textContent = `${Math.round(state.currentZoom * 100)}%`;
+        }
+    }
+
+    // --- LETTERHEAD MODE & PRESETS ---
+    window.setLetterheadMode = function (mode) {
+        state.letterheadMode = mode;
+        const tabDigital = document.getElementById('tabModeDigital');
+        const tabPreprinted = document.getElementById('tabModePreprinted');
+        if (tabDigital && tabPreprinted) {
+            tabDigital.classList.toggle('is-active', mode === 'digital');
+            tabPreprinted.classList.toggle('is-active', mode === 'preprinted');
+        }
+
+        const digitalControls = document.getElementById('digitalLetterheadControls');
+        if (digitalControls) {
+            // Keep controls visible so user can configure stationary or toggle
+            digitalControls.style.opacity = mode === 'digital' ? '1' : '0.85';
+        }
+
+        updateLiveCanvas();
+    };
+
+    window.applyHeaderPreset = function (headerCm, footerCm) {
+        const headerInput = document.getElementById('header');
+        const footerInput = document.getElementById('footer');
+        if (headerInput && headerCm !== null) headerInput.value = headerCm;
+        if (footerInput && footerCm !== null) footerInput.value = footerCm;
+
+        // Toggle active chip style
+        document.querySelectorAll('.ps-preset-chips .ps-chip').forEach(chip => {
+            const isMatch = chip.textContent.includes(`${headerCm}cm`);
+            chip.classList.toggle('is-active', isMatch);
+        });
+
+        updateLiveCanvas();
+    };
+
+    // --- SIGNATURES MATRIX & ALIGNMENT ---
+    window.setSigGlobalAlignment = function (align) {
+        state.sigGlobalAlignment = align;
+        document.querySelectorAll('#sigGlobalAlignmentTabs .ps-tab-item').forEach(tab => {
+            tab.classList.toggle('is-active', tab.getAttribute('data-align') === align);
+        });
+        const grid = document.getElementById('docSignaturesGrid');
+        if (grid) {
+            grid.style.justifyContent = align;
+        }
+    };
+
+    window.handleSigSlotToggle = function (slotKey) {
+        updateSignaturesLiveCanvas();
+    };
+
+    // --- PREVIEW MODE (Live Canvas vs PDF Iframe) ---
+    window.switchPreviewMode = function (mode) {
+        const btnCanvas = document.getElementById('btnModeCanvas');
+        const btnPdf = document.getElementById('btnModePdf');
+        const liveSheet = document.getElementById('liveA4Sheet');
+        const pdfBox = document.getElementById('pdfPreviewIframeBox');
+
+        if (mode === 'pdf') {
+            btnCanvas?.classList.remove('is-active');
+            btnPdf?.classList.add('is-active');
+            if (liveSheet) liveSheet.style.display = 'none';
+            if (pdfBox) pdfBox.classList.add('is-active');
+            autogeneratingpdf();
+        } else {
+            btnPdf?.classList.remove('is-active');
+            btnCanvas?.classList.add('is-active');
+            if (pdfBox) pdfBox.classList.remove('is-active');
+            if (liveSheet) liveSheet.style.display = 'flex';
+        }
+    };
+
+    // --- LIVE CANVAS SYNCHRONIZATION (0ms Instant DOM Update) ---
+    function updateLiveCanvas() {
+        const headerCm = parseFloat(document.getElementById('header')?.value) || 0;
+        const footerCm = parseFloat(document.getElementById('footer')?.value) || 0;
+        const marginLeftCm = parseFloat(document.getElementById('margin-left')?.value) || 0;
+        const marginRightCm = parseFloat(document.getElementById('margin-right')?.value) || 0;
+        const sigPdLeftCm = parseFloat(document.getElementById('padding-left')?.value) || 0;
+        const sigPdRightCm = parseFloat(document.getElementById('padding-right')?.value) || 0;
+
+        const fontFamily = document.getElementById('pdf-font-family')?.value || 'Arial';
+        const fontSizePt = parseInt(document.getElementById('pdf-font-size')?.value) || 11;
+        const rowSpacing = parseInt(document.getElementById('spacing')?.value) || 1;
+
+        const showAbnormalFlag = document.getElementById('high-low-marker')?.checked ?? true;
+        const abnormalInRed = document.getElementById('abnormal-results-red')?.checked ?? true;
+        const abnormalInBold = document.getElementById('abnormal-results-bold')?.checked ?? true;
+        const showInvestBanner = document.getElementById('show-investigations')?.checked ?? true;
+        const hideCategories = document.getElementById('hide-categories')?.checked ?? false;
+        const hideTableHeadings = document.getElementById('hide-table-headings')?.checked ?? false;
+
+        const docBody = document.getElementById('docReportBody');
+        const sheet = document.getElementById('liveA4Sheet');
+        const headerGuide = document.getElementById('preprintedHeaderGuide');
+        const footerGuide = document.getElementById('preprintedFooterGuide');
+        const headerLabel = document.getElementById('headerGuideLabel');
+        const footerLabel = document.getElementById('footerGuideLabel');
+        const letterheadOverlay = document.getElementById('letterheadBgOverlay');
+
+        // Font Family & Sizing on Sheet
+        if (sheet) {
+            sheet.style.fontFamily = fontFamily;
+        }
+        if (docBody) {
+            docBody.style.paddingLeft = `${Math.max(10, Math.round(marginLeftCm * CM_TO_PX))}px`;
+            docBody.style.paddingRight = `${Math.max(10, Math.round(marginRightCm * CM_TO_PX))}px`;
+            docBody.style.fontSize = `${fontSizePt}pt`;
+        }
+
+        // Letterhead Layer vs Pre-printed Spacer
+        if (state.letterheadMode === 'digital' && state.activeLetterheadUrl) {
+            if (letterheadOverlay) {
+                letterheadOverlay.classList.add('is-active');
+                letterheadOverlay.style.backgroundImage = `url("${state.activeLetterheadUrl}")`;
+            }
+            if (headerGuide) {
+                headerGuide.style.height = `${Math.round(headerCm * CM_TO_PX)}px`;
+                headerGuide.style.background = 'transparent';
+                headerGuide.style.borderBottomColor = 'transparent';
+                headerGuide.style.color = 'transparent';
+            }
+            if (footerGuide) {
+                footerGuide.style.height = `${Math.round(footerCm * CM_TO_PX)}px`;
+                footerGuide.style.background = 'transparent';
+                footerGuide.style.borderTopColor = 'transparent';
+                footerGuide.style.color = 'transparent';
+            }
+        } else {
+            // Pre-printed stationery mode
+            if (letterheadOverlay) {
+                letterheadOverlay.classList.remove('is-active');
+                letterheadOverlay.style.backgroundImage = 'none';
+            }
+            if (headerGuide) {
+                const headerHeightPx = Math.round(headerCm * CM_TO_PX);
+                headerGuide.style.height = `${headerHeightPx}px`;
+                headerGuide.style.background = '';
+                headerGuide.style.borderBottomColor = '#94a3b8';
+                headerGuide.style.color = '#64748b';
+                headerGuide.style.display = headerHeightPx > 0 ? 'flex' : 'none';
+                if (headerLabel) headerLabel.textContent = `${headerCm.toFixed(1)} cm`;
+            }
+            if (footerGuide) {
+                const footerHeightPx = Math.round(footerCm * CM_TO_PX);
+                footerGuide.style.height = `${footerHeightPx}px`;
+                footerGuide.style.background = '';
+                footerGuide.style.borderTopColor = '#94a3b8';
+                footerGuide.style.color = '#64748b';
+                footerGuide.style.display = footerHeightPx > 0 ? 'flex' : 'none';
+                if (footerLabel) footerLabel.textContent = `${footerCm.toFixed(1)} cm`;
+            }
+        }
+
+        // Row spacing on parameter table
+        const paddingMap = {
+            1: '5px 10px',
+            2: '8px 10px',
+            3: '11px 10px',
+            4: '14px 10px',
+            5: '17px 10px'
+        };
+        const cellPadding = paddingMap[rowSpacing] || '6px 10px';
+        document.querySelectorAll('#docParametersTable td').forEach(td => {
+            td.style.padding = cellPadding;
+        });
+
+        // Abnormal highlighting styles
+        document.querySelectorAll('.ps-val-abnormal').forEach(el => {
+            if (abnormalInRed) {
+                el.classList.add('ps-result-abnormal');
+            } else {
+                el.classList.remove('ps-result-abnormal');
+            }
+            el.style.fontWeight = abnormalInBold ? '700' : '500';
+        });
+
+        document.querySelectorAll('.ps-result-flag').forEach(badge => {
+            badge.style.display = showAbnormalFlag ? 'inline-block' : 'none';
+        });
+
+        // Banner and Categories
+        const banner = document.getElementById('docInvestigationBanner');
+        if (banner) banner.style.display = showInvestBanner ? 'block' : 'none';
+
+        const catRows = document.querySelectorAll('.ps-doc-category-row');
+        catRows.forEach(row => {
+            row.style.display = hideCategories ? 'none' : 'table-row';
+        });
+
+        const tableHead = document.getElementById('docTableHead');
+        if (tableHead) {
+            tableHead.style.display = hideTableHeadings ? 'none' : 'table-header-group';
+        }
+
+        // Signature container padding
+        const sigContainer = document.getElementById('docSignaturesContainer');
+        if (sigContainer) {
+            sigContainer.style.paddingLeft = `${Math.round(sigPdLeftCm * CM_TO_PX)}px`;
+            sigContainer.style.paddingRight = `${Math.round(sigPdRightCm * CM_TO_PX)}px`;
+        }
+
+        // Update signature slots on canvas
+        updateSignaturesLiveCanvas();
+    }
+
+    // Render signature slots inside the Live Canvas
+    function updateSignaturesLiveCanvas() {
+        const showLab = document.getElementById('show-lab')?.checked ?? true;
+        const showDoc1 = document.getElementById('show-doctor1')?.checked ?? true;
+        const showDoc2 = document.getElementById('show-doctor2')?.checked ?? true;
+
+        const labInfoText = document.getElementById('lab-info')?.value || 'Medical Lab Technologist\nB.Sc. MLT, DMLT';
+        const doc1InfoText = document.getElementById('firstdoctor-info')?.value || 'Dr. A. Sharma\nMBBS, MD (Pathology)';
+        const doc2InfoText = document.getElementById('seconddoctor-info')?.value || 'Dr. R. Mehta\nConsultant Pathologist';
+
+        const slot1 = document.getElementById('docSigSlot1');
+        const slot2 = document.getElementById('docSigSlot2');
+        const slot3 = document.getElementById('docSigSlot3');
+
+        const text1 = document.getElementById('docSigText1');
+        const text2 = document.getElementById('docSigText2');
+        const text3 = document.getElementById('docSigText3');
+
+        const wrap1 = document.getElementById('docSigImgWrap1');
+        const wrap2 = document.getElementById('docSigImgWrap2');
+        const wrap3 = document.getElementById('docSigImgWrap3');
+
+        // Slot 1 (Lab Incharge)
+        if (slot1) {
+            slot1.style.display = showLab ? 'flex' : 'none';
+            if (text1) text1.textContent = labInfoText;
+            if (wrap1) {
+                if (state.labSignUrl) {
+                    wrap1.innerHTML = `<img src="${state.labSignUrl}" class="ps-doc-sig-img" alt="Lab Signature" onerror="window.handleSigImgError(this, 'lab')" />`;
+                } else {
+                    const fallbackName = extractDoctorDisplayName(labInfoText, 'M. Verma');
+                    wrap1.innerHTML = `<div class="ps-doc-digital-signature">${fallbackName}</div>`;
+                }
+            }
+        }
+
+        // Slot 2 (Doctor 1)
+        if (slot2) {
+            slot2.style.display = showDoc1 ? 'flex' : 'none';
+            if (text2) text2.textContent = doc1InfoText;
+            if (wrap2) {
+                if (state.doc1SignUrl) {
+                    wrap2.innerHTML = `<img src="${state.doc1SignUrl}" class="ps-doc-sig-img" alt="Doctor 1 Signature" onerror="window.handleSigImgError(this, 'doc1')" />`;
+                } else {
+                    const fallbackName = extractDoctorDisplayName(doc1InfoText, 'Dr. A. Sharma');
+                    wrap2.innerHTML = `<div class="ps-doc-digital-signature">${fallbackName}</div>`;
+                }
+            }
+        }
+
+        // Slot 3 (Doctor 2)
+        if (slot3) {
+            slot3.style.display = showDoc2 ? 'flex' : 'none';
+            if (text3) text3.textContent = doc2InfoText;
+            if (wrap3) {
+                if (state.doc2SignUrl) {
+                    wrap3.innerHTML = `<img src="${state.doc2SignUrl}" class="ps-doc-sig-img" alt="Doctor 2 Signature" onerror="window.handleSigImgError(this, 'doc2')" />`;
+                } else {
+                    const fallbackName = extractDoctorDisplayName(doc2InfoText, 'Dr. R. Mehta');
+                    wrap3.innerHTML = `<div class="ps-doc-digital-signature">${fallbackName}</div>`;
+                }
+            }
+        }
+    }
+
+    // Global image error handler to prevent broken image icons
+    window.handleSigImgError = function (imgEl, slotKey) {
+        if (!imgEl) return;
+        const parent = imgEl.parentElement;
+        if (!parent) return;
+
+        let fallbackName = 'Doctor';
+        if (slotKey === 'lab') {
+            state.labSignUrl = '';
+            fallbackName = extractDoctorDisplayName(document.getElementById('lab-info')?.value, 'M. Verma');
+        } else if (slotKey === 'doc1') {
+            state.doc1SignUrl = '';
+            fallbackName = extractDoctorDisplayName(document.getElementById('firstdoctor-info')?.value, 'Dr. A. Sharma');
+        } else if (slotKey === 'doc2') {
+            state.doc2SignUrl = '';
+            fallbackName = extractDoctorDisplayName(document.getElementById('seconddoctor-info')?.value, 'Dr. R. Mehta');
+        }
+
+        parent.innerHTML = `<div class="ps-doc-digital-signature">${fallbackName}</div>`;
+    };
+
+    // --- FILE INGESTION & DRAG AND DROP ---
+    function setupDragAndDrop() {
+        // 1. Letterhead Dropzone
+        const letterheadDropzone = document.getElementById('letterheadDropzone');
+        const letterheadInput = document.getElementById('fileInput');
+
+        if (letterheadDropzone && letterheadInput) {
+            ['dragenter', 'dragover'].forEach(event => {
+                letterheadDropzone.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    letterheadDropzone.classList.add('is-dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(event => {
+                letterheadDropzone.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    letterheadDropzone.classList.remove('is-dragover');
+                });
+            });
+
+            letterheadDropzone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    processLetterheadFile(files[0]);
+                }
+            });
+
+            letterheadInput.addEventListener('change', (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    processLetterheadFile(files[0]);
+                }
+            });
+        }
+
+        // 2. Doctor Signatures Dropzones
+        setupSignatureDropzone('dropzoneLabSign', 'lab-sign-file', 'lab');
+        setupSignatureDropzone('dropzoneDoc1Sign', 'doctor-left-file', 'doc1');
+        setupSignatureDropzone('dropzoneDoc2Sign', 'Doctor-Right-file', 'doc2');
+    }
+
+    function setupSignatureDropzone(dropzoneId, inputId, slotKey) {
+        const dropzone = document.getElementById(dropzoneId);
+        const input = document.getElementById(inputId);
+        if (!dropzone || !input) return;
+
+        ['dragenter', 'dragover'].forEach(event => {
+            dropzone.addEventListener(event, (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-
-                const parentDiv = icon.parentElement; // icon ka direct parent (e.g. labSignImgdiv, firstSignImgdiv)
-                const imgtag = parentDiv.querySelector('img');
-                if (!imgtag) {
-                    return;
-                }
-                const urlfield = imgtag.getAttribute('data-srcfeild')
-                const publicIdfield = imgtag.getAttribute('data-publicfeild')
-                const publicId = imgtag.getAttribute('data-asset');
-                pageloader.style.display = "flex";
-
-                try {
-                    // Send a request to delete the image by its URL
-                    const response = await fetch(`${BASE_URL}/api/v1/user/deleteLabInchargeSign`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ publicId, urlfield, publicIdfield }), // Send the URL in the request body
-                    });
-                    const result = await response.json();
-
-                    if (response.ok) {
-                        await fetchLabSignAndSetInputs();
-                        await autogeneratingpdf({
-                            LeftsignPd: document.getElementById('padding-left').value,
-                            Rightsignpd: document.getElementById('padding-right').value
-                        });
-                        imagedeletion();
-                    } else {
-                        alert(`Failed to delete the image: ${result.message}`);
-                    }
-                } catch (error) {
-                    console.error('Error deleting image:', error);
-                    alert('Error deleting the image.');
-                } finally {
-                    pageloader.style.display = "none";
-
-                }
-
+                dropzone.classList.add('is-dragover');
             });
+        });
+
+        ['dragleave', 'drop'].forEach(event => {
+            dropzone.addEventListener(event, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('is-dragover');
+            });
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                processSignatureFile(files[0], slotKey);
+            }
+        });
+
+        input.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                processSignatureFile(files[0], slotKey);
+            }
         });
     }
 
-    // ---- Signature helpers for live preview ---------------------------------
-    // Keep request payload lightweight: only send usable URLs, not embedded data blobs.
-    function normalizeImageSrc(src) {
-        if (!src) return "";
-        const value = String(src).trim();
-        return value.startsWith("data:") ? "" : value;
-    }
-
-    async function collectSignatureData() {
-        const labSrc = document.getElementById('labinchargesign')?.src || "";
-        const leftSrc = document.getElementById('firstdoctorsign')?.src || "";
-        const rightSrc = document.getElementById('seconddoctorsign')?.src || "";
-
-        return {
-            showlab: document.getElementById('show-lab').checked,
-            showdoctorfirst: document.getElementById('show-doctor1').checked,
-            showdoctorsecond: document.getElementById('show-doctor2').checked,
-            fileInputLab: normalizeImageSrc(labSrc),
-            fileInputDoctorleft: normalizeImageSrc(leftSrc),
-            fileInputDoctorright: normalizeImageSrc(rightSrc),
-            fileInputLabtext: document.getElementById('lab-info').value,
-            fileInputDoctorlefttext: document.getElementById('firstdoctor-info').value,
-            fileInputDoctorrighttext: document.getElementById('seconddoctor-info').value,
-        };
-    }
-
-    function buildSignatureFooterHtml(sig) {
-        const visibility = (flag) => flag ? 'block' : 'none';
-        const renderSlot = (isVisible, imgSrc, caption) => `
-            <div class="sig-slot" style="display:${visibility(isVisible)}; text-align:center; min-width:110px;">
-                ${imgSrc ? `<img src="${imgSrc}" width="95" height="35" loading="eager" decoding="sync" />`
-                : `<div style="height:35px;width:95px;"></div>`}
-                <div class="textspan" style="font-size:11px; margin-top:4px;">${caption || ''}</div>
-            </div>`;
-        return `
-        <div class="signed-off-div" style="width:100%;margin-top:20px;">
-            <div class="signed-off-div2" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-                ${renderSlot(sig.showdoctorfirst, sig.fileInputDoctorleft, sig.fileInputDoctorlefttext)}
-                ${renderSlot(sig.showlab, sig.fileInputLab, sig.fileInputLabtext)}
-                ${renderSlot(sig.showdoctorsecond, sig.fileInputDoctorright, sig.fileInputDoctorrighttext)}
-            </div>
-        </div>`;
-    }
-
-    async function fetchTemplateImages() {
-        pageloader.style.display = "flex";
-
-        try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/templates`, { method: "POST" }); // Update URL as per your backend
-            const data = await response.json();
-            console.log("this is urls: ", data.urls);
-
-            if (data.urls && Array.isArray(data.urls)) {
-                const container = document.getElementById('images-div'); // Assuming you have a container with this ID
-                container.innerHTML = "";
-                let order = 1;
-
-                data.urls.forEach((url) => {
-                    const img = document.createElement('img');
-                    img.src = url.template;
-                    img.classList.add('image');
-                    img.setAttribute('data-id', order++);
-                    img.setAttribute('data-asset', url.public_id);
-                    img.setAttribute('data-template-id', url._id);
-                    img.alt = 'Template Image';
-                    container.appendChild(img);
-                });
-            } else {
-                console.error('No URLs found:', data);
-            }
-        } catch (error) {
-            console.error('Error fetching template images:', error);
-        } finally {
-            pageloader.style.display = "none";
-
+    function processLetterheadFile(file) {
+        if (!file.type.startsWith('image/')) {
+            showToast('Please select a valid image file (PNG, JPG, WEBP).', 'error');
+            return;
         }
-    };
 
-    // end populating data=================================================================================
+        state.pendingTemplateFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            state.activeLetterheadUrl = dataUrl;
 
-    async function autogeneratingpdf({ value1, checkBox = false, showlab, showdoctorfirst, showdoctorsecond,
-        backgroundImageUrl = null, headermargin, footermargin, marginRight, marginLeft,
-        selectedFontSize, selectedFontFamily, RowSpacing, HighLow, HLinred: HLinred,
-        BoldRow, showInvest, hideCategories, hideTableHeadings, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
-        fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd } = {}) {
-        const loader = document.querySelector('.loaderDiv');
-        const value2 = localStorage.getItem('myKey');
-        console.log("value2 is:", value2);
+            // Update Thumbnail Box
+            const thumbBox = document.getElementById('letterheadThumbBox');
+            const thumbImg = document.getElementById('letterheadThumbImg');
+            const thumbName = document.getElementById('letterheadThumbName');
+            const thumbSize = document.getElementById('letterheadThumbSize');
 
-        // // Use current form values when arguments are missing, so persisted settings stay in sync.
-        // headermargin = headermargin ?? document.getElementById('header')?.value;
-        // footermargin = footermargin ?? document.getElementById('footer')?.value;
-        // marginRight = marginRight ?? document.getElementById('margin-right')?.value;
-        // marginLeft = marginLeft ?? document.getElementById('margin-left')?.value;
-        // selectedFontSize = selectedFontSize ?? document.getElementById('pdf-font-size')?.value;
-        // RowSpacing = RowSpacing ?? document.getElementById('spacing')?.value;
-        // HighLow = HighLow ?? document.getElementById('high-low-marker')?.checked;
-        // HLinred = HLinred ?? document.getElementById('abnormal-results-red')?.checked;
-        // BoldRow = BoldRow ?? document.getElementById('abnormal-results-bold')?.checked;
-        // showInvest = showInvest ?? document.getElementById('show-investigations')?.checked;
-        // paddingLeft       = paddingLeft       ?? document.getElementById('padding-left')?.value;
-        // paddingRight      = paddingRight      ?? document.getElementById('padding-right')?.value;
+            if (thumbBox && thumbImg && thumbName && thumbSize) {
+                thumbImg.src = dataUrl;
+                thumbName.textContent = file.name;
+                thumbSize.textContent = `${formatBytes(file.size)} (Pending upload)`;
+                thumbBox.style.display = 'flex';
+            }
 
-        const sig = await collectSignatureData();
-        const footerHtml = buildSignatureFooterHtml(sig);
+            setLetterheadMode('digital');
+            updateStatusIndicator('unsaved', 'Unsaved changes');
+            showToast('Letterhead preview ready. Click "Save Settings" to persist.', 'success');
+        };
+        reader.readAsDataURL(file);
+    }
 
+    function processSignatureFile(file, slotKey) {
+        if (!file.type.startsWith('image/')) {
+            showToast('Please upload a valid PNG or image file.', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            if (slotKey === 'lab') {
+                state.pendingLabSignFile = file;
+                state.labSignUrl = dataUrl;
+                renderSignatureThumb('labSignThumbBox', 'labSignImgdiv', dataUrl, 'Lab Incharge');
+            } else if (slotKey === 'doc1') {
+                state.pendingDoc1SignFile = file;
+                state.doc1SignUrl = dataUrl;
+                renderSignatureThumb('firstSignThumbBox', 'firstSignImgdiv', dataUrl, 'Doctor 1');
+            } else if (slotKey === 'doc2') {
+                state.pendingDoc2SignFile = file;
+                state.doc2SignUrl = dataUrl;
+                renderSignatureThumb('secondSignThumbBox', 'secondSignImgdiv', dataUrl, 'Doctor 2');
+            }
+
+            updateLiveCanvas();
+            updateStatusIndicator('unsaved', 'Unsaved signatures');
+            showToast('Signature loaded. Click "Save Settings" to persist.', 'success');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function renderSignatureThumb(boxId, innerDivId, imgUrl, title) {
+        const box = document.getElementById(boxId);
+        const innerDiv = document.getElementById(innerDivId);
+        if (!box || !innerDiv) return;
+
+        innerDiv.innerHTML = `<img src="${imgUrl}" alt="${title}" style="max-height: 48px; max-width: 90px; object-fit: contain; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px;" onerror="this.onerror=null;this.style.display='none';" />`;
+        box.style.display = 'flex';
+    }
+
+    // --- TEMPLATE REMOVAL & SIGNATURE DELETION ---
+    function setupDeleteHandlers() {
+        // Remove Letterhead
+        document.getElementById('btnRemoveTemplate')?.addEventListener('click', () => {
+            state.activeLetterheadUrl = '';
+            state.pendingTemplateFile = null;
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) fileInput.value = '';
+            const thumbBox = document.getElementById('letterheadThumbBox');
+            if (thumbBox) thumbBox.style.display = 'none';
+
+            updateLiveCanvas();
+            showToast('Letterhead template removed from preview.', 'warning');
+        });
+
+        // Delete Lab Sign
+        document.getElementById('btnDeleteLabSign')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await deleteSignatureSlot('lab');
+        });
+
+        // Delete Doc 1 Sign
+        document.getElementById('btnDeleteDoc1Sign')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await deleteSignatureSlot('doc1');
+        });
+
+        // Delete Doc 2 Sign
+        document.getElementById('btnDeleteDoc2Sign')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await deleteSignatureSlot('doc2');
+        });
+    }
+
+    async function deleteSignatureSlot(slotKey) {
+        let publicId = '';
+        let urlField = '';
+        let publicIdField = '';
+        let inputId = '';
+        let thumbBoxId = '';
+        let innerDivId = '';
+
+        if (slotKey === 'lab') {
+            publicId = state.labSignPublicId;
+            urlField = 'labinchargesign';
+            publicIdField = 'labinchargesignpublicid';
+            inputId = 'lab-sign-file';
+            thumbBoxId = 'labSignThumbBox';
+            innerDivId = 'labSignImgdiv';
+        } else if (slotKey === 'doc1') {
+            publicId = state.doc1SignPublicId;
+            urlField = 'firstdoctorsign';
+            publicIdField = 'firstdoctorsignpublicid';
+            inputId = 'doctor-left-file';
+            thumbBoxId = 'firstSignThumbBox';
+            innerDivId = 'firstSignImgdiv';
+        } else if (slotKey === 'doc2') {
+            publicId = state.doc2SignPublicId;
+            urlField = 'seconddoctorsign';
+            publicIdField = 'seconddoctorsignpublicid';
+            inputId = 'Doctor-Right-file';
+            thumbBoxId = 'secondSignThumbBox';
+            innerDivId = 'secondSignImgdiv';
+        }
+
+        // Reset input and state
+        const fileInput = document.getElementById(inputId);
+        if (fileInput) fileInput.value = '';
+        const thumbBox = document.getElementById(thumbBoxId);
+        if (thumbBox) thumbBox.style.display = 'none';
+        const innerDiv = document.getElementById(innerDivId);
+        if (innerDiv) innerDiv.innerHTML = '';
+
+        if (slotKey === 'lab') {
+            state.pendingLabSignFile = null;
+            state.labSignUrl = '';
+            state.labSignPublicId = '';
+        } else if (slotKey === 'doc1') {
+            state.pendingDoc1SignFile = null;
+            state.doc1SignUrl = '';
+            state.doc1SignPublicId = '';
+        } else if (slotKey === 'doc2') {
+            state.pendingDoc2SignFile = null;
+            state.doc2SignUrl = '';
+            state.doc2SignPublicId = '';
+        }
+
+        updateLiveCanvas();
+
+        // If it was already persisted on backend, trigger API removal
+        if (publicId) {
+            try {
+                updateStatusIndicator('saving', 'Removing signature...');
+                const res = await fetch(`${BASE_URL}/api/v1/user/deleteLabInchargeSign`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ publicId, urlfield: urlField, publicIdfield: publicIdField })
+                });
+                if (res.ok) {
+                    showToast('Signature deleted from database successfully.', 'success');
+                } else {
+                    showToast('Removed from view, but backend reported an issue.', 'warning');
+                }
+            } catch (err) {
+                console.error('Error deleting signature from backend:', err);
+                showToast('Removed from interface.', 'warning');
+            } finally {
+                updateStatusIndicator('saved', 'Ready');
+            }
+        } else {
+            showToast('Signature removed.', 'info');
+        }
+    }
+
+    // --- API & DATA FETCHING ---
+    async function fetchDataAndSetInputs() {
+        const reportId = localStorage.getItem('myKey');
         try {
-            loader.style.display = 'flex';
-            loader.style.zIndex = '9999';
-            const response = await fetch(`${BASE_URL}/api/v1/user/get-pdf`, {
+            updateStatusIndicator('saving', 'Loading settings...');
+            const response = await fetch(`${BASE_URL}/api/v1/user/getting-pdf-data`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                // body: JSON.stringify({ htmlContent, cssContent, header, footer, backgroundImageUrl, value1 }),
-                body: JSON.stringify({
-                    value1: value2, checkBox, backgroundImageUrl,
-                    headermargin, footermargin, marginRight, marginLeft, selectedFontSize, RowSpacing,
-                    selectedFontFamily, HighLow, HLinred,
-                    BoldRow, showInvest, hideCategories, hideTableHeadings,
-                    showlab: sig.showlab,
-                    showdoctorfirst: sig.showdoctorfirst,
-                    showdoctorsecond: sig.showdoctorsecond,
-                    fileInputLab: sig.fileInputLab,
-                    fileInputDoctorleft: sig.fileInputDoctorleft,
-                    fileInputDoctorright: sig.fileInputDoctorright,
-                    fileInputLabtext: sig.fileInputLabtext,
-                    fileInputDoctorlefttext: sig.fileInputDoctorlefttext,
-                    fileInputDoctorrighttext: sig.fileInputDoctorrighttext,
-                    footer: footerHtml,
-                    persistCustomization: true,
-                    LeftsignPd, Rightsignpd
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reportId })
             });
 
-            if (!response.ok) throw new Error('PDF generation failed');
+            if (!response.ok) throw new Error('Failed to load PDF configuration data');
+            const data = await response.json();
 
-            // Create a Blob from the response
-            const pdfBlob = await response.blob();
+            if (data) {
+                if (data.headermargin !== undefined) document.getElementById('header').value = data.headermargin;
+                if (data.footermargin !== undefined) document.getElementById('footer').value = data.footermargin;
+                if (data.marginRight !== undefined) document.getElementById('margin-right').value = data.marginRight;
+                if (data.marginLeft !== undefined) document.getElementById('margin-left').value = data.marginLeft;
+                if (data.LeftsignPd !== undefined) document.getElementById('padding-left').value = data.LeftsignPd;
+                if (data.Rightsignpd !== undefined) document.getElementById('padding-right').value = data.Rightsignpd;
 
-            // Create a URL for the Blob
-            const pdfUrl = URL.createObjectURL(pdfBlob);
+                if (data.selectedFontFamily) document.getElementById('pdf-font-family').value = data.selectedFontFamily;
+                if (data.selectedFontSize) document.getElementById('pdf-font-size').value = data.selectedFontSize;
+                if (data.RowSpacing !== undefined) document.getElementById('spacing').value = data.RowSpacing;
 
-            // Set the URL in the iframe
-            const iframe = document.getElementById('pdf-preview');
-            if (iframe) {
-                iframe.src = pdfUrl;
-            } else {
-                console.error('Iframe with ID "pdf-preview" not found!');
+                if (data.HighLow !== undefined) document.getElementById('high-low-marker').checked = !!data.HighLow;
+                if (data.HLinred !== undefined) document.getElementById('abnormal-results-red').checked = !!data.HLinred;
+                if (data.BoldRow !== undefined) document.getElementById('abnormal-results-bold').checked = !!data.BoldRow;
+                if (data.showInvest !== undefined) document.getElementById('show-investigations').checked = !!data.showInvest;
+                if (data.hideCategories !== undefined) document.getElementById('hide-categories').checked = !!data.hideCategories;
+                if (data.hideTableHeadings !== undefined) document.getElementById('hide-table-headings').checked = !!data.hideTableHeadings;
             }
         } catch (error) {
-            console.error('Error generating PDF:', error);
+            console.warn('Notice: Using default print settings due to fetch fallback:', error.message);
+        }
+    }
+
+    async function fetchLabSignAndSetInputs() {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/getDoctorsSign`);
+            if (!response.ok) throw new Error('Failed to fetch doctor signatures');
+
+            const data = await response.json();
+            if (data) {
+                state.docSignRecordId = data._id || '';
+
+                if (data.labinchargeinfo !== undefined) document.getElementById('lab-info').value = data.labinchargeinfo;
+                if (data.firstdoctorsigninfo !== undefined) document.getElementById('firstdoctor-info').value = data.firstdoctorsigninfo;
+                if (data.seconddoctorsigninfo !== undefined) document.getElementById('seconddoctor-info').value = data.seconddoctorsigninfo;
+
+                if (data.showlabinchargesign !== undefined) document.getElementById('show-lab').checked = !!data.showlabinchargesign;
+                if (data.showfirstdoctorsign !== undefined) document.getElementById('show-doctor1').checked = !!data.showfirstdoctorsign;
+                if (data.showseconddoctorsign !== undefined) document.getElementById('show-doctor2').checked = !!data.showseconddoctorsign;
+
+                // Lab Sign Image
+                state.labSignUrl = sanitizeUrl(data.labinchargesign);
+                state.labSignPublicId = data.labinchargesignpublicid || '';
+                if (state.labSignUrl) {
+                    renderSignatureThumb('labSignThumbBox', 'labSignImgdiv', state.labSignUrl, 'Lab Incharge');
+                } else {
+                    document.getElementById('labSignThumbBox').style.display = 'none';
+                }
+
+                // Doctor 1 Sign Image
+                state.doc1SignUrl = sanitizeUrl(data.firstdoctorsign);
+                state.doc1SignPublicId = data.firstdoctorsignpublicid || '';
+                if (state.doc1SignUrl) {
+                    renderSignatureThumb('firstSignThumbBox', 'firstSignImgdiv', state.doc1SignUrl, 'Doctor 1');
+                } else {
+                    document.getElementById('firstSignThumbBox').style.display = 'none';
+                }
+
+                // Doctor 2 Sign Image
+                state.doc2SignUrl = sanitizeUrl(data.seconddoctorsign);
+                state.doc2SignPublicId = data.seconddoctorsignpublicid || '';
+                if (state.doc2SignUrl) {
+                    renderSignatureThumb('secondSignThumbBox', 'secondSignImgdiv', state.doc2SignUrl, 'Doctor 2');
+                } else {
+                    document.getElementById('secondSignThumbBox').style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.warn('Notice: Doctor signature data could not be retrieved:', error.message);
+        }
+    }
+
+    async function fetchTemplateGallery() {
+        const gallery = document.getElementById('images-div');
+        const galleryGroup = document.getElementById('templateGalleryGroup');
+        if (!gallery) return;
+
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/templates`, { method: 'POST' });
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (data && Array.isArray(data.urls) && data.urls.length > 0) {
+                gallery.innerHTML = '';
+                if (galleryGroup) galleryGroup.style.display = 'block';
+
+                data.urls.forEach((item, index) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'ps-template-item';
+                    if (index === 0 && !state.activeLetterheadUrl) {
+                        itemDiv.classList.add('is-selected');
+                        state.activeLetterheadUrl = item.template;
+                        state.activeLetterheadPublicId = item.public_id;
+                        state.activeLetterheadId = item._id;
+                    }
+
+                    const img = document.createElement('img');
+                    img.src = item.template;
+                    img.alt = `Template ${index + 1}`;
+                    img.loading = 'lazy';
+
+                    const deleteBtn = document.createElement('div');
+                    deleteBtn.className = 'ps-template-delete';
+                    deleteBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    deleteBtn.title = 'Delete Template';
+
+                    deleteBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Are you sure you want to delete this letterhead template?')) return;
+
+                        try {
+                            updateStatusIndicator('saving', 'Deleting template...');
+                            const delRes = await fetch(`${BASE_URL}/api/v1/user/delete-image`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    templateId: item._id,
+                                    url: item.template,
+                                    public_id: item.public_id
+                                })
+                            });
+                            if (delRes.ok) {
+                                itemDiv.remove();
+                                if (state.activeLetterheadUrl === item.template) {
+                                    state.activeLetterheadUrl = '';
+                                }
+                                updateLiveCanvas();
+                                showToast('Template deleted successfully.', 'success');
+                            } else {
+                                showToast('Failed to delete template.', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Error deleting template.', 'error');
+                        } finally {
+                            updateStatusIndicator('saved', 'Ready');
+                        }
+                    });
+
+                    itemDiv.appendChild(img);
+                    itemDiv.appendChild(deleteBtn);
+
+                    itemDiv.addEventListener('click', () => {
+                        document.querySelectorAll('.ps-template-item').forEach(el => el.classList.remove('is-selected'));
+                        itemDiv.classList.add('is-selected');
+                        state.activeLetterheadUrl = item.template;
+                        state.activeLetterheadPublicId = item.public_id;
+                        state.activeLetterheadId = item._id;
+
+                        // Display in thumb box
+                        const thumbBox = document.getElementById('letterheadThumbBox');
+                        const thumbImg = document.getElementById('letterheadThumbImg');
+                        const thumbName = document.getElementById('letterheadThumbName');
+                        const thumbSize = document.getElementById('letterheadThumbSize');
+                        if (thumbBox && thumbImg) {
+                            thumbImg.src = item.template;
+                            thumbName.textContent = `Template ${index + 1}`;
+                            thumbSize.textContent = 'Saved Cloudinary Template';
+                            thumbBox.style.display = 'flex';
+                        }
+
+                        setLetterheadMode('digital');
+                        updateLiveCanvas();
+                    });
+
+                    gallery.appendChild(itemDiv);
+                });
+            } else {
+                if (galleryGroup) galleryGroup.style.display = 'none';
+            }
+        } catch (error) {
+            console.warn('Notice: Template gallery unavailable:', error.message);
+        }
+    }
+
+    // --- OFFICIAL PDF COMPILATION & PREVIEW GENERATOR ---
+    async function autogeneratingpdf(customOverrides = {}) {
+        const iframe = document.getElementById('pdf-preview');
+        const loader = document.getElementById('pdfIframeLoader');
+        const bookingId = localStorage.getItem('myKey') || '';
+        const withoutLetterhead = document.getElementById('check1')?.checked || false;
+
+        const headermargin = customOverrides.headermargin ?? document.getElementById('header')?.value ?? '2.5';
+        const footermargin = customOverrides.footermargin ?? document.getElementById('footer')?.value ?? '1.8';
+        const marginRight = customOverrides.marginRight ?? document.getElementById('margin-right')?.value ?? '1.0';
+        const marginLeft = customOverrides.marginLeft ?? document.getElementById('margin-left')?.value ?? '1.0';
+        const LeftsignPd = customOverrides.LeftsignPd ?? document.getElementById('padding-left')?.value ?? '0.5';
+        const Rightsignpd = customOverrides.Rightsignpd ?? document.getElementById('padding-right')?.value ?? '0.5';
+
+        const selectedFontSize = customOverrides.selectedFontSize ?? document.getElementById('pdf-font-size')?.value ?? '11';
+        const selectedFontFamily = customOverrides.selectedFontFamily ?? document.getElementById('pdf-font-family')?.value ?? 'Arial';
+        const RowSpacing = customOverrides.RowSpacing ?? document.getElementById('spacing')?.value ?? '1';
+
+        const HighLow = customOverrides.HighLow ?? document.getElementById('high-low-marker')?.checked ?? true;
+        const HLinred = customOverrides.HLinred ?? document.getElementById('abnormal-results-red')?.checked ?? true;
+        const BoldRow = customOverrides.BoldRow ?? document.getElementById('abnormal-results-bold')?.checked ?? true;
+        const showInvest = customOverrides.showInvest ?? document.getElementById('show-investigations')?.checked ?? true;
+        const hideCategories = customOverrides.hideCategories ?? document.getElementById('hide-categories')?.checked ?? false;
+        const hideTableHeadings = customOverrides.hideTableHeadings ?? document.getElementById('hide-table-headings')?.checked ?? false;
+
+        const showlab = document.getElementById('show-lab')?.checked ?? true;
+        const showdoctorfirst = document.getElementById('show-doctor1')?.checked ?? true;
+        const showdoctorsecond = document.getElementById('show-doctor2')?.checked ?? true;
+
+        const labText = document.getElementById('lab-info')?.value || '';
+        const doc1Text = document.getElementById('firstdoctor-info')?.value || '';
+        const doc2Text = document.getElementById('seconddoctor-info')?.value || '';
+
+        // Safe image URLs: only pass HTTP(S) links, omit Base64 data strings for lightweight transport
+        const safeUrl = (url) => (url && url.startsWith('http')) ? url : '';
+        const labImgUrl = safeUrl(state.labSignUrl);
+        const doc1ImgUrl = safeUrl(state.doc1SignUrl);
+        const doc2ImgUrl = safeUrl(state.doc2SignUrl);
+        const bgUrl = withoutLetterhead ? '' : safeUrl(state.activeLetterheadUrl);
+
+        // Build HTML footer for the PDF compiler
+        const renderSlotHtml = (visible, img, text) => {
+            if (!visible) return '<div style="min-width: 120px;"></div>';
+            return `
+                <div style="text-align: center; min-width: 120px; max-width: 220px;">
+                    ${img ? `<img src="${img}" style="max-height: 44px; max-width: 140px; object-fit: contain;" />` : `<div style="height: 35px;"></div>`}
+                    <div style="font-size: 10px; color: #1e293b; margin-top: 4px; white-space: pre-line; border-top: 1px solid #94a3b8; padding-top: 3px;">${text}</div>
+                </div>`;
+        };
+
+        const footerHtml = `
+            <div style="width: 100%; display: flex; justify-content: ${state.sigGlobalAlignment}; align-items: flex-end; padding-left: ${LeftsignPd}cm; padding-right: ${Rightsignpd}cm;">
+                ${renderSlotHtml(showlab, labImgUrl, labText)}
+                ${renderSlotHtml(showdoctorfirst, doc1ImgUrl, doc1Text)}
+                ${renderSlotHtml(showdoctorsecond, doc2ImgUrl, doc2Text)}
+            </div>`;
+
+        const payload = {
+            value1: bookingId,
+            checkBox: withoutLetterhead,
+            backgroundImageUrl: bgUrl,
+            headermargin,
+            footermargin,
+            marginRight,
+            marginLeft,
+            LeftsignPd,
+            Rightsignpd,
+            selectedFontSize,
+            selectedFontFamily,
+            RowSpacing,
+            HighLow,
+            HLinred,
+            BoldRow,
+            showInvest,
+            hideCategories,
+            hideTableHeadings,
+            showlab,
+            showdoctorfirst,
+            showdoctorsecond,
+            fileInputLab: labImgUrl,
+            fileInputDoctorleft: doc1ImgUrl,
+            fileInputDoctorright: doc2ImgUrl,
+            fileInputLabtext: labText,
+            fileInputDoctorlefttext: doc1Text,
+            fileInputDoctorrighttext: doc2Text,
+            footer: footerHtml,
+            persistCustomization: !!customOverrides.persistCustomization
+        };
+
+        try {
+            if (loader) loader.style.display = 'flex';
+            const res = await fetch(`${BASE_URL}/api/v1/user/get-pdf`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('PDF Compiler failed to generate PDF.');
+
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            if (iframe) {
+                iframe.src = blobUrl;
+            }
+        } catch (err) {
+            console.error('Error generating official PDF:', err);
         } finally {
-            loader.style.display = 'none';
-            loader.style.zIndex = '-1';
+            if (loader) loader.style.display = 'none';
         }
     }
 
-    const checkBox = document.getElementById('check1'); // Get the checkbox element
+    // --- FULL CONFIGURATION PERSISTENCE (SAVE ALL SETTINGS) ---
+    async function saveAllSettings() {
+        if (state.isSaving) return;
+        state.isSaving = true;
 
-    checkBox.addEventListener('change', function () {
-        if (checkBox.checked) {
-            // Without background
-            autogeneratingpdf({ checkBox: checkBox.checked });
-        } else {
-            autogeneratingpdf({ checkBox: checkBox.checked });
+        const saveBtn = document.getElementById('btnSaveAllSettings');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span class="ps-btn-text-full">Saving...</span><span class="ps-btn-text-short">Saving...</span>';
         }
-    })
+        updateStatusIndicator('saving', 'Saving configurations...');
 
-    async function Initialization() {
+        try {
+            // 1. Upload Pending Letterhead Template if any
+            if (state.pendingTemplateFile) {
+                const formData = new FormData();
+                formData.append('template', state.pendingTemplateFile);
+                formData.append('headermargin', document.getElementById('header')?.value || '2.5');
+                formData.append('footermargin', document.getElementById('footer')?.value || '1.8');
+                formData.append('marginRight', document.getElementById('margin-right')?.value || '1.0');
+                formData.append('marginLeft', document.getElementById('margin-left')?.value || '1.0');
 
-        await fetchDataAndSetInputs();
-        await fetchLabSignAndSetInputs();
-        await fetchTemplateImages();
-        await autogeneratingpdf();
-        imagedeletion();
-        selectionimage();
-    }
-
-
-    Initialization();
-    document.getElementById('pdf-font-family')?.addEventListener('change', (event) => {
-        updateFontPreview(event.target.value);
-    });
-
-    document.getElementById('uploadTemplate').addEventListener('click', async function () {
-        const fileInput = document.getElementById('fileInput');
-        const messageElement = document.getElementById('message');
-        let selectedImage = document.querySelector('.image.selected');
-        let imageUrlToSend = null; // URL to send to the backend
-        const headermargin = document.getElementById("header").value;
-        const footermargin = document.getElementById("footer").value;
-        const marginRight = document.getElementById("margin-right").value;
-        const marginLeft = document.getElementById("margin-left").value;
-
-        // Ensure the first image is selected by default if no other image is selected
-        if (!selectedImage) {
-            selectedImage = document.querySelector('.image');
-            if (selectedImage) {
-                selectedImage.classList.add('selected');
-            }
-        }
-
-        if (fileInput && fileInput.files.length > 0) {
-            // Case 1: File is uploaded
-            const file = fileInput.files[0];
-
-            if (!file.type.startsWith('image/')) {
-                messageElement.textContent = 'Only image files are allowed.';
-                return;
-            }
-
-            // Upload the file to the backend
-            const formData = new FormData();
-            formData.append('template', file);
-            formData.append('headermargin', headermargin);
-            formData.append('footermargin', footermargin);
-            formData.append('marginRight', marginRight);
-            formData.append('marginLeft', marginLeft);
-            pageloader.style.display = "flex";
-
-            try {
-                const response = await fetch(`${BASE_URL}/api/v1/user/template`, {
+                const uploadRes = await fetch(`${BASE_URL}/api/v1/user/template`, {
                     method: 'POST',
                     body: formData
                 });
 
-                if (response.ok) {
-                    fileInput.value = "";
-                    const result = await response.json();
-                    messageElement.textContent = 'File uploaded successfully!';
-                    imageUrlToSend = result.url; // Use the uploaded file's URL
-                    await fetchTemplateImages();
-                    await selectionimage();
-                    await autogeneratingpdf({ backgroundImageUrl: imageUrlToSend, headermargin, footermargin, marginRight, marginLeft }); // Generate the PDF with the uploaded file
-                    fetchDataAndSetInputs();
-                    return; // Exit early since uploaded file is prioritized
+                if (uploadRes.ok) {
+                    const uploadResult = await uploadRes.json();
+                    if (uploadResult.url) {
+                        state.activeLetterheadUrl = uploadResult.url;
+                    }
+                    state.pendingTemplateFile = null;
+                    await fetchTemplateGallery();
                 } else {
-                    const errorResult = await response.json();
-                    messageElement.textContent = `Error: ${errorResult.message}`;
-                    return;
+                    throw new Error('Letterhead template upload failed.');
                 }
-            } catch (error) {
-                messageElement.textContent = 'An error occurred while uploading the file.';
-                console.error('Upload error:', error);
-                return;
-            } finally {
-                pageloader.style.display = "none";
-
             }
-        }
 
-        // Case 2: Use the selected image if available
-        if (selectedImage) {
-            imageUrlToSend = selectedImage.src;
-        }
+            // 2. Upload Pending Doctor Signatures or Info Updates
+            const sigFormData = new FormData();
+            if (state.pendingLabSignFile) sigFormData.append('labsign', state.pendingLabSignFile);
+            if (state.pendingDoc1SignFile) sigFormData.append('firstdoctorsign', state.pendingDoc1SignFile);
+            if (state.pendingDoc2SignFile) sigFormData.append('seconddoctorsign', state.pendingDoc2SignFile);
 
-        // Case 3: If no file is uploaded and no image is selected, use the first image
-        if (!imageUrlToSend) {
-            const firstImage = document.querySelector('.image');
-            if (firstImage) {
-                imageUrlToSend = firstImage.src;
-            }
-        }
+            sigFormData.append('labinchargeinfo', document.getElementById('lab-info')?.value || '');
+            sigFormData.append('leftdoctorinfo', document.getElementById('firstdoctor-info')?.value || '');
+            sigFormData.append('rightdoctorinfo', document.getElementById('seconddoctor-info')?.value || '');
+            sigFormData.append('showlab', document.getElementById('show-lab')?.checked ?? true);
+            sigFormData.append('showdoctorfirst', document.getElementById('show-doctor1')?.checked ?? true);
+            sigFormData.append('showdoctorsecond', document.getElementById('show-doctor2')?.checked ?? true);
+            sigFormData.append('LeftsignPd', document.getElementById('padding-left')?.value || '0.5');
+            sigFormData.append('Rightsignpd', document.getElementById('padding-right')?.value || '0.5');
 
-        // Ensure the image URL is sent to generate the PDF
-        if (imageUrlToSend) {
-            console.log("headermargin, footermargin, marginRight, marginLeft:", headermargin, footermargin, marginRight, marginLeft);
-            await autogeneratingpdf({ backgroundImageUrl: imageUrlToSend, headermargin, footermargin, marginRight, marginLeft });
-            messageElement.textContent = 'PDF generated successfully with the selected/default image!';
-            fetchDataAndSetInputs();
-        } else {
-            messageElement.textContent = 'No image or file available to generate the PDF.';
-        }
-    });
-
-    document.getElementById('updateSign').addEventListener('click', async function () {
-        const showlab = document.getElementById('show-lab').checked;
-        const showdoctorfirst = document.getElementById('show-doctor1').checked;
-        const showdoctorsecond = document.getElementById('show-doctor2').checked;
-        const fileInputLab1 = document.getElementById('lab-sign-file');
-        const fileInputDoctorleft1 = document.getElementById('doctor-left-file');
-        const fileInputDoctorright1 = document.getElementById('Doctor-Right-file');
-        const fileInputLabtext = document.getElementById('lab-info').value;
-        const fileInputDoctorlefttext = document.getElementById('firstdoctor-info').value;
-        const fileInputDoctorrighttext = document.getElementById('seconddoctor-info').value;
-
-        const labsigndiv = document.getElementById('labSignImgdiv');
-        const imgUrl = labsigndiv.querySelector('img')?.src || "";
-        console.log("this is the image Url", imgUrl);
-
-        const file1 = fileInputLab1?.files?.[0];
-        const file2 = fileInputDoctorleft1?.files?.[0];
-        const file3 = fileInputDoctorright1?.files?.[0];
-
-        if ((file1 && !file1.type.startsWith('image/')) ||
-            (file2 && !file2.type.startsWith('image/')) ||
-            (file3 && !file3.type.startsWith('image/'))) {
-            alert("Only image files are allowed");
-            return;
-        }
-
-        const formData = new FormData();
-        if (file1) formData.append('labsign', file1);
-        if (file2) formData.append('firstdoctorsign', file2);
-        if (file3) formData.append('seconddoctorsign', file3);
-
-        formData.append('labinchargeinfo', fileInputLabtext);
-        formData.append('leftdoctorinfo', fileInputDoctorlefttext);
-        formData.append('rightdoctorinfo', fileInputDoctorrighttext);
-        formData.append('showlab', showlab);
-        formData.append('showdoctorfirst', showdoctorfirst);
-        formData.append('showdoctorsecond', showdoctorsecond);
-        formData.append('LeftsignPd', document.getElementById('padding-left').value);
-        formData.append('Rightsignpd', document.getElementById('padding-right').value);
-        pageloader.style.display = "flex";
-
-        try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/uploadDoctorsSign`, {
+            const sigRes = await fetch(`${BASE_URL}/api/v1/user/uploadDoctorsSign`, {
                 method: 'POST',
-                body: formData
+                body: sigFormData
             });
 
-            const result = await response.json();
-            if (response.ok) {
+            if (sigRes.ok) {
+                state.pendingLabSignFile = null;
+                state.pendingDoc1SignFile = null;
+                state.pendingDoc2SignFile = null;
                 await fetchLabSignAndSetInputs();
-                await imagedeletion();
-                fileInputLab1.value = "";
-                fileInputDoctorleft1.value = "";
-                fileInputDoctorright1.value = "";
-                const showlab = document.getElementById('show-lab').checked;
-                const showdoctorfirst = document.getElementById('show-doctor1').checked;
-                const showdoctorsecond = document.getElementById('show-doctor2').checked;
-                const fileInputLab = document.getElementById('labinchargesign')?.src || "";
-                const fileInputDoctorleft = document.getElementById('firstdoctorsign')?.src || "";
-                const fileInputDoctorright = document.getElementById('seconddoctorsign')?.src || "";
-                const fileInputLabtext = document.getElementById('lab-info').value;
-                const fileInputDoctorlefttext = document.getElementById('firstdoctor-info').value;
-                const fileInputDoctorrighttext = document.getElementById('seconddoctor-info').value;
-                const value1 = localStorage.getItem('myKey');
-
-                autogeneratingpdf({
-                    value1, showlab: showlab, showdoctorfirst: showdoctorfirst, showdoctorsecond: showdoctorsecond, fileInputLab: fileInputLab,
-                    fileInputDoctorleft: fileInputDoctorleft, fileInputDoctorright: fileInputDoctorright,
-                    fileInputLabtext: fileInputLabtext, fileInputDoctorlefttext: fileInputDoctorlefttext,
-                    fileInputDoctorrighttext: fileInputDoctorrighttext, LeftsignPd: document.getElementById('padding-left').value, Rightsignpd: document.getElementById('padding-right').value
-                })
-            } else {
-                alert("Error: " + result.message);
             }
+
+            // 3. Persist General PDF Customization Parameters
+            await autogeneratingpdf({ persistCustomization: true });
+
+            updateStatusIndicator('saved', 'All changes saved');
+            showToast('All print settings, margins & signatures saved successfully!', 'success');
         } catch (error) {
-            console.error('Upload error:', error.message);
-            alert(error.message);
+            console.error('Save settings failure:', error);
+            updateStatusIndicator('error', 'Error saving');
+            showToast(`Save failed: ${error.message}`, 'error');
         } finally {
-            pageloader.style.display = "none";
-
+            state.isSaving = false;
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span class="ps-btn-text-full">Save Settings</span><span class="ps-btn-text-short">Save</span>';
+            }
         }
-    });
-
-    document.getElementById('updateGeneral').addEventListener('click', async function () {
-        const selectedFontFamily = document.getElementById('pdf-font-family').value;
-        const selectedFontSize = document.getElementById('pdf-font-size').value;
-        const RowSpacing = document.getElementById('spacing').value;
-        const HighLow = document.getElementById('high-low-marker').checked;
-        const HLinred = document.getElementById('abnormal-results-red').checked;
-        const BoldRow = document.getElementById('abnormal-results-bold').checked;
-        const showInvest = document.getElementById('show-investigations').checked;
-        const hideCategories = document.getElementById('hide-categories').checked;
-        const hideTableHeadings = document.getElementById('hide-table-headings').checked;
-
-        autogeneratingpdf({
-            selectedFontFamily: selectedFontFamily, selectedFontSize: selectedFontSize, RowSpacing: RowSpacing,
-            HighLow: HighLow, HLinred: HLinred, BoldRow: BoldRow, showInvest: showInvest,
-            hideCategories: hideCategories, hideTableHeadings: hideTableHeadings
-        }); // Generate the PDF with the uploaded file
-    });
-
-    // Function to validate input field values and update button state
-    function validateField(input, min, max) {
-        const value = parseFloat(input.value);
-        const errorId = input.id + "-error";
-        const errorElement = document.getElementById(errorId);
-
-        if (isNaN(value) || value < min || value > max) {
-            errorElement.textContent = `Value must be between ${min} and ${max} cm.`;
-            errorElement.style.color = "red";
-            input.style.borderColor = "red";
-        } else {
-            errorElement.textContent = "";
-            input.style.borderColor = "green";
-        }
-
-        // Call function to update button state
-        updateButtonState();
     }
 
-    // Function to check all fields and enable/disable the button
-    function updateButtonState() {
-        const fields = ['header', 'footer', 'margin-right', 'margin-left'];
-        let isValid = true;
+    // --- EVENT LISTENERS INITIALIZATION ---
+    function bindInputListeners() {
+        const liveInputs = [
+            'header', 'footer', 'margin-left', 'margin-right', 'padding-left', 'padding-right',
+            'pdf-font-family', 'pdf-font-size', 'spacing',
+            'high-low-marker', 'abnormal-results-red', 'abnormal-results-bold',
+            'show-investigations', 'hide-categories', 'hide-table-headings',
+            'show-lab', 'show-doctor1', 'show-doctor2'
+        ];
 
-        fields.forEach(fieldId => {
-            const input = document.getElementById(fieldId);
-            const errorId = fieldId + "-error";
-            const errorElement = document.getElementById(errorId);
-
-            // If any error message is present, mark form as invalid
-            if (errorElement.textContent) {
-                isValid = false;
+        liveInputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', () => {
+                    updateStatusIndicator('unsaved', 'Unsaved changes');
+                    updateLiveCanvas();
+                });
+                el.addEventListener('change', () => {
+                    updateStatusIndicator('unsaved', 'Unsaved changes');
+                    updateLiveCanvas();
+                });
             }
         });
 
-        // Enable or disable the update button based on form validity
-        const updateButton = document.getElementById('uploadTemplate');
-        if (isValid) {
-            updateButton.removeAttribute('disabled');
-            updateButton.style.cursor = 'pointer';
-        } else {
-            updateButton.setAttribute('disabled', true);
-            updateButton.style.cursor = 'not-allowed';
-        }
+        // Doctor designation textarea live binding
+        ['lab-info', 'firstdoctor-info', 'seconddoctor-info'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', () => {
+                    updateStatusIndicator('unsaved', 'Unsaved changes');
+                    updateSignaturesLiveCanvas();
+                });
+            }
+        });
+
+        // Without Letterhead Checkbox
+        document.getElementById('check1')?.addEventListener('change', (e) => {
+            const overlay = document.getElementById('letterheadBgOverlay');
+            if (overlay) {
+                overlay.style.display = e.target.checked ? 'none' : (state.letterheadMode === 'digital' ? 'block' : 'none');
+            }
+            if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
+                autogeneratingpdf();
+            }
+        });
+
+        // Save Button
+        document.getElementById('btnSaveAllSettings')?.addEventListener('click', saveAllSettings);
+
+        // Legacy compatibility button clicks
+        document.getElementById('uploadTemplate')?.addEventListener('click', saveAllSettings);
+        document.getElementById('updateSign')?.addEventListener('click', saveAllSettings);
+        document.getElementById('updateGeneral')?.addEventListener('click', saveAllSettings);
+        document.getElementById('update-button')?.addEventListener('click', saveAllSettings);
+
+        // Back / Close Navigation Button
+        document.getElementById('close-btn')?.addEventListener('click', () => {
+            const bookingId = localStorage.getItem('myKey') || '';
+            const format = localStorage.getItem('pdfformat') || 'bill';
+            window.location.href = `${BASE_URL}/admin/admin.html?page=${format}&value1=${bookingId}`;
+        });
+
+        // Window resize & orientation auto-fit
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                fitPreviewToWindow();
+            }, 150);
+        });
+
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                fitPreviewToWindow();
+            }, 250);
+        });
     }
 
-    // Attach validation to input fields
-    document.getElementById('header').addEventListener('input', () => validateField(document.getElementById('header'), 0, 10));
-    document.getElementById('footer').addEventListener('input', () => validateField(document.getElementById('footer'), 0, 6));
-    document.getElementById('margin-right').addEventListener('input', () => validateField(document.getElementById('margin-right'), 0, 4));
-    document.getElementById('margin-left').addEventListener('input', () => validateField(document.getElementById('margin-left'), 0, 4));
-    document.getElementById('padding-left').addEventListener('input', () => validateField(document.getElementById('padding-left'), 0, 20));
-    document.getElementById('padding-right').addEventListener('input', () => validateField(document.getElementById('padding-right'), 0, 20));
-    // Initial call to disable the button on page load
-    updateButtonState();
+    // --- APPLICATION BOOTSTRAP ---
+    async function init() {
+        setupDragAndDrop();
+        setupDeleteHandlers();
+        bindInputListeners();
 
-    // Add event listener to the back button
-    document.getElementById('close-btn').addEventListener('click', function () {
-        const bookingId = localStorage.getItem('myKey');
-        const format = localStorage.getItem('pdfformat');
-        window.location.href = `${BASE_URL}/admin/admin.html?page=${format}&value1=${bookingId}`;
-    });
+        // Load configuration and data from server
+        await fetchDataAndSetInputs();
+        await fetchLabSignAndSetInputs();
+        await fetchTemplateGallery();
 
-    function verifyinputfeilds() {
-        const textareainfo = document.querySelectorAll('.signDiv textarea');
-        const errormessage = document.getElementById('errormessage');
-        let maxlength = 75;
-        textareainfo.forEach((feild) => {
-            feild.addEventListener('input', () => {
-                if (feild.value.length >= maxlength) {
-                    errormessage.style.display = "block";
-                    errormessage.textContent = "❗ Maximum 75 characters allowed";
-                } else {
-                    errormessage.style.display = "none";
-                    errormessage.textContent = ""
-                }
-            })
-        })
+        // Calculate initial true-to-scale responsive preview
+        fitPreviewToWindow();
+        updateLiveCanvas();
+        updateStatusIndicator('saved', 'Ready');
     }
-    verifyinputfeilds();
+
+    // Run when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 
 })();

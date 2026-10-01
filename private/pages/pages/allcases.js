@@ -271,6 +271,144 @@ async function allcases() {
         return currencyFormatter.format(Number(amount) || 0);
     }
 
+    
+    // Floating Portal Popover Management (outside table container so it never clips)
+    function closeDropdown() {
+        const existing = document.getElementById("allcases-dropdown-popover");
+        if (existing) {
+            if (existing._trigger) {
+                existing._trigger.classList.remove("is-active");
+                existing._trigger.setAttribute("aria-expanded", "false");
+            }
+            existing.remove();
+        }
+    }
+
+    function positionPopover(popover, triggerBtn, row) {
+        if (!popover || !triggerBtn) return;
+
+        const triggerRect = triggerBtn.getBoundingClientRect();
+        const menuWidth = popover.offsetWidth || 195;
+        const menuHeight = popover.offsetHeight || 230;
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+        const spaceBelow = viewportHeight - triggerRect.bottom;
+        const spaceAbove = triggerRect.top;
+
+        // Is this one of the bottom rows of the table?
+        const isLastRow = row ? !row.nextElementSibling : false;
+        const isSecondLastRow = row && row.nextElementSibling ? !row.nextElementSibling.nextElementSibling : false;
+
+        // Intelligent placement: flip upwards (dropup) for last rows or if space below is limited
+        let openUpwards = false;
+        if (spaceBelow < menuHeight + 10) {
+            openUpwards = spaceAbove >= menuHeight || spaceAbove > spaceBelow;
+        } else if ((isLastRow || isSecondLastRow) && spaceAbove >= menuHeight + 10) {
+            openUpwards = true;
+        }
+
+        let top;
+        let maxHeight = Math.min(380, viewportHeight - 20);
+
+        if (openUpwards) {
+            top = triggerRect.top - menuHeight - 6;
+            if (top < 10) {
+                top = 10;
+                maxHeight = Math.max(120, triggerRect.top - 16);
+            }
+            popover.classList.add("dropup");
+            popover.classList.remove("dropdown");
+        } else {
+            top = triggerRect.bottom + 6;
+            if (top + menuHeight > viewportHeight - 10) {
+                maxHeight = Math.max(120, viewportHeight - top - 10);
+            }
+            popover.classList.add("dropdown");
+            popover.classList.remove("dropup");
+        }
+
+        let left = triggerRect.left;
+        if (left + menuWidth > viewportWidth - 12) {
+            left = triggerRect.right - menuWidth;
+        }
+        if (left < 10) left = 10;
+        if (left + menuWidth > viewportWidth - 10) {
+            left = Math.max(10, viewportWidth - menuWidth - 10);
+        }
+
+        popover.style.maxWidth = `${Math.min(menuWidth, viewportWidth - 20)}px`;
+        popover.style.maxHeight = `${Math.round(maxHeight)}px`;
+        popover.style.top = `${Math.round(top)}px`;
+        popover.style.left = `${Math.round(left)}px`;
+    }
+
+    function openDropdownMenu(triggerBtn, row, booking) {
+        if (!triggerBtn || !row) return;
+
+        const currentPopover = document.getElementById("allcases-dropdown-popover");
+        if (currentPopover && currentPopover._trigger === triggerBtn) {
+            closeDropdown();
+            return;
+        }
+
+        closeDropdown();
+
+        triggerBtn.classList.add("is-active");
+        triggerBtn.setAttribute("aria-expanded", "true");
+
+        const bookingId = row.getAttribute("data-booking-id");
+        const isReportReady = booking ? booking.isreportready : false;
+
+        const cancelAction = isReportReady
+            ? ""
+            : `<a class="action-btn cancel-btn" data-action="cancel" target="_blank"><i class="fa-solid fa-rectangle-xmark"></i> Cancel</a>`;
+
+        const popover = document.createElement("div");
+        popover.id = "allcases-dropdown-popover";
+        popover.className = "allcases-dropdown-menu allcases-floating-popover";
+        popover._trigger = triggerBtn;
+        popover._row = row;
+        popover.dataset.bookingId = bookingId;
+
+        popover.innerHTML = `
+            <a class="action-btn generate-bill-btn" data-action="generate-bill"><i class="fa-solid fa-file-invoice"></i> Generate Bill</a>
+            <button type="button" class="action-btn generate-trf-btn" data-action="generate-trf"><i class="fa-solid fa-receipt"></i> Generate TRF</button>
+            <a class="action-btn edit-booking" data-action="edit-booking" target="_blank"><i class="fa-solid fa-file-pen"></i> Edit Booking</a>
+            <a class="action-btn hold-btn" data-action="hold" target="_blank"><i class="fa-solid fa-hands-holding"></i> Hold</a>
+            <a class="action-btn clinical-btn" data-action="clinical" target="_blank"><i class="fa-solid fa-house-chimney-medical"></i> Clinical</a>
+            ${cancelAction}
+        `;
+
+        document.body.appendChild(popover);
+        positionPopover(popover, triggerBtn, row);
+
+        popover.addEventListener("click", async (ev) => {
+            const item = ev.target.closest("[data-action]");
+            if (!item) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            const action = item.getAttribute("data-action");
+            closeDropdown();
+            const createdBy = row.getAttribute("data-created-by") || booking?.createdBy;
+
+            if (action === "generate-bill") {
+                await generateBillPDF(booking, item);
+            } else if (action === "generate-trf") {
+                handleGenerateTRF(bookingId);
+            } else if (action === "edit-booking") {
+                openEditBookingPage(booking, row);
+            } else if (action === "hold") {
+                await handleHoldBooking(bookingId, createdBy);
+            } else if (action === "clinical") {
+                await handleClinicalBooking(bookingId, createdBy);
+            } else if (action === "cancel") {
+                await handleCancelBooking(bookingId, createdBy);
+            }
+        });
+    }
+
     function displayBookings(bookings) {
         const tableBody = document.getElementById("tbody");
         tableBody.innerHTML = "";
@@ -351,14 +489,7 @@ async function allcases() {
                     <div class="enter-result">
                         <a data-page="reportFormat" class="edit-report"><i class="fa-solid fa-pen-to-square"></i> View report</a>
                     </div>
-                    <i class="fas fa-ellipsis-h more-options" title="More Actions"></i>
-                    <div class="allcases-dropdown-menu" style="display: none;">
-                        <a data-page="labreport" class="download-report" target="_blank"><i class="fa-solid fa-pen-to-square"></i> Enter result</a>
-                        <a class="action-btn generate-bill-btn"><i class="fa-solid fa-file-invoice"></i> Generate Bill</a>
-                        <a class="action-btn edit-booking" target="_blank"><i class="fa-solid fa-file-pen"></i> Edit Booking</a>
-                        <a class="action-btn hold-btn" target="_blank"><i class="fa-solid fa-hands-holding"></i> Hold</a>
-                        <a class="action-btn clinical-btn" target="_blank"><i class="fa-solid fa-house-chimney-medical"></i> clinical</a>
-                    </div>
+                    <button type="button" class="more-options" title="More Actions" aria-label="More Actions" aria-haspopup="true" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>
                 </td>`;
             } else {
                 const amountOrBarcodeCell = islayerone
@@ -376,14 +507,7 @@ async function allcases() {
                     <div class="enter-result">
                         <a data-page="labreport" class="view-bill"><i class="fa-solid fa-pen-to-square"></i> Enter result</a>
                     </div>
-                    <i class="fas fa-ellipsis-h more-options" title="More Actions"></i>
-                    <div class="allcases-dropdown-menu" style="display: none;">
-                        <a class="action-btn edit-booking" target="_blank"><i class="fa-solid fa-file-pen"></i> Edit Booking</a>
-                        <a class="action-btn generate-bill-btn"><i class="fa-solid fa-file-invoice"></i> Generate Bill</a>
-                        <a class="action-btn hold-btn" target="_blank"><i class="fa-solid fa-hands-holding"></i> Hold</a>
-                        <a class="action-btn clinical-btn" target="_blank"><i class="fa-solid fa-house-chimney-medical"></i> clinical</a>
-                        <a class="action-btn cancel-btn" target="_blank"><i class="fa-solid fa-rectangle-xmark"></i> Cancel</a>
-                    </div>
+                    <button type="button" class="more-options" title="More Actions" aria-label="More Actions" aria-haspopup="true" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>
                 </td>`;
             }
 
@@ -416,25 +540,14 @@ async function allcases() {
         const secondaryAction = booking.isreportready
             ? `<a data-page="reportFormat" class="case-action-btn case-action-secondary edit-report"><i class="fa-solid fa-file-lines"></i><span>View Report</span></a>`
             : "";
-        const cancelAction = booking.isreportready
-            ? ""
-            : `<a class="action-btn cancel-btn" target="_blank"><i class="fa-solid fa-rectangle-xmark"></i> Cancel</a>`;
 
         return `
             <div class="case-action-group">
                 ${primaryAction}
                 ${secondaryAction}
-                <button type="button" class="more-options" title="More Actions" aria-label="More Actions">
+                <button type="button" class="more-options" title="More Actions" aria-label="More Actions" aria-haspopup="true" aria-expanded="false">
                     <i class="fas fa-ellipsis-h"></i>
                 </button>
-                <div class="allcases-dropdown-menu" style="display: none;">
-                    <a class="action-btn generate-bill-btn"><i class="fa-solid fa-file-invoice"></i> Generate Bill</a>
-                    <button type="button" class="action-btn generate-trf-btn"><i class="fa-solid fa-receipt"></i> Generate TRF</button>
-                    <a class="action-btn edit-booking" target="_blank"><i class="fa-solid fa-file-pen"></i> Edit Booking</a>
-                    <a class="action-btn hold-btn" target="_blank"><i class="fa-solid fa-hands-holding"></i> Hold</a>
-                    <a class="action-btn clinical-btn" target="_blank"><i class="fa-solid fa-house-chimney-medical"></i> Clinical</a>
-                    ${cancelAction}
-                </div>
             </div>
         `;
     }
@@ -529,21 +642,17 @@ async function allcases() {
             const target = e.target.closest("a, button, .more-options");
             if (!target) return;
 
-            // ✅ NEW: Handle three dots dropdown toggle
-            if (target.classList.contains("more-options")) {
-                const dropdown = target.nextElementSibling;
-                if (dropdown && dropdown.classList.contains("allcases-dropdown-menu")) {
-                    // Close all other dropdowns first
-                    document.querySelectorAll(".allcases-dropdown-menu").forEach(dd => {
-                        if (dd !== dropdown) dd.style.display = "none";
-                    });
-                    // Toggle current dropdown
-                    dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
-                }
+            const row = target.closest("tr");
+            if (!row) return;
+
+            // Handle three dots dropdown toggle
+            if (target.closest(".more-options")) {
+                const triggerBtn = target.closest(".more-options");
+                const bookingData = row.getAttribute("data-booking");
+                const bookingObj = bookingData ? JSON.parse(bookingData) : null;
+                openDropdownMenu(triggerBtn, row, bookingObj);
                 return;
             }
-
-            const row = target.closest("tr");
             if (!row) return;
 
             const bookingData = row.getAttribute("data-booking");
@@ -570,123 +679,185 @@ async function allcases() {
                 openEditBookingPage(booking, row);
             }
             else if (target.classList.contains("hold-btn")) {
-                const confirmation = window.confirm("Are you want to update the status as 'Hold'");
-                if (!confirmation) return;
-
-                await updatebookingStatus(bookingId, "Hold");
-
-                if (user.tenantId.modelType !== "1layer") {
-                    showPopup(bookingId, createdBy);
-                    await fetchMessages(bookingId);
-                }
-
-                await fetchBookings(currentPage);
+                await handleHoldBooking(bookingId, createdBy);
             }
             else if (target.classList.contains("clinical-btn")) {
-                const confirmation = window.confirm("Are you want to update the status as 'clinical'");
-                if (!confirmation) return;
-
-                await updatebookingStatus(bookingId, "clinical");
-
-                if (user.tenantId.modelType !== "1layer") {
-                    showPopup(bookingId, createdBy);
-                    await fetchMessages(bookingId);
-                }
-
-                await fetchBookings(currentPage);
+                await handleClinicalBooking(bookingId, createdBy);
             }
             else if (target.classList.contains("cancel-btn")) {
-                const confirmation = window.confirm("Are you sure you want to cancel this booking?");
-                if (!confirmation) return;
-
-                const loadingMsg = document.createElement('div');
-                loadingMsg.textContent = 'Processing cancellation...';
-                loadingMsg.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;padding:10px 20px;border-radius:5px;z-index:9999';
-                document.body.appendChild(loadingMsg);
-                try {
-                    const response = await fetch(`${BASE_URL}/api/v1/user/bookings/cancel`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ bookingId })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({ message: 'Server error' }));
-                        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-                    }
-
-                    const res = await response.json();
-
-                    if (res.success || response.ok) {
-                        if (user.tenantId.modelType !== "1layer") {
-                            showPopup(bookingId, createdBy);
-                            await fetchMessages(bookingId);
-                        }
-                        alert(res.message || 'Booking cancelled successfully');
-                        await fetchBookings(currentPage);
-                    } else {
-                        throw new Error(res.message || 'Failed to cancel booking');
-                    }
-
-                } catch (error) {
-                    console.error('Cancellation error:', error.message);
-
-                    let errorMessage = 'Failed to cancel booking. ';
-
-                    if (error.message.includes('Network')) {
-                        errorMessage += 'Please check your internet connection.';
-                    } else if (error.message.includes('timeout')) {
-                        errorMessage += 'Request timed out. Please try again.';
-                    } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-                        errorMessage += 'Session expired. Please login again.';
-                    } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
-                        errorMessage += 'You do not have permission to cancel this booking.';
-                    } else if (error.message.includes('404')) {
-                        errorMessage += 'Booking not found.';
-                    } else {
-                        errorMessage += error.message || 'Please try again later.';
-                    }
-
-                    alert(errorMessage);
-                } finally {
-                    if (loadingMsg && loadingMsg.parentNode) {
-                        loadingMsg.parentNode.removeChild(loadingMsg);
-                    }
-                }
+                await handleCancelBooking(bookingId, createdBy);
             }
             else if (target.classList.contains("generate-bill-btn")) {
-                const booking = JSON.parse(row.getAttribute("data-booking"));
-                generateBillPDF(booking, target);
+                const bookingToBill = booking || (row.getAttribute("data-booking") ? JSON.parse(row.getAttribute("data-booking")) : null);
+                await generateBillPDF(bookingToBill, target);
             }
             else if (target.classList.contains("generate-trf-btn")) {
-                const bookingIdForTrf = booking?.bookingId || row.getAttribute("data-booking-id");
-                if (!bookingIdForTrf) {
-                    alert("Booking ID not found for this case.");
-                    return;
-                }
-
-                const dropdown = target.closest(".allcases-dropdown-menu");
-                if (dropdown) {
-                    dropdown.style.display = "none";
-                }
-
-                const trfUrl = `${BASE_URL}/api/v1/user/bookings/${encodeURIComponent(bookingIdForTrf)}/trf-slip`;
-                const newWindow = window.open(trfUrl, "_blank", "noopener,noreferrer");
+                handleGenerateTRF(bookingId);
             }
         });
 
-        // ✅ NEW: Close dropdowns when clicking outside
-        if (!document.body.dataset.allCasesDropdownBound) {
-            document.body.dataset.allCasesDropdownBound = "true";
-            document.addEventListener("click", (event) => {
-            if (!event.target.closest(".more-options") && !event.target.closest(".allcases-dropdown-menu")) {
-                document.querySelectorAll(".allcases-dropdown-menu").forEach((dropdown) => {
-                    dropdown.style.display = "none";
-                });
+        // Global dropdown click outside and scroll management
+        if (window._labflowCleanupDropdown) {
+            window._labflowCleanupDropdown();
+        }
+
+        const handleDocClick = (event) => {
+            const popover = document.getElementById("allcases-dropdown-popover");
+            if (!popover) return;
+            if (popover.contains(event.target) || (popover._trigger && popover._trigger.contains(event.target))) {
+                return;
             }
+            closeDropdown();
+        };
+
+        const handleKeyDown = (event) => {
+            if (event.key === "Escape") {
+                closeDropdown();
+            }
+        };
+
+        let scrollRafId = null;
+        const handleScrollOrResize = (event) => {
+            const popover = document.getElementById("allcases-dropdown-popover");
+            if (!popover) return;
+
+            if (event && event.target && (event.target === popover || popover.contains(event.target))) {
+                return;
+            }
+
+            if (scrollRafId) cancelAnimationFrame(scrollRafId);
+            scrollRafId = requestAnimationFrame(() => {
+                const current = document.getElementById("allcases-dropdown-popover");
+                if (!current || !current._trigger) return;
+
+                const triggerRect = current._trigger.getBoundingClientRect();
+                if (
+                    triggerRect.bottom < 0 ||
+                    triggerRect.top > window.innerHeight ||
+                    triggerRect.right < 0 ||
+                    triggerRect.left > window.innerWidth
+                ) {
+                    closeDropdown();
+                    return;
+                }
+
+                positionPopover(current, current._trigger, current._row);
             });
+        };
+
+        document.addEventListener("click", handleDocClick, true);
+        document.addEventListener("pointerdown", handleDocClick, true);
+        document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", handleScrollOrResize, { capture: true, passive: true });
+        window.addEventListener("resize", handleScrollOrResize, { passive: true });
+
+        window._labflowCleanupDropdown = () => {
+            document.removeEventListener("click", handleDocClick, true);
+            document.removeEventListener("pointerdown", handleDocClick, true);
+            document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", handleScrollOrResize, { capture: true });
+            window.removeEventListener("resize", handleScrollOrResize);
+            if (scrollRafId) cancelAnimationFrame(scrollRafId);
+            closeDropdown();
+        };
+    }
+
+    function handleGenerateTRF(bookingId) {
+        if (!bookingId) {
+            alert("Booking ID not found for this case.");
+            return;
+        }
+        const trfUrl = `${BASE_URL}/api/v1/user/bookings/${encodeURIComponent(bookingId)}/trf-slip`;
+        window.open(trfUrl, "_blank", "noopener,noreferrer");
+    }
+
+    async function handleHoldBooking(bookingId, createdBy) {
+        const confirmation = window.confirm("Are you want to update the status as 'Hold'");
+        if (!confirmation) return;
+
+        await updatebookingStatus(bookingId, "Hold");
+
+        if (user && user.tenantId && user.tenantId.modelType !== "1layer") {
+            showPopup(bookingId, createdBy);
+            await fetchMessages(bookingId);
+        }
+
+        await fetchBookings(currentPage);
+    }
+
+    async function handleClinicalBooking(bookingId, createdBy) {
+        const confirmation = window.confirm("Are you want to update the status as 'clinical'");
+        if (!confirmation) return;
+
+        await updatebookingStatus(bookingId, "clinical");
+
+        if (user && user.tenantId && user.tenantId.modelType !== "1layer") {
+            showPopup(bookingId, createdBy);
+            await fetchMessages(bookingId);
+        }
+
+        await fetchBookings(currentPage);
+    }
+
+    async function handleCancelBooking(bookingId, createdBy) {
+        const confirmation = window.confirm("Are you sure you want to cancel this booking?");
+        if (!confirmation) return;
+
+        const loadingMsg = document.createElement('div');
+        loadingMsg.textContent = 'Processing cancellation...';
+        loadingMsg.style.cssText = 'position:fixed;top:20px;right:20px;background:#333;color:#fff;padding:10px 20px;border-radius:5px;z-index:9999';
+        document.body.appendChild(loadingMsg);
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/bookings/cancel`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ bookingId })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Server error' }));
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+            }
+
+            const res = await response.json();
+
+            if (res.success || response.ok) {
+                if (user && user.tenantId && user.tenantId.modelType !== "1layer") {
+                    showPopup(bookingId, createdBy);
+                    await fetchMessages(bookingId);
+                }
+                alert(res.message || 'Booking cancelled successfully');
+                await fetchBookings(currentPage);
+            } else {
+                throw new Error(res.message || 'Failed to cancel booking');
+            }
+
+        } catch (error) {
+            console.error('Cancellation error:', error.message);
+
+            let errorMessage = 'Failed to cancel booking. ';
+
+            if (error.message && error.message.includes('Network')) {
+                errorMessage += 'Please check your internet connection.';
+            } else if (error.message && error.message.includes('timeout')) {
+                errorMessage += 'Request timed out. Please try again.';
+            } else if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+                errorMessage += 'Session expired. Please login again.';
+            } else if (error.message && (error.message.includes('403') || error.message.includes('Forbidden'))) {
+                errorMessage += 'You do not have permission to cancel this booking.';
+            } else if (error.message && error.message.includes('404')) {
+                errorMessage += 'Booking not found.';
+            } else {
+                errorMessage += error.message || 'Please try again later.';
+            }
+
+            alert(errorMessage);
+        } finally {
+            if (loadingMsg && loadingMsg.parentNode) {
+                loadingMsg.parentNode.removeChild(loadingMsg);
+            }
         }
     }
 
@@ -714,7 +885,7 @@ async function allcases() {
                 console.log("status not updated");
             }
         } catch (error) {
-            console.log(error)
+            console.log(error);
         }
     }
 
@@ -811,7 +982,7 @@ async function allcases() {
     }
 
     function displayMessages(messages) {
-        if (!messagesDiv) return;
+        if (!messagesDiv || !Array.isArray(messages)) return;
 
         messages.forEach(message => {
             const div = document.createElement('div');
@@ -842,7 +1013,7 @@ async function allcases() {
     }
 
     function saveBookingToLocalStorage(booking, row) {
-        const regId = row.cells[0].innerText;
+        const regId = (row && row.cells && row.cells[0]) ? row.cells[0].innerText.trim() : (booking ? (booking.bookingId || "") : "");
         localStorage.setItem("booking", JSON.stringify(booking));
         localStorage.setItem("regId", JSON.stringify(regId));
         sessionStorage.setItem("booking", JSON.stringify(booking));
@@ -942,7 +1113,7 @@ async function allcases() {
     function generateInvoiceHTML(booking) {
         // Get test names
         const testNamesArray = [...new Set(
-            booking.tableData.flatMap(obj => obj.testName.split(",").map(name => name.trim()))
+            (booking.tableData || []).flatMap(obj => (obj.testName || "").split(",").map(name => name.trim()))
         )];
 
         // Create test table rows
@@ -957,7 +1128,7 @@ async function allcases() {
             .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
         // Get lab logo if available
-        const logoImg = user.tenantId?.logo ? `<img id="bill-logo" src="${user.tenantId.logo}" style="width: 250px; height: 125px;">` : '';
+        const logoImg = user?.tenantId?.logo ? `<img id="bill-logo" src="${user.tenantId.logo}" style="width: 250px; height: 125px;">` : '';
 
         // Build HTML
         const html = `
@@ -1017,15 +1188,17 @@ async function allcases() {
     async function generateBillPDF(booking, button) {
         try {
             // Validate required fields
-            if (!booking.bookingId || !booking.total) {
+            if (!booking || !booking.bookingId || !booking.total) {
                 alert('Missing booking information. Cannot generate bill.');
                 return;
             }
 
             // Show loading state
-            const originalText = button.innerHTML;
-            button.innerHTML = '<i class="fa-solid fa-spinner"></i> Generating...';
-            button.disabled = true;
+            const originalText = button ? button.innerHTML : '';
+            if (button) {
+                button.innerHTML = '<i class="fa-solid fa-spinner"></i> Generating...';
+                button.disabled = true;
+            }
 
             // Generate invoice HTML and CSS
             const invoiceHtml = generateInvoiceHTML(booking);
@@ -1073,8 +1246,7 @@ async function allcases() {
             }
 
             // Close dropdown
-            const dropdown = button.closest(".allcases-dropdown-menu");
-            if (dropdown) dropdown.style.display = "none";
+            closeDropdown();
 
             // Show success message
             showSuccessNotification('Bill generated successfully');
@@ -1084,8 +1256,10 @@ async function allcases() {
             alert(`Error generating bill: ${error.message}`);
         } finally {
             // Restore button state
-            button.innerHTML = '<i class="fa-solid fa-file-invoice"></i> Generate Bill';
-            button.disabled = false;
+            if (button) {
+                button.innerHTML = originalText || '<i class="fa-solid fa-file-invoice"></i> Generate Bill';
+                button.disabled = false;
+            }
         }
     }
 
@@ -1107,140 +1281,6 @@ async function allcases() {
         setTimeout(() => {
             notification.remove();
         }, 3000);
-    }
-
-    function setupEventListeners() {
-        const nextBtn = document.getElementById("next");
-        const prevBtn = document.getElementById("previous");
-        const searchBtn = document.getElementById("search-btn");
-        const clearBtn = document.getElementById("clearfield");
-        const rejectBtn = document.getElementById('rejectBtn');
-
-        if (nextBtn) {
-            nextBtn.addEventListener("click", () => {
-                if (currentPage < totalPages) fetchBookings(currentPage + 1);
-            });
-        }
-
-        if (prevBtn) {
-            prevBtn.addEventListener("click", () => {
-                if (currentPage > 1) fetchBookings(currentPage - 1);
-            });
-        }
-
-        if (searchBtn) {
-            searchBtn.addEventListener("click", () => {
-                fetchBookings(1);
-            });
-        }
-
-        if (clearBtn) {
-            clearBtn.addEventListener("click", () => {
-                const regNoEl = document.getElementById("reg-no");
-                const patientNameEl = document.getElementById("patient-name");
-                const genderEl = document.getElementById("gender");
-                const patientPhoneEl = document.getElementById("patient-phone");
-                const barcodeEl = document.getElementById("barcode");
-                const labNameEl = document.getElementById("lab-name");
-                const statusEl = document.getElementById("status");
-                const franchiseeEl = document.getElementById("franchisee");
-                const startDateEl = document.getElementById("start-date");
-                const endDateEl = document.getElementById("end-date");
-
-                if (regNoEl) regNoEl.value = "";
-                if (patientNameEl) patientNameEl.value = "";
-                if (genderEl) genderEl.value = "";
-                if (patientPhoneEl) patientPhoneEl.value = "";
-                if (barcodeEl) barcodeEl.value = "";
-                if (labNameEl) labNameEl.value = "";
-                if (statusEl) statusEl.value = "";
-                if (franchiseeEl) franchiseeEl.value = "";
-                if (startDateEl) startDateEl.value = "";
-                if (endDateEl) endDateEl.value = "";
-
-                fetchBookings(1);
-            });
-        }
-
-        // Add Enter key listeners to all filter inputs
-        const filterIds = [
-            'reg-no', 'patient-name', 'franchisee', 'gender',
-            'patient-phone', 'barcode', 'lab-name', 'status',
-            'start-date', 'end-date'
-        ];
-
-        filterIds.forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        if (validateDateRange()) {
-                            fetchBookings(1);
-                        }
-                    }
-                });
-            }
-        });
-
-        if (sendMessageBtn) {
-            sendMessageBtn.addEventListener("click", async function () {
-                const Input = document.getElementById("messageInput");
-                if (!Input) return;
-
-                const messageInput = Input.value.trim();
-                const receiver = Input.getAttribute('data-created-by');
-                const bookingId = Input.getAttribute('data-booking-id');
-
-                if (!messageInput) {
-                    return alert('message field is empty');
-                }
-
-                try {
-                    const response = await fetch(`${BASE_URL}/api/v1/user/saveConversation`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            senderId: userId,
-                            receiverId: receiver,
-                            bookingId,
-                            message: messageInput
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Failed to send data to API");
-                    }
-
-                    const responseData = await response.json();
-                    alert('message sent successfully');
-                    displayMessages([{
-                        senderId: userId,
-                        message: messageInput
-                    }]);
-                    Input.value = "";
-                } catch (error) {
-                    console.error("Error sending message:", error);
-                }
-            });
-        }
-
-        if (closePopupBtn) {
-            closePopupBtn.addEventListener("click", closePopup);
-        }
-
-        if (rejectBtn) {
-            rejectBtn.addEventListener('click', async function () {
-                const messageInput = document.getElementById("messageInput");
-                if (!messageInput) return;
-
-                const bookingId = messageInput.getAttribute('data-booking-id');
-                if (bookingId) {
-                    await rejectBooking(bookingId);
-                }
-            });
-        }
     }
 
     function setupEventListeners() {

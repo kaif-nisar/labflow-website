@@ -1,3 +1,5 @@
+import "dotenv/config";
+import { UPLOAD_ROOT } from "./src/utils/localStorage.js";
 import express from "express";
 import { configDotenv } from "dotenv";
 import cookieParser from "cookie-parser";
@@ -23,7 +25,6 @@ import {
 import { initializeSchedulers } from "./src/utils/subscriptionScheduler.js";
 import { cleanupCustomizationsOnStartup } from "./src/utils/customizationCleanup.js";
 
-configDotenv();
 
 const app = express();
 const OFFICIAL_SITE_URL = "https://labflowlis.com";
@@ -458,6 +459,105 @@ app.use((error, req, res, next) => {
 import targetRouter from "./src/routes/target.routes.js";
 import copilotRouter from "./src/copilot/copilot.routes.js";
 
+// ========================
+// 🤖 AI SMART EXTRACTION API (Unstructured Text Ingestion)
+// ========================
+app.post("/api/ai/parse-lab-details", express.json(), (req, res) => {
+  try {
+    const rawText = String(req.body?.text || "").trim();
+    if (!rawText) {
+      return res.status(400).json({ success: false, message: "Text parameter is required" });
+    }
+
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const data = {};
+
+    // 1. Email
+    const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) data.email = emailMatch[0].toLowerCase();
+
+    // 2. Phone (Indian 10-digit)
+    const phoneMatch = rawText.match(/(?:(?:\+?91[\s-]?)?[0]?)?([6-9]\d{4}[\s-]?\d{5})\b/);
+    if (phoneMatch) data.phoneNo = phoneMatch[1].replace(/[\s-]/g, "");
+
+    // 3. Pincode
+    const pinMatch = rawText.match(/(?:pin(?:\s*code)?|pincode|postal\s*code)?\s*[:=-]?\s*\b([1-9][0-9]{5})\b/i);
+    if (pinMatch) data.pincode = pinMatch[1];
+
+    // 4. Device Restriction
+    const devMatch = rawText.match(/(?:device(?:s)?|allowed\s*devices?|device\s*limit)\s*[:=-]?\s*(\d+)/i)
+      || rawText.match(/(?:max|limit)\s*[:=-]?\s*(\d+)\s*device/i)
+      || rawText.match(/(\d+)\s*(?:allowed\s*)?device/i);
+    if (devMatch) {
+      const devNum = parseInt(devMatch[1], 10);
+      data.deviceRestriction = {
+        isEnabled: true,
+        maxAllowedDevices: Math.min(4, Math.max(1, devNum || 1)),
+      };
+    } else if (/single\s*device/i.test(rawText)) {
+      data.deviceRestriction = { isEnabled: true, maxAllowedDevices: 1 };
+    } else if (/no\s*(?:device\s*)?limit|unlimited\s*device|disable\s*device/i.test(rawText)) {
+      data.deviceRestriction = { isEnabled: false, maxAllowedDevices: 1 };
+    }
+
+    // 5. Validity & Duration
+    if (/(?:1\s*year|yearly|12\s*months?|365\s*days?|annual)/i.test(rawText)) {
+      data.leaseTerms = "yearly";
+      data.activeForDays = 365;
+    } else if (/(?:half\s*year|6\s*months?|quaterly|quarterly|3\s*months?|180\s*days?)/i.test(rawText)) {
+      data.leaseTerms = "quaterly";
+      data.activeForDays = /(?:6\s*months?|180\s*days?|half\s*year)/i.test(rawText) ? 180 : 90;
+    } else if (/(?:1\s*month|monthly|30\s*days?)/i.test(rawText)) {
+      data.leaseTerms = "monthly";
+      data.activeForDays = 30;
+    } else {
+      const daysMatch = rawText.match(/(?:validity|duration|active\s*for|period)\s*[:=-]?\s*(\d+)\s*days?/i);
+      if (daysMatch) data.activeForDays = parseInt(daysMatch[1], 10);
+    }
+
+    // 6. Rent / Pricing
+    const rentMatch = rawText.match(/(?:monthly\s*rent|rent|price|amount|rate)\s*[:=-]?\s*(?:₹|rs\.?|inr)?\s*(\d+(?:,\d+)*(?:\.\d+)?)/i);
+    if (rentMatch) data.rentAmount = rentMatch[1].replace(/,/g, "");
+
+    // 7. Franchise / Lab Name
+    const labLabelMatch = rawText.match(/(?:(?:lab|center|centre|franchise|clinic|hospital|diagnostic(?:\s*center)?)(?:\s*name)?)\s*[:=-]\s*([^\n\r,]+)/i);
+    if (labLabelMatch) {
+      data.franchiseName = labLabelMatch[1].trim();
+    } else {
+      const candidateLine = lines.find(l =>
+        /(?:lab\b|diagnostics?\b|pathology\b|healthcare\b|clinic\b|hospital\b)/i.test(l) &&
+        !/@/.test(l) &&
+        !/http/i.test(l) &&
+        !/(?:create\s*account|please|validity|duration|phone|email|rent|pincode|address|device)/i.test(l)
+      );
+      if (candidateLine) data.franchiseName = candidateLine.replace(/^[-\s*•]+/, "").trim();
+    }
+
+    // 8. Doctor / Full Name
+    const doctorMatch = rawText.match(/(?:(?:dr\.?|doctor|owner|contact\s*person|proprietor|full\s*name|name))\s*[:=-]\s*([^\n\r,]+)/i);
+    if (doctorMatch) {
+      data.fullName = doctorMatch[1].trim();
+    } else {
+      const drLine = lines.find(l => /^dr[\s.]+/i.test(l));
+      if (drLine) data.fullName = drLine.trim();
+    }
+
+    // 9. Username & Password
+    const userMatch = rawText.match(/(?:user(?:name)?|login\s*id)\s*[:=-]?\s*([a-zA-Z0-9_.-]+)/i);
+    if (userMatch) data.username = userMatch[1].trim();
+    const passMatch = rawText.match(/(?:pass(?:word)?)\s*[:=-]?\s*([^\s,;]+)/i);
+    if (passMatch) data.password = passMatch[1].trim();
+
+    // 10. Address
+    const addrMatch = rawText.match(/(?:address|addr|location)\s*[:=-]?\s*([^\n\r]+)/i);
+    if (addrMatch) data.address = addrMatch[1].trim();
+
+    return res.status(200).json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.use("/api/v1/copilot", copilotRouter);
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/qr-reports", qrReportRouter);
@@ -465,6 +565,24 @@ app.use("/api/v1/offline-reports", offlineReportRouter);
 app.use("/r", qrReportRouter);
 app.use("/api/v1/target", targetRouter);
 app.use("/", marketingRouter);
+
+// ========================
+// 📂 USER UPLOADS (local storage fallback when Cloudinary is disabled)
+// ========================
+// When Cloudinary is enabled, stored URLs already point to Cloudinary CDN.
+// When Cloudinary is disabled (no credentials), files are saved under
+// uploads/ locally — this route makes them reachable over HTTP.
+app.use("/uploads", express.static(UPLOAD_ROOT, {
+    index: false,
+    maxAge: process.env.NODE_ENV === "production" ? "7d" : 0,
+    etag: true,
+    setHeaders: (res, fp) => {
+        if (/\.(png|jpe?g|gif|svg|webp|avif)$/i.test(fp)) {
+            res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+        }
+    }
+}));
+
 app.use(express.static("public", {
     index: false,
     maxAge: process.env.NODE_ENV === "production" ? "7d" : 0,

@@ -491,6 +491,9 @@
     downloadpdffunction();
     sendReport();
     hidecontent();
+    initViewportZoomControls();
+    initEnterResultHandlers(report);
+    updateHeaderMeta(report);
     markPageReady();
 
     const defer = (cb) => {
@@ -1929,6 +1932,144 @@
             setButtonBusy(button, false);
         }
     });
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  VIEWPORT ZOOM — keeps the A4 canvas scaled for the screen
+    // ════════════════════════════════════════════════════════════════════════
+    function initViewportZoomControls() {
+        const scaler = document.getElementById('reportViewportScaler');
+        const wrapper = document.getElementById('reportViewportWrapper');
+        const zoomLabel = document.getElementById('zoomLevelLabel');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomFitBtn = document.getElementById('zoomFitBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+
+        if (!scaler) return;
+
+        // Ensure parent container in admin SPA also has dark viewer background
+        const contentBox = document.getElementById('content-box');
+        if (contentBox) {
+            contentBox.style.backgroundColor = '#2b2e35';
+        }
+
+        const SHEET_W = 794; // A4 at 96 DPI
+        const STEP = 0.1;
+        const MIN_SCALE = 0.3;
+        const MAX_SCALE = 2.0;
+        let currentScale = 1;
+
+        function syncScalerHeight() {
+            const canvas = document.getElementById('a4SheetCanvas');
+            if (canvas && scaler) {
+                const canvasH = canvas.offsetHeight || 1123;
+                scaler.style.height = `${Math.ceil(canvasH * currentScale)}px`;
+            }
+        }
+
+        function calcFitScale() {
+            const availW = (wrapper ? wrapper.clientWidth : window.innerWidth) - 48;
+            return Math.min(1, Math.max(MIN_SCALE, availW / SHEET_W));
+        }
+
+        function applyScale(scale) {
+            currentScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+            scaler.style.transform = `scale(${currentScale})`;
+            scaler.style.transformOrigin = 'top center';
+            syncScalerHeight();
+            if (zoomLabel) zoomLabel.textContent = `${Math.round(currentScale * 100)}%`;
+        }
+
+        function fitToScreen() {
+            applyScale(calcFitScale());
+        }
+
+        // Initial fit and height sync
+        setTimeout(() => {
+            fitToScreen();
+            syncScalerHeight();
+        }, 60);
+
+        if (zoomInBtn) zoomInBtn.addEventListener('click', () => applyScale(currentScale + STEP));
+        if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => applyScale(currentScale - STEP));
+        if (zoomFitBtn) zoomFitBtn.addEventListener('click', fitToScreen);
+        if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => applyScale(1));
+
+        // Re-fit on window resize (debounced)
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                fitToScreen();
+                syncScalerHeight();
+            }, 120);
+        });
+
+        // Also sync height when images/fonts finish loading
+        window.addEventListener('load', syncScalerHeight);
+        if (window.ResizeObserver) {
+            const canvas = document.getElementById('a4SheetCanvas');
+            if (canvas) {
+                const ro = new ResizeObserver(() => syncScalerHeight());
+                ro.observe(canvas);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  ENTER RESULT HANDLERS — mirrors allcases.js routing
+    // ════════════════════════════════════════════════════════════════════════
+    function initEnterResultHandlers(reportData) {
+        const booking = reportData || {};
+        const regId = booking.bookingId || localStorage.getItem('bookingId') || '';
+        const BASE = typeof BASE_URL !== 'undefined' ? BASE_URL : '';
+
+        function navigateToEnterResult() {
+            try {
+                const bookingPayload = JSON.stringify(booking);
+                const regIdPayload = JSON.stringify(regId);
+                localStorage.setItem('booking', bookingPayload);
+                localStorage.setItem('regId', regIdPayload);
+                sessionStorage.setItem('booking', bookingPayload);
+                sessionStorage.setItem('regId', regIdPayload);
+            } catch (e) { /* storage may be blocked */ }
+
+            if (typeof window.loadPage === 'function') {
+                window.loadPage('labreport');
+            } else {
+                window.location.href = `${BASE}/admin/admin.html?page=labreport`;
+            }
+        }
+
+        const topBtn = document.getElementById('topEnterResultBtn');
+        const bottomBtn = document.getElementById('enterResultBtn');
+        if (topBtn) topBtn.addEventListener('click', navigateToEnterResult);
+        if (bottomBtn) bottomBtn.addEventListener('click', navigateToEnterResult);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  TOP-BAR META — fills patient name/booking-id/status in the header
+    // ════════════════════════════════════════════════════════════════════════
+    function updateHeaderMeta(reportData) {
+        const badge = document.getElementById('headerPatientBadge');
+        const nameEl = document.getElementById('topbarPatientName');
+        const idEl = document.getElementById('topbarBookingId');
+        const statusEl = document.getElementById('topbarStatusBadge');
+
+        const name = reportData?.patientName || '';
+        const bid = reportData?.bookingId || '';
+
+        if (nameEl && name) nameEl.textContent = name;
+        if (idEl && bid) idEl.textContent = `#${bid}`;
+        if (badge && (name || bid)) badge.style.display = 'flex';
+
+        if (statusEl) {
+            const isSigned = !!reportData?.signedOff;
+            statusEl.textContent = isSigned ? 'Signed' : 'Unsigned';
+            statusEl.className = isSigned ? 'signed' : 'unsigned';
+            statusEl.style.display = '';
+        }
+    }
 
     function hidecontent() {
         if (user?.showprintsetting === false) {

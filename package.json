@@ -15,7 +15,7 @@
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "start": "node --max-old-space-size=1024 app.js",
+    "start": "node -r dotenv/config --max-old-space-size=1024 app.js",
     "dev": "nodemon -r dotenv/config --experimental-json-modules app.js",
     "sync": "browser-sync start --proxy localhost:3000 --files 'public/index.html, app.js, src/routes/user.routes.js' --port 3001 --reload-delay 1000",
     "prod": "node --max-old-space-size=1024 app.js",

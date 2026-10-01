@@ -98,6 +98,10 @@ const tenantSchema = new Schema(
         default: "INR",
       },
     },
+    deviceRestriction: {
+      isEnabled: { type: Boolean, default: true },
+      maxAllowedDevices: { type: Number, default: 1, min: 1, max: 4 },
+    },
     analytics: {
       totalUsers: { type: Number, default: 0 },
       totalTests: { type: Number, default: 0 },

@@ -1,5 +1,6 @@
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>All Cases</title>
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <style>
@@ -111,15 +112,18 @@
         }
 
         .container-allcases {
-            min-width: 100%;
-            overflow: auto;
-            scrollbar-width: none;
-            padding: 0 20px 20px;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 20px 40px;
             box-sizing: border-box;
+            display: block;
         }
 
         table {
             width: 100%;
+            min-width: 860px;
             border-collapse: collapse;
             background: #fff;
             border: 1px solid #dbe4ef;
@@ -214,7 +218,50 @@
         }
 
         .actions {
-            min-width: 280px;
+            min-width: 170px;
+            white-space: nowrap;
+        }
+
+        .actions .enter-result {
+            display: inline-flex;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .actions .enter-result a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .actions .enter-result a.edit-report {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+        }
+
+        .actions .enter-result a.edit-report:hover {
+            background: #bae6fd;
+            color: #0284c7;
+        }
+
+        .actions .enter-result a.view-bill {
+            background: #fef3c7;
+            color: #b45309;
+            border: 1px solid #fde68a;
+        }
+
+        .actions .enter-result a.view-bill:hover {
+            background: #fde68a;
+            color: #92400e;
         }
 
         .case-action-group {
@@ -274,17 +321,38 @@
             padding: 0;
         }
 
+        .more-options.is-active,
+        .more-options:focus-visible {
+            background: #f1f5f9;
+            color: #0f172a;
+            border-color: #94a3b8;
+            outline: none;
+        }
+
         .allcases-dropdown-menu {
-            position: absolute;
-            top: calc(100% + 8px);
-            right: 0;
-            min-width: 190px;
+            position: fixed !important;
+            min-width: 195px;
             padding: 8px;
             border: 1px solid #dbe4ef;
             border-radius: 12px;
             background: #fff;
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
-            z-index: 1000;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.22), 0 4px 12px rgba(15, 23, 42, 0.08);
+            z-index: 2147483647 !important;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+            margin: 0;
+            pointer-events: auto;
+            animation: dropdownFadeIn 0.15s ease-out;
+        }
+        .allcases-dropdown-menu.dropup {
+            transform-origin: bottom left;
+        }
+        .allcases-dropdown-menu.dropdown {
+            transform-origin: top left;
+        }
+        @keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
         .allcases-dropdown-menu .action-btn {
@@ -432,41 +500,119 @@
         }
 
         @media (max-width: 900px) {
-            .filter-section {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            h1 {
+                font-size: 24px;
+                margin: 16px 16px 10px;
             }
 
-            .actions {
-                min-width: 240px;
+            .filter-section {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                margin: 0 16px 16px;
+                padding: 14px;
+                gap: 10px;
+            }
+
+            .totalbarbook {
+                margin: 0 16px 10px;
+            }
+
+            .container-allcases {
+                padding: 0 16px 30px;
             }
         }
 
         @media (max-width: 640px) {
             h1 {
-                margin-top: 20px;
+                font-size: 21px;
+                margin: 14px 10px 8px;
             }
 
-            .filter-section,
-            .container-allcases,
-            .totalbarbook {
-                margin-left: 12px;
-                margin-right: 12px;
+            .filter-section {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                margin: 0 10px 14px;
+                padding: 12px;
+                border-radius: 12px;
             }
 
-            .container-allcases {
-                padding-left: 12px;
-                padding-right: 12px;
+            .filter-field input,
+            .filter-field select {
+                min-height: 38px;
+                padding: 8px 10px;
+                font-size: 13px;
+                width: 100%;
+                box-sizing: border-box;
             }
 
             .buttons {
                 grid-column: 1 / -1;
+                display: flex;
+                gap: 8px;
+                width: 100%;
             }
 
-            .case-action-group {
-                align-items: stretch;
+            .buttons button {
+                flex: 1;
+                min-height: 42px;
+                font-size: 13.5px;
+                padding: 0 12px;
             }
 
-            .case-action-btn {
+            .totalbarbook {
+                margin: 0 10px 10px;
+                font-size: 12.5px;
+                gap: 8px;
+                flex-direction: column;
+            }
+
+            .container-allcases {
+                padding: 0 10px 24px;
+                margin: 0;
+                width: 100%;
+                max-width: 100%;
+            }
+
+            table {
+                min-width: 820px;
+                border-radius: 12px;
+            }
+
+            table th,
+            table td {
+                padding: 9px 8px;
+                font-size: 12.5px;
+            }
+
+            .allcases-dropdown-menu {
+                min-width: 200px;
+            }
+
+            .allcases-dropdown-menu .action-btn {
+                min-height: 40px;
+                font-size: 13.5px;
+                padding: 8px 12px;
+            }
+
+            .preNext {
+                margin: 14px 0 20px;
+            }
+
+            .preNext button {
+                min-height: 38px;
+                padding: 0 16px;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .filter-section {
+                grid-template-columns: 1fr;
+            }
+
+            .buttons {
+                flex-direction: column;
+            }
+
+            .buttons button {
                 width: 100%;
             }
         }
