@@ -331,24 +331,30 @@
 
         .allcases-dropdown-menu {
             position: fixed !important;
-            min-width: 195px;
-            padding: 8px;
-            border: 1px solid #dbe4ef;
+            width: max-content;
+            min-width: 0;
+            max-width: calc(100vw - 20px);
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            border: 1px solid #cbd5e1;
             border-radius: 12px;
             background: #fff;
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.22), 0 4px 12px rgba(15, 23, 42, 0.08);
+            box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
             z-index: 2147483647 !important;
             max-height: calc(100vh - 20px);
             overflow-y: auto;
             margin: 0;
             pointer-events: auto;
-            animation: dropdownFadeIn 0.15s ease-out;
+            animation: dropdownFadeIn 0.12s ease-out;
+            box-sizing: border-box;
         }
         .allcases-dropdown-menu.dropup {
-            transform-origin: bottom left;
+            transform-origin: bottom right;
         }
         .allcases-dropdown-menu.dropdown {
-            transform-origin: top left;
+            transform-origin: top right;
         }
         @keyframes dropdownFadeIn {
             from { opacity: 0; transform: translateY(-4px); }
@@ -356,13 +362,120 @@
         }
 
         .allcases-dropdown-menu .action-btn {
+            display: flex;
+            align-items: center;
             justify-content: flex-start;
+            gap: 8px;
             width: 100%;
+            box-sizing: border-box;
+            padding: 7px 10px;
+            min-height: 32px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
             color: #334155;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            text-align: left;
+            text-decoration: none;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.12s ease, color 0.12s ease;
+        }
+
+        .allcases-dropdown-menu .action-btn i {
+            width: 16px;
+            text-align: center;
+            font-size: 13px;
+            flex-shrink: 0;
+            color: #64748b;
+        }
+
+        .allcases-dropdown-menu .action-btn span {
+            white-space: nowrap;
         }
 
         .allcases-dropdown-menu .action-btn:hover {
-            background: #f8fafc;
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .allcases-dropdown-menu .action-btn:hover i {
+            color: #334155;
+        }
+
+        /* PDF Actions Highlight */
+        .allcases-dropdown-menu .action-btn.generate-bill-btn {
+            background: #f0fdf4;
+            color: #166534;
+            font-weight: 600;
+        }
+
+        .allcases-dropdown-menu .action-btn.generate-bill-btn i {
+            color: #16a34a;
+        }
+
+        .allcases-dropdown-menu .action-btn.generate-bill-btn:hover {
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .allcases-dropdown-menu .action-btn.generate-trf-btn {
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 600;
+        }
+
+        .allcases-dropdown-menu .action-btn.generate-trf-btn i {
+            color: #2563eb;
+        }
+
+        .allcases-dropdown-menu .action-btn.generate-trf-btn:hover {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .allcases-dropdown-menu .pdf-badge {
+            margin-left: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 4px;
+            letter-spacing: 0.4px;
+            line-height: 1.2;
+            display: inline-block;
+        }
+
+        .allcases-dropdown-menu .generate-bill-btn .pdf-badge {
+            background: #bbf7d0;
+            color: #14532d;
+            border: 1px solid #86efac;
+        }
+
+        .allcases-dropdown-menu .generate-trf-btn .pdf-badge {
+            background: #bfdbfe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        .allcases-dropdown-menu .dropdown-divider {
+            height: 1px;
+            margin: 4px 2px;
+            background: #e2e8f0;
+        }
+
+        .allcases-dropdown-menu .action-btn.cancel-btn {
+            color: #dc2626;
+        }
+
+        .allcases-dropdown-menu .action-btn.cancel-btn i {
+            color: #ef4444;
+        }
+
+        .allcases-dropdown-menu .action-btn.cancel-btn:hover {
+            background: #fef2f2;
+            color: #b91c1c;
         }
 
         .table-state-row td {
@@ -584,13 +697,14 @@
             }
 
             .allcases-dropdown-menu {
-                min-width: 200px;
+                width: max-content;
+                min-width: 0;
             }
 
             .allcases-dropdown-menu .action-btn {
-                min-height: 40px;
-                font-size: 13.5px;
-                padding: 8px 12px;
+                min-height: 34px;
+                font-size: 13px;
+                padding: 6px 10px;
             }
 
             .preNext {

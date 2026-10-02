@@ -288,8 +288,8 @@ async function allcases() {
         if (!popover || !triggerBtn) return;
 
         const triggerRect = triggerBtn.getBoundingClientRect();
-        const menuWidth = popover.offsetWidth || 195;
-        const menuHeight = popover.offsetHeight || 230;
+        const menuWidth = popover.offsetWidth;
+        const menuHeight = popover.offsetHeight;
         const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
 
@@ -312,7 +312,7 @@ async function allcases() {
         let maxHeight = Math.min(380, viewportHeight - 20);
 
         if (openUpwards) {
-            top = triggerRect.top - menuHeight - 6;
+            top = triggerRect.top - menuHeight - 4;
             if (top < 10) {
                 top = 10;
                 maxHeight = Math.max(120, triggerRect.top - 16);
@@ -320,7 +320,7 @@ async function allcases() {
             popover.classList.add("dropup");
             popover.classList.remove("dropdown");
         } else {
-            top = triggerRect.bottom + 6;
+            top = triggerRect.bottom + 4;
             if (top + menuHeight > viewportHeight - 10) {
                 maxHeight = Math.max(120, viewportHeight - top - 10);
             }
@@ -328,16 +328,22 @@ async function allcases() {
             popover.classList.remove("dropup");
         }
 
-        let left = triggerRect.left;
-        if (left + menuWidth > viewportWidth - 12) {
-            left = triggerRect.right - menuWidth;
+        // Align the popup right next to the three-dots button (right-aligned to trigger button)
+        let left = triggerRect.right - menuWidth;
+
+        // If aligning right overflows left viewport, align to trigger's left edge
+        if (left < 10) {
+            left = triggerRect.left;
         }
-        if (left < 10) left = 10;
+
+        // Ensure popover always stays fully visible inside viewport
         if (left + menuWidth > viewportWidth - 10) {
             left = Math.max(10, viewportWidth - menuWidth - 10);
         }
+        if (left < 10) {
+            left = 10;
+        }
 
-        popover.style.maxWidth = `${Math.min(menuWidth, viewportWidth - 20)}px`;
         popover.style.maxHeight = `${Math.round(maxHeight)}px`;
         popover.style.top = `${Math.round(top)}px`;
         popover.style.left = `${Math.round(left)}px`;
@@ -362,7 +368,7 @@ async function allcases() {
 
         const cancelAction = isReportReady
             ? ""
-            : `<a class="action-btn cancel-btn" data-action="cancel" target="_blank"><i class="fa-solid fa-rectangle-xmark"></i> Cancel</a>`;
+            : `<button type="button" class="action-btn cancel-btn" data-action="cancel"><i class="fa-solid fa-rectangle-xmark"></i><span>Cancel</span></button>`;
 
         const popover = document.createElement("div");
         popover.id = "allcases-dropdown-popover";
@@ -372,11 +378,29 @@ async function allcases() {
         popover.dataset.bookingId = bookingId;
 
         popover.innerHTML = `
-            <a class="action-btn generate-bill-btn" data-action="generate-bill"><i class="fa-solid fa-file-invoice"></i> Generate Bill</a>
-            <button type="button" class="action-btn generate-trf-btn" data-action="generate-trf"><i class="fa-solid fa-receipt"></i> Generate TRF</button>
-            <a class="action-btn edit-booking" data-action="edit-booking" target="_blank"><i class="fa-solid fa-file-pen"></i> Edit Booking</a>
-            <a class="action-btn hold-btn" data-action="hold" target="_blank"><i class="fa-solid fa-hands-holding"></i> Hold</a>
-            <a class="action-btn clinical-btn" data-action="clinical" target="_blank"><i class="fa-solid fa-house-chimney-medical"></i> Clinical</a>
+            <button type="button" class="action-btn generate-bill-btn is-pdf-action" data-action="generate-bill">
+                <i class="fa-solid fa-file-invoice"></i>
+                <span>Generate Bill</span>
+                <span class="pdf-badge">PDF</span>
+            </button>
+            <button type="button" class="action-btn generate-trf-btn is-pdf-action" data-action="generate-trf">
+                <i class="fa-solid fa-receipt"></i>
+                <span>Generate TRF</span>
+                <span class="pdf-badge">PDF</span>
+            </button>
+            <div class="dropdown-divider"></div>
+            <button type="button" class="action-btn edit-booking" data-action="edit-booking">
+                <i class="fa-solid fa-file-pen"></i>
+                <span>Edit Booking</span>
+            </button>
+            <button type="button" class="action-btn hold-btn" data-action="hold">
+                <i class="fa-solid fa-hands-holding"></i>
+                <span>Hold</span>
+            </button>
+            <button type="button" class="action-btn clinical-btn" data-action="clinical">
+                <i class="fa-solid fa-house-chimney-medical"></i>
+                <span>Clinical</span>
+            </button>
             ${cancelAction}
         `;
 
@@ -406,112 +430,6 @@ async function allcases() {
             } else if (action === "cancel") {
                 await handleCancelBooking(bookingId, createdBy);
             }
-        });
-    }
-
-    function displayBookings(bookings) {
-        const tableBody = document.getElementById("tbody");
-        tableBody.innerHTML = "";
-
-        if (!bookings.length) {
-            tableBody.innerHTML = `<tr><td colspan="7">No bookings found for selected filters.</td></tr>`;
-            return;
-        }
-
-        bookings.forEach((booking) => {
-            if (booking.status === "cancelled" || booking.status === "On Hold") {
-                return;
-            }
-
-            const row = document.createElement("tr");
-
-            // Unique test names
-            const testNamesArray = [...new Set(
-                booking.tableData.flatMap(obj => obj.testName.split(",").map(name => name.trim()))
-            )];
-            const uniqueTestNames = testNamesArray.join(", ");
-
-            // Set custom attributes
-            row.setAttribute("data-test-names", uniqueTestNames);
-            row.setAttribute("age", booking.year);
-            row.setAttribute("gender", booking.gender);
-            row.setAttribute("data-booking-id", booking.bookingId);
-            row.setAttribute("data-patient-phone", booking.patientPhone);
-            row.setAttribute("data-lab-name", booking.labName);
-            row.setAttribute("data-updated-at", booking.updatedAt);
-            row.setAttribute("data-created-by", booking.createdBy);
-            row.setAttribute("data-booking", JSON.stringify(booking));
-
-            // Status-based background color
-            let baseColor = booking.status === 'completed'
-                ? 'rgba(0, 128, 0, 0.342)'
-                : booking.status === 'pending'
-                    ? 'rgba(141, 92, 2, 0.333)'
-                    : booking.status === 'Hold'
-                        ? 'rgba(120, 32, 0, 0.356)'
-                        : 'rgba(0, 143, 143, 0.333)';
-
-            // Add LIS gradient if data is present
-            if (booking.isLisPresent) {
-                row.style.background = `linear-gradient(to right, rgba(138, 43, 226, 0.4) 0%, rgba(138, 43, 226, 0.15) 8px, ${baseColor} 8px)`;
-            } else {
-                row.style.backgroundColor = baseColor;
-            }
-
-            // Create barcode HTML with LIS indicators
-            let barcodeHtml = '';
-            if (booking.barcodeDetails && booking.barcodeDetails.length > 0) {
-                barcodeHtml = booking.barcodeDetails.map(detail => {
-                    const icon = detail.isLisPresent 
-                        ? '<i class="fa-solid fa-circle-check" style="color: #28a745; margin-right: 3px;"></i>' 
-                        : '<i class="fa-solid fa-circle-xmark" style="color: #dc3545; margin-right: 3px;"></i>';
-                    
-                    return `<span style="display: inline-flex; align-items: center; margin: 2px 4px 2px 0; white-space: nowrap;" title="${detail.isLisPresent ? 'LIS data available' : 'LIS data not available'}">${icon}${detail.barcode}</span>`;
-                }).join('');
-            } else {
-                barcodeHtml = Array.isArray(booking.acceptedbarcode) ? booking.acceptedbarcode.join(" ") : "";
-            }
-
-            // HTML for row - ✅ REMOVED onclick from three dots icon
-            if (booking.isreportready) {
-                const amountOrBarcodeCell = islayerone
-                    ? `<td style="text-align: right; font-weight: 500;">₹ ${(booking.total || 0).toFixed(2)}</td>`
-                    : `<td style="white-space: normal;">${barcodeHtml}</td>`;
-
-                row.innerHTML = `
-                <td class="reg-no">${booking.bookingId}</td>
-                <td>${formatBookingDateTime(booking.date, booking.time)}</td>
-                <td>${booking.patientName}</td>
-                <td>${islayerone ? (booking.doctorName || "") : (booking.createdbyuser || "")}</td>
-                ${amountOrBarcodeCell}
-                <td><button class="status-btn">${booking.status}</button></td>
-                <td class="actions">
-                    <div class="enter-result">
-                        <a data-page="reportFormat" class="edit-report"><i class="fa-solid fa-pen-to-square"></i> View report</a>
-                    </div>
-                    <button type="button" class="more-options" title="More Actions" aria-label="More Actions" aria-haspopup="true" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>
-                </td>`;
-            } else {
-                const amountOrBarcodeCell = islayerone
-                    ? `<td style="text-align: right; font-weight: 500;">₹ ${(booking.total || 0).toFixed(2)}</td>`
-                    : `<td style="white-space: normal;">${barcodeHtml}</td>`;
-
-                row.innerHTML = `
-                <td class="reg-no">${booking.bookingId}</td>
-                <td>${formatBookingDateTime(booking.date, booking.time)}</td>
-                <td>${booking.patientName}</td>
-                <td>${islayerone ? (booking.doctorName || "") : (booking.createdbyuser || "")}</td>
-                ${amountOrBarcodeCell}
-                <td><button class="status-btn">${booking.status}</button></td>
-                <td class="actions">
-                    <div class="enter-result">
-                        <a data-page="labreport" class="view-bill"><i class="fa-solid fa-pen-to-square"></i> Enter result</a>
-                    </div>
-                    <button type="button" class="more-options" title="More Actions" aria-label="More Actions" aria-haspopup="true" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>
-                </td>`;
-            }
-
-            tableBody.appendChild(row);
         });
     }
 

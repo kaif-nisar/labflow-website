@@ -156,9 +156,6 @@
 
     // ─── 2. PARALLEL INITIAL FETCHES ─────────────────────────────────────────
     const report = await fetchreport();
-    if (!report || !report._id) {
-        throw new Error('Report data could not be loaded for this booking.');
-    }
     const bookingTestMetaPromise = fetchBookingTestMeta(report?.bookingId);
 
     value1 = report._id;
@@ -491,9 +488,6 @@
     downloadpdffunction();
     sendReport();
     hidecontent();
-    initViewportZoomControls();
-    initEnterResultHandlers(report);
-    updateHeaderMeta(report);
     markPageReady();
 
     const defer = (cb) => {
@@ -1205,21 +1199,9 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ value1 })
             }, { silent: isBootPhase });
-            if (!response.ok) {
-                let message = "something went wrong";
-                try {
-                    const payload = await response.json();
-                    message = payload?.message || payload?.error || message;
-                } catch {
-                    // Ignore parse errors and use the fallback message.
-                }
-                throw new Error(message);
-            }
+            if (!response.ok) throw new Error("something went wrong");
             return await response.json();
-        } catch (error) {
-            console.log(error);
-            throw error;
-        }
+        } catch (error) { console.log(error); }
     }
 
     async function fetchBookingTestMeta(bookingId) {
@@ -1304,7 +1286,10 @@
     }
 
     async function populateHeader() {
-        document.getElementById("booking-registeration-number").innerText = report.reg_id;
+        const bookingRegElem = document.getElementById("booking-registeration-number");
+        if (bookingRegElem) {
+            bookingRegElem.innerText = report.reg_id;
+        }
 
         const patientdetails = document.createElement("div");
         patientdetails.classList.add("report-details-innerDiv2");
@@ -1485,8 +1470,6 @@
             const section = document.createElement("div");
             section.className = "section";
             if (data.categorizedPDF && index > 0) section.classList.add("page-break");
-            const categoryName = String(categoryData?.category || "").trim();
-            const categoryTitle = String(categoryData?.title || "").trim();
 
             const headings = document.createElement("div");
             headings.classList.add("headings");
@@ -1497,20 +1480,20 @@
 
             const categoryHeading = document.createElement("h3");
             categoryHeading.classList.add("category-heading");
-            categoryHeading.textContent = categoryName;
+            categoryHeading.textContent = categoryData.category;
             categoryHeading.appendChild(deleteH2Button);
             headings.appendChild(categoryHeading);
 
             let titleHeading = null;
-            if (categoryName !== categoryTitle) {
+            if (categoryData.category !== categoryData.title) {
                 const deleteH3Button = document.createElement("span");
                 deleteH3Button.innerHTML = `<i class="fa-sharp fa-solid fa-xmark" title="Delete Panel"></i>`;
                 deleteH3Button.className = "delete-btn";
 
-                if (!categoryTitle.includes('Unknown Title')) {
+                if (!categoryData.title.includes('Unknown Title')) {
                     titleHeading = document.createElement("h4");
                     titleHeading.classList.add("table-heading");
-                    titleHeading.textContent = categoryTitle;
+                    titleHeading.textContent = categoryData.title;
                     titleHeading.appendChild(deleteH3Button);
                     headings.appendChild(titleHeading);
                 }
@@ -1580,13 +1563,10 @@
                     } else {
                         const testNameMeta = getTestNameCellMeta(test.testName);
                         const testNameCell = testNameMeta.cell;
-                        const isMultiParameterHeading = Boolean(test.isMultiParameterHeading)
-                            || (
-                                hasRenderableText(test.testName)
-                                && !hasRenderableText(test.value)
-                                && !hasRenderableText(test.unit)
-                                && !hasRenderableText(test.reference)
-                            );
+                        const isMultiParameterHeading = hasRenderableText(test.testName)
+                            && !hasRenderableText(test.value)
+                            && !hasRenderableText(test.unit)
+                            && !hasRenderableText(test.reference);
                         const isParameterRow = testNameMeta.isParameterRow;
 
                         if (isMultiParameterHeading) {
@@ -1909,14 +1889,410 @@
         setButtonBusy(button, true, 'Opening...');
         setActionFeedback('Print preview open ho raha hai...', 'info', { autoHideMs: 0 });
         try {
-            const printArea  = document.getElementById('container').innerHTML;
-            const cssContent = document.getElementById('stying').innerHTML;
+            const containerNode = document.getElementById('container');
+            const signoffNode   = document.querySelector('.signed-off-div');
+            const cssContent    = document.getElementById('stying')?.innerHTML || '';
+
+            const printHtml = `
+                <div class="print-wrapper">
+                    ${containerNode ? containerNode.outerHTML : ''}
+                    ${signoffNode ? signoffNode.outerHTML : ''}
+                </div>
+            `;
+
+            const printStyles = `
+                ${cssContent}
+
+                @page {
+                    size: A4 portrait;
+                    margin: 8mm 10mm 8mm 10mm;
+                }
+
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    box-sizing: border-box !important;
+                }
+
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: #ffffff !important;
+                    color: #000000 !important;
+                    width: 100% !important;
+                }
+
+                .print-wrapper {
+                    width: 100% !important;
+                    margin: 0 auto !important;
+                }
+
+                .container-format1 {
+                    width: 100% !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                }
+
+                .container22 {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                }
+
+                /* Hide UI controls, legacy markers, and hidden fields */
+                .download-pdf-div,
+                .downloadDiv,
+                .wrong,
+                .delete-btn,
+                .deletion,
+                .popup-modal,
+                #modal,
+                #loadingOverlay,
+                .action-feedback-message,
+                .page-boot-loader,
+                .container22 > .header,
+                .container22 > .container2 + br,
+                .container22 > h3,
+                .forhide {
+                    display: none !important;
+                }
+
+                /* Patient Demographics Box */
+                .report-details {
+                    width: 100% !important;
+                    margin: 0 0 10px 0 !important;
+                }
+
+                .report-details-innerDiv2 {
+                    position: relative !important;
+                    width: 100% !important;
+                    border: 1px solid #000 !important;
+                    padding: 4px 6px !important;
+                    min-height: 80px !important;
+                    box-sizing: border-box !important;
+                }
+
+                .format1left2 {
+                    width: 44% !important;
+                    display: inline-flex !important;
+                    flex-direction: column !important;
+                    justify-content: space-around !important;
+                    padding-left: 4px !important;
+                }
+
+                .format1-infor-div {
+                    display: flex !important;
+                    align-items: baseline !important;
+                    gap: 6px !important;
+                    font-size: 11.5px !important;
+                    line-height: 1.4 !important;
+                    color: #111 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    white-space: nowrap !important;
+                }
+
+                .format1-tags {
+                    min-width: 82px !important;
+                    width: 82px !important;
+                    font-weight: 500 !important;
+                    color: #333 !important;
+                }
+
+                .format1-infor-div .value {
+                    white-space: nowrap !important;
+                    overflow: visible !important;
+                }
+
+                #investDiv.format1-infor-div {
+                    white-space: normal !important;
+                    align-items: flex-start !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    box-sizing: border-box !important;
+                }
+
+                #investDiv .format1-tags {
+                    flex-shrink: 0 !important;
+                    min-width: 82px !important;
+                    width: 82px !important;
+                }
+
+                #investDiv .value {
+                    white-space: normal !important;
+                    word-break: break-word !important;
+                    overflow-wrap: break-word !important;
+                    flex: 1 !important;
+                    min-width: 0 !important;
+                    font-size: 10.5px !important;
+                    line-height: 1.25 !important;
+                }
+
+                #investDiv #investigationarray {
+                    white-space: normal !important;
+                    word-break: break-word !important;
+                    overflow-wrap: break-word !important;
+                }
+
+                /* Middle column: both divider frame and content share exact same position (left: 62.5%, width: 36%) */
+                .format1-rightcover {
+                    position: absolute !important;
+                    top: 0 !important;
+                    bottom: 0 !important;
+                    height: 100% !important;
+                    left: 62.5% !important;
+                    width: 36% !important;
+                    transform: translateX(-50%) !important;
+                    border-left: 1px solid #000 !important;
+                    border-right: 1px solid #000 !important;
+                    border-top: none !important;
+                    border-bottom: none !important;
+                    margin: 0 !important;
+                    box-sizing: border-box !important;
+                    pointer-events: none !important;
+                }
+
+                .format1-rightcover span {
+                    position: absolute !important;
+                    left: 52% !important;
+                    top: 10px !important;
+                    font-size: 11.5px !important;
+                    font-weight: 600 !important;
+                    color: #000 !important;
+                    letter-spacing: 0.3px !important;
+                }
+
+                .format1-right2 {
+                    position: absolute !important;
+                    left: 62.5% !important;
+                    transform: translateX(-50%) !important;
+                    top: 0 !important;
+                    bottom: 0 !important;
+                    height: 100% !important;
+                    width: 36% !important;
+                    padding: 4px 12px !important; /* 12px breathing room so text never touches vertical lines */
+                    box-sizing: border-box !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    justify-content: space-around !important;
+                }
+
+                #barcodeImage {
+                    height: 25px !important;
+                    width: 80px !important;
+                    margin: 0 !important;
+                    vertical-align: middle !important;
+                }
+
+                .format1-registered-div2 {
+                    font-size: 10.5px !important;
+                    line-height: 1.35 !important;
+                    width: 100% !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: space-between !important;
+                    color: #222 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                }
+
+                .format1-registeration-tag2 {
+                    width: 80px !important;
+                    min-width: 80px !important;
+                    font-weight: 500 !important;
+                    color: #333 !important;
+                }
+
+                .format1-time-div {
+                    width: auto !important;
+                    flex: 1 !important;
+                    display: flex !important;
+                    justify-content: space-between !important;
+                    font-size: 10.5px !important;
+                    padding-left: 6px !important;
+                }
+
+                .click.qr-div {
+                    position: absolute !important;
+                    right: 14px !important;
+                    top: 50% !important;
+                    transform: translateY(-50%) !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: center !important;
+                }
+
+                #qrimg {
+                    width: 58px !important;
+                    height: 58px !important;
+                }
+
+                .branding strong { font-size: 7px !important; }
+                .branding span { font-size: 7px !important; }
+
+
+                /* Headings */
+                .headings {
+                    margin: 14px 0 8px 0 !important;
+                    text-align: center !important;
+                }
+
+                .category-heading {
+                    font-size: 15px !important;
+                    font-weight: 800 !important;
+                    color: #000 !important;
+                    text-align: center !important;
+                    margin: 0 !important;
+                    letter-spacing: 0.5px !important;
+                    text-transform: uppercase !important;
+                }
+
+                .table-heading {
+                    font-size: 13.5px !important;
+                    font-weight: 700 !important;
+                    color: #222 !important;
+                    text-align: center !important;
+                    margin: 2px 0 6px 0 !important;
+                    text-transform: uppercase !important;
+                }
+
+                /* Tables — fix column widths so Reference/Unit NEVER squish */
+                .container2 {
+                    width: 100% !important;
+                    margin: 0 !important;
+                }
+
+                table.test-table {
+                    width: 100% !important;
+                    table-layout: fixed !important;
+                    border-collapse: collapse !important;
+                    margin-bottom: 8px !important;
+                }
+
+                table.test-table thead {
+                    background-color: #888888 !important;
+                }
+
+                table.test-table thead th {
+                    color: #ffffff !important;
+                    font-size: 13px !important;
+                    font-weight: 700 !important;
+                    padding: 4px 6px !important;
+                    border: none !important;
+                    white-space: nowrap !important;
+                }
+
+                table.test-table th.deletion,
+                table.test-table td.wrong {
+                    display: none !important;
+                    width: 0 !important;
+                }
+
+                table.test-table th:nth-child(2),
+                table.test-table td.test-name {
+                    width: 40% !important;
+                    text-align: left !important;
+                    word-break: break-word !important;
+                }
+
+                table.test-table th:nth-child(3),
+                table.test-table th.valuecell {
+                    width: 20% !important;
+                    text-align: left !important;
+                    padding-left: 48px !important;
+                    white-space: nowrap !important;
+                }
+
+                table.test-table td.high-low {
+                    width: 20% !important;
+                    text-align: left !important;
+                    padding-left: 0 !important;
+                    white-space: nowrap !important;
+                    font-weight: 700 !important;
+                }
+
+                table.test-table td.high-low .HL,
+                table.test-table td.high-low div {
+                    width: 48px !important;
+                    display: inline-block !important;
+                    text-align: center !important;
+                }
+
+                table.test-table td.high-low .result-value {
+                    display: inline-block !important;
+                }
+
+                table.test-table th:nth-child(4),
+                table.test-table td:nth-child(4) {
+                    width: 18% !important;
+                    text-align: left !important;
+                    white-space: nowrap !important;
+                }
+
+                table.test-table th:nth-child(5),
+                table.test-table td:nth-child(5) {
+                    width: 22% !important;
+                    text-align: left !important;
+                    white-space: nowrap !important;
+                }
+
+                table.test-table tbody {
+                    border-bottom: 1.5px solid #222 !important;
+                }
+
+                table.test-table tbody tr {
+                    border-bottom: none !important;
+                    page-break-inside: avoid !important;
+                }
+
+                table.test-table td {
+                    font-size: 12px !important;
+                    padding: 2.5px 6px !important;
+                    line-height: 1.35 !important;
+                    color: #111 !important;
+                }
+
+                /* Interpretation Section */
+                .interpretation {
+                    padding: 10px 0 !important;
+                }
+
+                .documented-content table {
+                    border: 1px solid #000 !important;
+                    border-collapse: collapse !important;
+                    width: 100% !important;
+                }
+
+                .documented-content table th,
+                .documented-content table td {
+                    border: 1px solid #000 !important;
+                    padding: 4px 8px !important;
+                }
+
+                /* Doctor Signatures */
+                .signed-off-div {
+                    width: 100% !important;
+                    margin-top: 24px !important;
+                    margin-bottom: 12px !important;
+                    display: block !important;
+                }
+
+                .signed-off-div2 {
+                    display: flex !important;
+                    justify-content: space-between !important;
+                    align-items: flex-end !important;
+                    width: 100% !important;
+                }
+            `;
+
             const printWindow = window.open('', '_blank');
             if (!printWindow) throw new Error('Popup blocked');
             printWindow.document.open();
-            printWindow.document.write(`<html><head><title>Print Report</title>
-                <style>${cssContent} body{font-family:Arial,sans-serif;margin:20px;}</style></head>
-                <body onload="window.print();window.close();">${printArea}</body></html>`);
+            printWindow.document.write(`<!DOCTYPE html><html><head><title>Print Report</title>
+                <style>${printStyles}</style></head>
+                <body onload="setTimeout(function(){ window.print(); window.close(); }, 350);">${printHtml}</body></html>`);
             printWindow.document.close();
             const trackedPrintAction = await trackSuccessfulAction('printDialog');
             setActionFeedback(
@@ -1933,149 +2309,11 @@
         }
     });
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  VIEWPORT ZOOM — keeps the A4 canvas scaled for the screen
-    // ════════════════════════════════════════════════════════════════════════
-    function initViewportZoomControls() {
-        const scaler = document.getElementById('reportViewportScaler');
-        const wrapper = document.getElementById('reportViewportWrapper');
-        const zoomLabel = document.getElementById('zoomLevelLabel');
-        const zoomInBtn = document.getElementById('zoomInBtn');
-        const zoomOutBtn = document.getElementById('zoomOutBtn');
-        const zoomFitBtn = document.getElementById('zoomFitBtn');
-        const zoomResetBtn = document.getElementById('zoomResetBtn');
-
-        if (!scaler) return;
-
-        // Ensure parent container in admin SPA also has dark viewer background
-        const contentBox = document.getElementById('content-box');
-        if (contentBox) {
-            contentBox.style.backgroundColor = '#2b2e35';
-        }
-
-        const SHEET_W = 794; // A4 at 96 DPI
-        const STEP = 0.1;
-        const MIN_SCALE = 0.3;
-        const MAX_SCALE = 2.0;
-        let currentScale = 1;
-
-        function syncScalerHeight() {
-            const canvas = document.getElementById('a4SheetCanvas');
-            if (canvas && scaler) {
-                const canvasH = canvas.offsetHeight || 1123;
-                scaler.style.height = `${Math.ceil(canvasH * currentScale)}px`;
-            }
-        }
-
-        function calcFitScale() {
-            const availW = (wrapper ? wrapper.clientWidth : window.innerWidth) - 48;
-            return Math.min(1, Math.max(MIN_SCALE, availW / SHEET_W));
-        }
-
-        function applyScale(scale) {
-            currentScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
-            scaler.style.transform = `scale(${currentScale})`;
-            scaler.style.transformOrigin = 'top center';
-            syncScalerHeight();
-            if (zoomLabel) zoomLabel.textContent = `${Math.round(currentScale * 100)}%`;
-        }
-
-        function fitToScreen() {
-            applyScale(calcFitScale());
-        }
-
-        // Initial fit and height sync
-        setTimeout(() => {
-            fitToScreen();
-            syncScalerHeight();
-        }, 60);
-
-        if (zoomInBtn) zoomInBtn.addEventListener('click', () => applyScale(currentScale + STEP));
-        if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => applyScale(currentScale - STEP));
-        if (zoomFitBtn) zoomFitBtn.addEventListener('click', fitToScreen);
-        if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => applyScale(1));
-
-        // Re-fit on window resize (debounced)
-        let resizeTimer;
-        window.addEventListener('resize', () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => {
-                fitToScreen();
-                syncScalerHeight();
-            }, 120);
-        });
-
-        // Also sync height when images/fonts finish loading
-        window.addEventListener('load', syncScalerHeight);
-        if (window.ResizeObserver) {
-            const canvas = document.getElementById('a4SheetCanvas');
-            if (canvas) {
-                const ro = new ResizeObserver(() => syncScalerHeight());
-                ro.observe(canvas);
-            }
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  ENTER RESULT HANDLERS — mirrors allcases.js routing
-    // ════════════════════════════════════════════════════════════════════════
-    function initEnterResultHandlers(reportData) {
-        const booking = reportData || {};
-        const regId = booking.bookingId || localStorage.getItem('bookingId') || '';
-        const BASE = typeof BASE_URL !== 'undefined' ? BASE_URL : '';
-
-        function navigateToEnterResult() {
-            try {
-                const bookingPayload = JSON.stringify(booking);
-                const regIdPayload = JSON.stringify(regId);
-                localStorage.setItem('booking', bookingPayload);
-                localStorage.setItem('regId', regIdPayload);
-                sessionStorage.setItem('booking', bookingPayload);
-                sessionStorage.setItem('regId', regIdPayload);
-            } catch (e) { /* storage may be blocked */ }
-
-            if (typeof window.loadPage === 'function') {
-                window.loadPage('labreport');
-            } else {
-                window.location.href = `${BASE}/admin/admin.html?page=labreport`;
-            }
-        }
-
-        const topBtn = document.getElementById('topEnterResultBtn');
-        const bottomBtn = document.getElementById('enterResultBtn');
-        if (topBtn) topBtn.addEventListener('click', navigateToEnterResult);
-        if (bottomBtn) bottomBtn.addEventListener('click', navigateToEnterResult);
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  TOP-BAR META — fills patient name/booking-id/status in the header
-    // ════════════════════════════════════════════════════════════════════════
-    function updateHeaderMeta(reportData) {
-        const badge = document.getElementById('headerPatientBadge');
-        const nameEl = document.getElementById('topbarPatientName');
-        const idEl = document.getElementById('topbarBookingId');
-        const statusEl = document.getElementById('topbarStatusBadge');
-
-        const name = reportData?.patientName || '';
-        const bid = reportData?.bookingId || '';
-
-        if (nameEl && name) nameEl.textContent = name;
-        if (idEl && bid) idEl.textContent = `#${bid}`;
-        if (badge && (name || bid)) badge.style.display = 'flex';
-
-        if (statusEl) {
-            const isSigned = !!reportData?.signedOff;
-            statusEl.textContent = isSigned ? 'Signed' : 'Unsigned';
-            statusEl.className = isSigned ? 'signed' : 'unsigned';
-            statusEl.style.display = '';
-        }
-    }
-
     function hidecontent() {
-        if (user?.showprintsetting === false) {
+        if (user.showprintsetting === false) {
             document.getElementById('printsettingbutton').style.display = "none";
         }
-        if (user?.tenantId?.modelType === "1layer") {
+        if (user.tenantId.modelType === "1layer") {
             const style = document.getElementById("stying");
             style.textContent += `
             .format1-rightcover{height:75px;}
