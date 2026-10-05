@@ -527,12 +527,10 @@
 
             if (refs.bookingDate && !isEditMode) {
                 refs.bookingDate.value = formatDateForInput(now);
-                refs.bookingDate.setAttribute('readonly', true);
             }
 
             if (refs.bookingTime && !isEditMode) {
                 refs.bookingTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                refs.bookingTime.setAttribute('readonly', true);
             }
         }
 
@@ -1464,10 +1462,31 @@
             }
         }
 
+        function setCatalogLoadingState(isLoading) {
+            if (!refs.availableList) return;
+            if (isLoading) {
+                refs.availableList.innerHTML = `
+                    <div class="catalog-loading-buffer">
+                        <div class="catalog-buffer-spinner"></div>
+                        <span>Loading tests, panels &amp; packages...</span>
+                    </div>
+                `;
+                if (refs.groupList && state.supportsAdvancedBookingApi !== false) {
+                    refs.groupList.innerHTML = `
+                        <div class="catalog-loading-buffer">
+                            <div class="catalog-buffer-spinner"></div>
+                            <span>Loading quick groups...</span>
+                        </div>
+                    `;
+                }
+            }
+        }
+
         async function loadCatalog({ preserveSelection = true } = {}) {
             syncIdentityState();
             state.selectedDoctorId = getSelectedDoctorId() || state.selfDoctorId;
             updateDoctorField();
+            setCatalogLoadingState(true);
 
             if (getBookingCatalogApiMode() === 'legacy') {
                 const legacyData = await loadLegacyBookingCatalog();
@@ -2510,6 +2529,75 @@
                     showMessage(error.message || 'Quick group save nahi ho paya.', 'error');
                 }
             });
+
+            setupEnterKeyNavigation();
+        }
+
+        function setupEnterKeyNavigation() {
+            if (state.enterKeyNavBound) return;
+            state.enterKeyNavBound = true;
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+
+                const target = event.target;
+                if (!target) return;
+
+                const tagName = target.tagName ? target.tagName.toUpperCase() : '';
+                if (tagName !== 'INPUT' && tagName !== 'SELECT' && tagName !== 'TEXTAREA') {
+                    return;
+                }
+
+                if (tagName === 'TEXTAREA' && event.shiftKey) {
+                    return;
+                }
+
+                if (target.id === 'selectTestDivforSearch') {
+                    const rawQuery = String(target.value || '').trim();
+                    if (rawQuery.length > 0 && parseQuickCodeInput(rawQuery).length > 0) {
+                        return;
+                    }
+                }
+
+                const activeModal = target.closest('.modal.active, .modal2-overlay[style*="flex"], .modal2-overlay.active');
+                const root = activeModal || document.querySelector('.container') || document.body;
+
+                const selector = [
+                    'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([disabled]):not([readonly])',
+                    'select:not([disabled]):not([readonly])',
+                    'textarea:not([disabled]):not([readonly])',
+                    '#submit-btn:not([disabled])',
+                ].join(', ');
+
+                const focusable = Array.from(root.querySelectorAll(selector)).filter((el) => {
+                    return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+                });
+
+                const index = focusable.indexOf(target);
+                if (index === -1) return;
+
+                event.preventDefault();
+
+                if (event.shiftKey) {
+                    const prev = focusable[index - 1];
+                    if (prev) {
+                        prev.focus();
+                        if (typeof prev.select === 'function' && prev.type !== 'date' && prev.type !== 'time') {
+                            prev.select();
+                        }
+                    }
+                } else {
+                    const next = focusable[index + 1];
+                    if (next) {
+                        next.focus();
+                        if (typeof next.select === 'function' && next.type !== 'date' && next.type !== 'time') {
+                            next.select();
+                        }
+                    } else if (refs.submitBtn && !refs.submitBtn.disabled) {
+                        refs.submitBtn.focus();
+                    }
+                }
+            });
         }
 
         function bindEditModeEvents() {
@@ -2585,7 +2673,7 @@
 
         try {
             hideMessage();
-            setLoading(true);
+            setLoading(false);
             bindCoreEvents();
             bindNewModeEvents();
             bindEditModeEvents();

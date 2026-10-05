@@ -132,6 +132,9 @@ const pannelSchema = new Schema(
 );
 
 pannelSchema.index({ name: 1, tenantId: 1 }, { unique: true });
+pannelSchema.index({ tenantId: 1, name: 1 });
+pannelSchema.index({ tenantId: 1, "assignedPrices.userId": 1, name: 1 });
+pannelSchema.index({ tenantId: 1, bookingCode: 1 });
 
 const addPannel = mongoose.model("pannel", pannelSchema);
 

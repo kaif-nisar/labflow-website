@@ -58,9 +58,31 @@ const getNextBookingCodeForScope = async (scope) => {
 
 const ensureBookingCodesForScope = async (scope) => {
   const scopeQuery = buildBookingCodeScopeQuery(scope);
+
+  const missingChecks = await Promise.all(
+    BOOKING_CODE_MODEL_CONFIGS.map(({ model }) =>
+      model
+        .findOne({
+          ...scopeQuery,
+          $or: [
+            { bookingCode: { $exists: false } },
+            { bookingCode: null },
+          ],
+        })
+        .select("_id")
+        .lean()
+    )
+  );
+
+  if (!missingChecks.some(Boolean)) {
+    return;
+  }
+
   let nextBookingCode = await getMaxBookingCodeForScope(scopeQuery);
 
-  for (const { model } of BOOKING_CODE_MODEL_CONFIGS) {
+  for (let i = 0; i < BOOKING_CODE_MODEL_CONFIGS.length; i++) {
+    if (!missingChecks[i]) continue;
+    const { model } = BOOKING_CODE_MODEL_CONFIGS[i];
     const missingDocs = await model
       .find({
         ...scopeQuery,

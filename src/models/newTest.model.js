@@ -159,6 +159,9 @@ const TestSchema = new Schema(
 );
 
 TestSchema.index({ Name: 1, tenantId: 1 }, { unique: true });
+TestSchema.index({ tenantId: 1, Name: 1 });
+TestSchema.index({ tenantId: 1, "assignedPrices.userId": 1, Name: 1 });
+TestSchema.index({ tenantId: 1, bookingCode: 1 });
 
 // Create the model
 const testSchema =

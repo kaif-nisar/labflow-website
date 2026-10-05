@@ -128,6 +128,9 @@ const packageSchema = new Schema(
   { timestamps: true }
 );
 
+packageSchema.index({ tenantId: 1, packageName: 1 });
+packageSchema.index({ tenantId: 1, bookingCode: 1 });
+
 const Package = mongoose.model("Package", packageSchema);
 
 export { Package };

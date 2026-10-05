@@ -334,9 +334,56 @@ const fetchCatalogDocuments = async ({ req, bookingUserId, itemIdsByType = null 
   };
 
   const [tests, panels, packages] = await Promise.all([
-    testSchema.find(buildQuery("test")).sort({ Name: 1 }),
-    addPannel.find(buildQuery("panel")).sort({ name: 1 }),
-    Package.find(buildQuery("package")).sort({ packageName: 1 }),
+    testSchema.aggregate([
+      { $match: buildQuery("test") },
+      { $sort: { Name: 1 } },
+      {
+        $project: {
+          _id: 1,
+          Name: 1,
+          Short_name: 1,
+          bookingCode: 1,
+          order: 1,
+          sampleType: 1,
+          Price: 1,
+          final_price: 1,
+          assignedPrices: 1,
+        },
+      },
+    ]),
+    addPannel.aggregate([
+      { $match: buildQuery("panel") },
+      { $sort: { name: 1 } },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          bookingCode: 1,
+          order: 1,
+          sample_types: 1,
+          price: 1,
+          final_price: 1,
+          assignedPrices: 1,
+        },
+      },
+    ]),
+    Package.aggregate([
+      { $match: buildQuery("package") },
+      { $sort: { packageName: 1 } },
+      {
+        $project: {
+          _id: 1,
+          packageName: 1,
+          bookingCode: 1,
+          order: 1,
+          testSample: 1,
+          pannelSample: 1,
+          packageFee: 1,
+          final_price: 1,
+          assignedPrices: 1,
+        },
+      },
+    ]),
   ]);
 
   return {
@@ -547,9 +594,9 @@ const fetchCatalogItemsForSelection = async ({ req, bookingUserId, normalizedIte
 
   const tenantId = getTenantIdFromReq(req);
   const [tests, panels, packages] = await Promise.all([
-    testSchema.find({ tenantId, _id: { $in: objectIds } }),
-    addPannel.find({ tenantId, _id: { $in: objectIds } }),
-    Package.find({ tenantId, _id: { $in: objectIds } }),
+    testSchema.find({ tenantId, _id: { $in: objectIds } }).select("Name Short_name bookingCode order sampleType Price final_price assignedPrices").lean(),
+    addPannel.find({ tenantId, _id: { $in: objectIds } }).select("name bookingCode order sample_types price final_price assignedPrices").lean(),
+    Package.find({ tenantId, _id: { $in: objectIds } }).select("packageName bookingCode order testSample pannelSample packageFee final_price assignedPrices").lean(),
   ]);
 
   return {

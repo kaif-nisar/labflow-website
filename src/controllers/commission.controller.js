@@ -418,7 +418,8 @@ const getAssignedTests = async (req, res) => {
 
       // Get all tests
       const allTests = await testSchema.find({ tenantId: req.user.tenantId })
-      // .select("Name Price final_price assignedPrices sampleType Short");
+        .select("Name Price final_price assignedPrices sampleType Short_name createdAt")
+        .lean();
 
       // Map all tests with either assigned price to the franchisee or default price
       const result = allTests.map((test) => {
@@ -462,7 +463,8 @@ const getAssignedTests = async (req, res) => {
             },
           ],
         })
-      // .select("Name Price final_price assignedPrices sampleType");
+        .select("Name Short_name Price final_price assignedPrices sampleType createdAt")
+        .lean();
 
       // Map the tests with appropriate prices
       const result = tests.map((test) => {
@@ -528,7 +530,8 @@ const getAssignedPanels = async (req, res) => {
       // Get all tests
       const panels = await addPannel
         .find({ tenantId: req.user.tenantId })
-        .select("name price final_price assignedPrices sample_types createdAt");
+        .select("name price final_price assignedPrices sample_types createdAt")
+        .lean();
       // Map all tests with either assigned price to the franchisee or default price
       const result = panels.map((panel) => {
         // Check if the panel has an assigned price for the specified franchisee (oldId)
@@ -571,7 +574,8 @@ const getAssignedPanels = async (req, res) => {
             },
           ],
         })
-        .select("name tests price final_price assignedPrices sample_types createdAt");
+        .select("name tests price final_price assignedPrices sample_types createdAt")
+        .lean();
     }
 
     // Filter assignedPrices for the specific franchisee and include necessary fields
@@ -635,7 +639,8 @@ const getAssignedPackages = async (req, res) => {
       // Get all tests
       const packages = await Package
         .find({ tenantId: req.user.tenantId })
-        .select("packageName packageFee final_price assignedPrices testSample pannelSample createdAt");
+        .select("packageName packageFee final_price assignedPrices testSample pannelSample createdAt")
+        .lean();
       // Map all tests with either assigned price to the franchisee or default price
       const result = packages.map((packageList) => {
         // Check if the panel has an assigned price for the specified franchisee (oldId)
@@ -676,7 +681,7 @@ const getAssignedPackages = async (req, res) => {
         ],
       }).select(
         "packageName testname pannelname packageFee final_price assignedPrices testSample pannelSample createdAt"
-      );
+      ).lean();
     }
     // Filter assignedPrices for the specific franchisee and include necessary fields
     const result = packages.map((packageList) => {
