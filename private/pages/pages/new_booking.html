@@ -5,76 +5,242 @@
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/offline-fonts.css">
 <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
+            background-color: #f8fafc;
+            color: #1e293b;
+            -webkit-font-smoothing: antialiased;
         }
 
         .container {
-            border-radius: 0.5rem;
-            /* padding: 2rem 3rem; */
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 20px;
+            box-sizing: border-box;
         }
 
-        .header {
-            font-size: 24px;
-            font-weight: 500;
-            margin-bottom: 10px;
+        h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 6px 0;
+        }
+
+        .breadcrumb {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .breadcrumb a {
+            color: #475569;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .breadcrumb a:hover {
+            color: #2563eb;
+            text-decoration: underline;
         }
 
         .count-booking {
-            height: 2rem;
-            width: 2rem;
-            background-color: black;
+            height: 1.75rem;
+            width: 1.75rem;
+            background-color: #334155;
             border-radius: 50%;
             color: white;
             display: flex;
             justify-content: center;
             align-items: center;
-            margin-right: 1rem;
-            font-size: 0.6rem;
+            margin-right: 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 600;
         }
 
-        .breadcrumb {
-            font-size: 14px;
-            color: var(--base);
-            margin-bottom: 20px;
-            background-color: var(--header);
-            display: flex;
-            gap: 5px;
-        }
-
-        .breadcrumb a {
-            color: var(--base);
-            text-decoration: none;
-        }
-
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-
+        /* Standardized Box Card System with Consistent 16px Spacing */
         .section {
-            margin-bottom: 16px;
+            margin: 0 0 16px 0;
             width: 100%;
+            border-radius: 10px;
+            padding: 16px 18px;
+            box-sizing: border-box;
+            border: 1px solid #e2e8f0;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
         }
 
-        .section-header {
+        .section:hover {
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.07);
+        }
+
+        .box-card-header {
             display: flex;
             align-items: center;
-            font-size: 15px;
+            gap: 8px;
+            font-size: 12.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+
+        .box-card-header i {
+            font-size: 13.5px;
+        }
+
+        /* 1. Meta / Last Booking Card */
+        .last-booking-section {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .last-booking-section .section-header {
+            display: flex;
+            align-items: center;
+            font-size: 14.5px;
             font-weight: 600;
             margin-bottom: 8px;
             color: #334155;
         }
 
-        .last-booking-section {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 12px 16px;
-            box-sizing: border-box;
+        /* 2. Schedule Card (Ultra-light Peach Tint) */
+        .booking-box-schedule {
+            background-color: #fffaf5;
+            border: 1px solid #fed7aa;
+        }
+        .booking-box-schedule .box-card-header {
+            color: #c2410c;
         }
 
+        /* 3. Patient Details Card - Classic Soft Peach */
+        .booking-box-patient {
+            background-color: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-left: 4px solid #f97316;
+        }
+        .booking-box-patient .box-card-header {
+            color: #ea580c;
+        }
+
+        /* 4. Doctor & Referral Card - Warm Almond / Champagne Pastel */
+        .booking-box-referral {
+            background-color: #fcf9f2;
+            border: 1px solid #f3e8d2;
+            border-left: 4px solid #d97706;
+        }
+        .booking-box-referral .box-card-header {
+            color: #b45309;
+        }
+
+        /* 5. Franchisee Card - Soft Warm Stone */
+        .booking-box-franchisee {
+            background-color: #fafaf9;
+            border: 1px solid #e7e5e4;
+        }
+        .booking-box-franchisee .box-card-header {
+            color: #57534e;
+        }
+
+        /* 6. Discount Card - Soft Pastel Honey */
+        .booking-box-discount {
+            background-color: #fffef5;
+            border: 1px solid #fef08a;
+            border-left: 4px solid #eab308;
+        }
+        .booking-box-discount .box-card-header {
+            color: #a16207;
+        }
+
+        /* 7. Quick Test Groups Card */
+        .booking-box-groups {
+            background-color: #fbfbfd;
+            border: 1px solid #e2e8f0;
+        }
+        .booking-box-groups .box-card-header {
+            color: #2563eb;
+        }
+
+        /* 8. Billing & Wallet Summary Card - Light Warm Peach */
+        .booking-box-billing {
+            background-color: #fff9f0;
+            border: 1px solid #fed7aa;
+            border-left: 4px solid #f97316;
+        }
+        .booking-box-billing .box-card-header {
+            color: #c2410c;
+        }
+
+        /* Container new booking normalization */
+        .container-new-booking {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Billing summary badges inside billing box */
+        .billing-summary-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .billing-badge {
+            flex: 1 1 240px;
+            background: #ffffff;
+            border: 1px solid #fed7aa;
+            border-radius: 8px;
+            padding: 10px 16px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .billing-badge-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #9a3412;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .header {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        .header span {
+            color: #0f172a;
+        }
+
+        .header2 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #166534;
+        }
+
+        .header2 span {
+            color: #15803d;
+        }
+
+        /* Section content grid */
         .section-content {
             display: flex;
             flex-wrap: wrap;
@@ -82,7 +248,7 @@
             width: 100%;
         }
 
-        .section-content>div {
+        .section-content > div {
             flex: 1 1 200px;
             margin: 0;
             min-width: 0;
@@ -102,8 +268,8 @@
         }
 
         .input-group:focus-within {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+            border-color: #f97316;
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
         }
 
         .input-group input,
@@ -115,7 +281,7 @@
             border: none;
             outline: none;
             background: transparent;
-            font-size: 0.95rem;
+            font-size: 0.92rem;
             color: #1e293b;
             box-sizing: border-box;
         }
@@ -126,7 +292,7 @@
 
         .input-group i {
             margin-right: 8px;
-            color: #64748b;
+            color: #94a3b8;
             font-size: 0.95rem;
             flex-shrink: 0;
         }
@@ -166,50 +332,49 @@
         .file-input {
             display: flex;
             align-items: center;
-            border: 1px solid #ccc;
-            border-radius: 0.25rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background-color: #ffffff;
+            height: 42px;
+            box-sizing: border-box;
         }
 
         .file-input input[type="file"] {
             margin: 0px 10px;
         }
 
-        .container-new-booking {
-            width: 100%;
-            margin: 20px auto;
-            /* padding: 20px; */
-            border-radius: 5px;
-        }
-
-        .header {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-
-        .total-bill {
-            font-size: 20px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .total-bill span {
-            color: #000;
-        }
-
+        /* Dual Section: Test Selection & Barcodes */
         .content {
             display: flex;
             justify-content: space-between;
             gap: 16px;
+            margin-bottom: 16px;
+            width: 100%;
         }
 
         .select-test-div {
             flex: 1 1 55%;
-            padding: 0px;
-            margin: 0px;
+            padding: 16px 18px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: #fffbf7;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            box-sizing: border-box;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+
+        .select-test-div .box-card-header {
+            color: #c2410c;
+        }
+
+        .test-selection-inner {
             display: flex;
             gap: 8px;
             align-items: stretch;
+            width: 100%;
         }
 
         .search-section {
@@ -221,6 +386,17 @@
             flex: 1 1 45%;
             min-width: 0;
             overflow-x: auto;
+            padding: 16px 18px;
+            margin: 0;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            box-sizing: border-box;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+
+        .details-section .box-card-header {
+            color: #334155;
         }
 
         .search-section input,
@@ -234,74 +410,55 @@
             box-sizing: border-box;
             outline: none;
             font-size: 0.9rem;
+            background-color: #ffffff;
             transition: border-color 0.15s, box-shadow 0.15s;
         }
 
         .search-section input:focus,
         .details-section input:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+            border-color: #f97316;
+            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
         }
 
         #booking-table {
-            min-width: 100%;
-            width: auto;
+            width: 100%;
             border-collapse: collapse;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
         }
 
         .details-section th,
         .details-section td {
-            min-width: 20%;
-            padding: 10px;
+            min-width: 50px;
+            padding: 10px 12px;
             text-align: left;
-            border: 1px solid #ddd;
+            border: 1px solid #e2e8f0;
             white-space: nowrap;
+            font-size: 0.88rem;
         }
 
         .details-section th {
-            background-color: #ffff99;
+            background-color: #f8fafc;
+            color: #334155;
+            font-weight: 600;
         }
 
         .details-section td {
-            background-color: #fff;
+            background-color: #ffffff;
+            color: #1e293b;
         }
 
         .details-section .no-sample {
             text-align: center;
-            color: #999;
+            color: #94a3b8;
         }
 
-        .submit-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: fit-content;
-            min-width: 160px;
-            margin: 2.5rem auto 1.5rem;
-            padding: 12px 28px;
-            background-color: #2563eb;
-            color: #fff;
-            text-align: center;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
-            transition: background-color 0.15s, transform 0.1s;
-        }
-
-        .submit-btn:hover {
-            background-color: #1d4ed8;
-        }
-
-        .submit-btn:active {
-            transform: translateY(1px);
-        }
-
-        .submit-btn i {
-            margin-right: 5px;
+        .details-section span {
+            display: none;
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 6px;
         }
 
         .right-left2 {
@@ -315,286 +472,6 @@
         .right-left2 i {
             font-size: 1.4rem;
             color: #94a3b8;
-        }
-
-        #tests-name-option {
-            margin-top: 0.25rem;
-        }
-
-        #booking-table {
-            width: 100%;
-            border-collapse: collapse;
-            border-radius: 6px;
-            overflow: hidden;
-            border: 1px solid #e2e8f0;
-        }
-
-        td,
-        th {
-            min-width: 50px;
-            border: 1px solid #e2e8f0;
-            padding: 9px 12px;
-            text-align: left;
-            word-wrap: normal;
-            font-size: 0.88rem;
-        }
-
-        #booking-table th {
-            background-color: #f8fafc;
-            color: #334155;
-            font-weight: 600;
-        }
-
-        #successMessage {
-            display: none;
-            width: 100%;
-            margin: 1rem 0 0.75rem;
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem;
-            font-size: 0.95rem;
-            font-weight: 500;
-            border: 1px solid transparent;
-            box-sizing: border-box;
-        }
-
-        #successMessage.booking-message--success {
-            background-color: #e8f7ef;
-            color: #0f5132;
-            border-color: #badbcc;
-        }
-
-        #successMessage.booking-message--error {
-            background-color: #fcebea;
-            color: #842029;
-            border-color: #f5c2c7;
-        }
-
-        /* adding doctor css  */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            justify-content: center;
-            align-items: flex-start;
-            transition: opacity 0.3s ease;
-            z-index: 1000000;
-            overflow-y: auto;
-        }
-
-        .modal.active {
-            display: flex;
-            opacity: 1;
-        }
-
-        .modal-content {
-            background-color: white;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            width: 600px;
-            padding: 20px;
-            margin-top: -100%;
-            transition: margin-top 0.5s ease;
-            position: relative;
-        }
-
-        .modal.active .modal-content {
-            margin: 50px;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e9ecef;
-            padding-bottom: 10px;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 24px;
-        }
-
-        .modal-header .close {
-            font-size: 24px;
-            cursor: pointer;
-        }
-
-        .modal-body {
-            padding: 20px 0;
-        }
-
-        .form-group {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            flex: 1;
-            font-size: 16px;
-        }
-
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            flex: 2;
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-        }
-
-        .form-group i {
-            margin-right: 10px;
-            font-size: 20px;
-            color: #6c757d;
-        }
-
-        .form-group input[type="date"] {
-            padding: 5px;
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            border-top: 1px solid #e9ecef;
-            padding-top: 10px;
-        }
-
-        .modal-footer button {
-            padding: 10px 20px;
-            font-size: 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .modal-footer .btn-close {
-            background-color: #e9ecef;
-            color: #000;
-            margin-right: 10px;
-        }
-
-        .modal-footer .btn-add {
-            background-color: #17a2b8;
-            color: white;
-        }
-
-        /* adding lab css  */
-        .modal2-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        input[type=date],
-        input[type=time],
-        #random-id {
-            background-color: transparent;
-        }
-
-        .modal2 {
-            background-color: white;
-            width: 600px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .modal2-header,
-        .modal2-footer {
-            padding: 15px;
-            border-bottom: 1px solid #e5e5e5;
-        }
-
-        .modal2-header {
-            border-bottom: none;
-        }
-
-        .modal2-title {
-            font-size: 20px;
-            margin: 0;
-        }
-
-        .modal2-body {
-            padding: 15px;
-        }
-
-        .form-group {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            flex: 0 0 100px;
-            font-weight: bold;
-        }
-
-        .form-group input,
-        .form-group textarea {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #e5e5e5;
-            border-radius: 4px;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #007bff;
-        }
-
-        .form-group .input-icon {
-            position: relative;
-        }
-
-        .form-group .input-icon input {
-            padding-left: 30px;
-        }
-
-        .form-group .input-icon .fa {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #6c757d;
-        }
-
-        .modal2-footer {
-            display: flex;
-            justify-content: flex-end;
-            border-top: none;
-        }
-
-        .modal2-footer button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        .modal2-footer .btn-close {
-            background-color: #e5e5e5;
-            color: #333;
-            margin-right: 10px;
-        }
-
-        .modal2-footer .btn-add {
-            background-color: #00aaff;
-            color: white;
         }
 
         #test-selection,
@@ -628,7 +505,60 @@
             background-color: #f1f5f9;
         }
 
-        /* Loading buffer styles for test, panel, package box */
+        .submit-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: fit-content;
+            min-width: 180px;
+            margin: 24px auto 16px;
+            padding: 12px 32px;
+            background-color: #2563eb;
+            color: #fff;
+            text-align: center;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+            transition: background-color 0.15s, transform 0.1s;
+        }
+
+        .submit-btn:hover {
+            background-color: #1d4ed8;
+        }
+
+        .submit-btn:active {
+            transform: translateY(1px);
+        }
+
+        #successMessage {
+            display: none;
+            width: 100%;
+            margin: 16px 0 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border: 1px solid transparent;
+            box-sizing: border-box;
+        }
+
+        #successMessage.booking-message--success {
+            background-color: #e8f7ef;
+            color: #0f5132;
+            border-color: #badbcc;
+        }
+
+        #successMessage.booking-message--error {
+            background-color: #fcebea;
+            color: #842029;
+            border-color: #f5c2c7;
+        }
+
+        /* Catalog loading buffer */
         .catalog-loading-buffer {
             display: flex;
             flex-direction: column;
@@ -660,156 +590,187 @@
             100% { transform: rotate(360deg); }
         }
 
-        @media(max-width: 900px) {
-            .content {
-                flex-direction: column;
-            }
-
-            .select-test-div {
-                width: 100%;
-            }
-
-            .details-section {
-                width: 100%;
-                margin-top: 15px;
-            }
-        }
-
-        @media(max-width: 768px) {
-            .modal2 {
-                width: 92%;
-                margin: 20px auto;
-            }
-
-            .modal-content {
-                width: 92%;
-                margin: 20px auto;
-            }
-
-            .container {
-                width: 100%;
-                padding: 10px;
-                box-sizing: border-box;
-                background-color: white;
-            }
-
-            .section {
-                width: 100%;
-                margin-bottom: 12px;
-            }
-
-            .section-content {
-                width: 100%;
-                gap: 10px;
-            }
-
-            .section-content>div {
-                flex: 1 1 100%;
-                margin-right: 0;
-            }
-
-            .input-group {
-                width: 100%;
-            }
-
-            .search-section {
-                width: 100%;
-            }
-
-            .select-test-div {
-                display: flex;
-                flex-direction: column;
-                width: 100%;
-                gap: 8px;
-            }
-
-            .right-left2 {
-                height: 2.5rem;
-                width: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transform: rotate(90deg);
-            }
-
-            .right-left2 i {
-                font-size: 1.5rem;
-            }
-
-            .content {
-                width: 100%;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .container-new-booking {
-                width: 100%;
-                margin: 0 auto;
-                padding: 0;
-            }
-
-            .details-section {
-                width: 100%;
-                margin-top: 15px;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            #booking-table {
-                width: 100%;
-                min-width: 500px;
-                border-collapse: collapse;
-            }
-
-            .submit-btn {
-                width: 100%;
-                max-width: 280px;
-                margin: 2rem auto;
-            }
-        }
-
-        @media(max-width: 500px) {
-            .section-header {
-                flex-wrap: wrap;
-                gap: 6px;
-            }
-
-            h2 {
-                font-size: 1.5rem;
-            }
-
-            #test-selection,
-            #test-selected,
-            #group-selection {
-                height: 200px;
-            }
-        }
-
-        .details-section span {
+        /* Doctor modal styles */
+        .modal {
             display: none;
-            color: red;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: flex-start;
+            transition: opacity 0.3s ease;
+            z-index: 1000000;
+            overflow-y: auto;
         }
 
-        .discountsection {
+        .modal.active {
             display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            width: 600px;
+            padding: 20px;
+            margin-top: -100%;
+            transition: margin-top 0.5s ease;
+            position: relative;
+        }
+
+        .modal.active .modal-content {
+            margin: 50px auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 10px;
         }
 
-        .discountsection .input-group {
+        .modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .modal-header .close {
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 20px 0;
+        }
+
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
             flex: 1;
-            min-width: 180px;
+            font-size: 15px;
         }
 
-        h2 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #1e293b;
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            flex: 2;
+            padding: 9px 12px;
+            font-size: 14px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
         }
-        
-        /* Added styles for better UX */
+
+        .form-group i {
+            margin-right: 10px;
+            font-size: 18px;
+            color: #6c757d;
+        }
+
+        .form-group input[type="date"] {
+            padding: 6px 12px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid #e9ecef;
+            padding-top: 12px;
+        }
+
+        .modal-footer button {
+            padding: 8px 18px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .modal-footer .btn-close {
+            background-color: #e9ecef;
+            color: #000;
+            margin-right: 10px;
+        }
+
+        .modal-footer .btn-add {
+            background-color: #2563eb;
+            color: white;
+        }
+
+        /* Lab modal styles */
+        .modal2-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal2 {
+            background-color: white;
+            width: 600px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+
+        .modal2-header,
+        .modal2-footer {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .modal2-header {
+            border-bottom: none;
+        }
+
+        .modal2-title {
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .modal2-body {
+            padding: 15px 20px;
+        }
+
+        .modal2-footer {
+            display: flex;
+            justify-content: flex-end;
+            border-top: none;
+        }
+
+        .modal2-footer button {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .modal2-footer .btn-close {
+            background-color: #e5e5e5;
+            color: #333;
+            margin-right: 10px;
+        }
+
+        .modal2-footer .btn-add {
+            background-color: #2563eb;
+            color: white;
+        }
+
         .tests-name-option.selected {
             display: none !important;
         }
@@ -822,6 +783,101 @@
         
         .realSelectedTests:hover {
             background-color: #f0f0f0;
+        }
+
+        /* Responsive Media Queries */
+        @media(max-width: 900px) {
+            .content {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .select-test-div,
+            .details-section {
+                width: 100%;
+                flex: 1 1 100%;
+            }
+        }
+
+        @media(max-width: 768px) {
+            .container {
+                padding: 12px 14px;
+            }
+
+            .section {
+                margin-bottom: 14px;
+                padding: 14px;
+            }
+
+            .section-content {
+                gap: 10px;
+            }
+
+            .section-content > div {
+                flex: 1 1 100%;
+            }
+
+            .input-group {
+                width: 100%;
+            }
+
+            .select-test-div {
+                padding: 14px;
+            }
+
+            .test-selection-inner {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .right-left2 {
+                height: 2.2rem;
+                width: 100%;
+                transform: rotate(90deg);
+            }
+
+            .details-section {
+                padding: 14px;
+                margin-top: 0;
+            }
+
+            #booking-table {
+                min-width: 450px;
+            }
+
+            .submit-btn {
+                width: 100%;
+                max-width: 300px;
+                margin: 20px auto 14px;
+            }
+
+            .modal,
+            .modal2 {
+                width: 92%;
+                margin: 20px auto;
+            }
+
+            .modal-content {
+                width: 92%;
+                margin: 20px auto;
+            }
+        }
+
+        @media(max-width: 500px) {
+            .section-header {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            h2 {
+                font-size: 1.4rem;
+            }
+
+            #test-selection,
+            #test-selected,
+            #group-selection {
+                height: 200px;
+            }
         }
     </style>
 </head>
@@ -844,7 +900,11 @@
                     </strong></div>
             </div>
         </div>
-        <div class="section">
+        <div class="section booking-box-schedule">
+            <div class="box-card-header">
+                <i class="fas fa-calendar-check"></i>
+                <span>Booking ID &amp; Schedule</span>
+            </div>
             <div class="section-content">
                 <div class="input-group">
                     <i class="fas fa-barcode"></i>
@@ -866,7 +926,11 @@
                 </div>
             </div>
         </div>
-        <div class="section">
+        <div class="section booking-box-patient">
+            <div class="box-card-header">
+                <i class="fas fa-user-circle"></i>
+                <span>Patient Information</span>
+            </div>
             <div class="section-content">
                 <div class="input-group">
                     <i class="fas fa-user"></i>
@@ -893,7 +957,11 @@
                 </div>
             </div>
         </div>
-        <div class="section">
+        <div class="section booking-box-referral">
+            <div class="box-card-header">
+                <i class="fas fa-user-md"></i>
+                <span>Doctor &amp; Referral Details</span>
+            </div>
             <div class="section-content">
                 <div class="input-group">
                     <select id="doctor-selection">
@@ -915,7 +983,11 @@
                 </div>
             </div>
         </div>
-        <div class="section">
+        <div class="section booking-box-franchisee forhide">
+            <div class="box-card-header">
+                <i class="fas fa-clinic-medical"></i>
+                <span>Franchisee &amp; Clinical Details</span>
+            </div>
             <div class="section-content forhide">
                 <div class="input-group">
                     <select id="franchisee-select">
@@ -930,7 +1002,11 @@
                 </div>
             </div>
         </div>
-        <div class="section discountsection">
+        <div class="section booking-box-discount">
+            <div class="box-card-header">
+                <i class="fas fa-tags"></i>
+                <span>Discount &amp; Concession</span>
+            </div>
             <div class="section-content">
                 <div class="input-group">
                     <i class="fas fa-tags"></i>
@@ -943,11 +1019,13 @@
             </div>
         </div>
 
-        <!-- second scroll  -->
-        <hr>
         <div class="container-new-booking">
-            <div class="section" style="margin-top: 18px;">
-                <div class="section-content" style="align-items: center; gap: 12px;">
+            <div class="section booking-box-groups">
+                <div class="box-card-header">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Quick Test Groups</span>
+                </div>
+                <div class="section-content" style="align-items: center; gap: 12px; margin-bottom: 10px;">
                     <div class="input-group" style="max-width: 320px;">
                         <input type="text" placeholder="Search quick groups" id="groupSearchInput">
                     </div>
@@ -965,38 +1043,55 @@
                     </div>
                 </div>
             </div>
-            <div style="background: #f8f9fa; border-radius: 8px; padding: 12px 16px; margin-top: 12px;">
-                <label for="header" style="font-weight: 600; color: #333;">Wallet debit Amount :-</label>
-                <div class="header" id="header">
-                    Total Amount : Rs. <span id="total">0</span>
+            <div class="section booking-box-billing">
+                <div class="box-card-header">
+                    <i class="fas fa-wallet"></i>
+                    <span>Billing &amp; Wallet Summary</span>
                 </div>
-                <div class="discountsection">
-                    <label for="header" style="font-weight: 600; color: #333;">Receive Amount from patient :-</label>
-                    <div class="header header2" id="header2">
-                        Discounted Amount : Rs. <span id="total2">0</span>
+                <div class="billing-summary-grid">
+                    <div class="billing-badge">
+                        <label for="header" class="billing-badge-label">Wallet Debit Amount</label>
+                        <div class="header" id="header">
+                            Total Amount : Rs. <span id="total">0</span>
+                        </div>
+                    </div>
+                    <div class="billing-badge">
+                        <label for="header2" class="billing-badge-label">Receive Amount from Patient</label>
+                        <div class="header header2" id="header2">
+                            Discounted Amount : Rs. <span id="total2">0</span>
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="content">
                 <div class="select-test-div">
-                    <div class="search-section">
-                        <input type="text" placeholder="Type to Search" id="selectTestDivforSearch" autocomplete="off">
-                        <div id="test-selection">
-                            <div class="catalog-loading-buffer">
-                                <div class="catalog-buffer-spinner"></div>
-                                <span>Loading tests, panels &amp; packages...</span>
+                    <div class="box-card-header">
+                        <i class="fas fa-vial"></i>
+                        <span>Search &amp; Select Tests / Panels / Packages</span>
+                    </div>
+                    <div class="test-selection-inner">
+                        <div class="search-section">
+                            <input type="text" placeholder="Type to Search (e.g. LFT, Lipid, CBC)" id="selectTestDivforSearch" autocomplete="off">
+                            <div id="test-selection">
+                                <div class="catalog-loading-buffer">
+                                    <div class="catalog-buffer-spinner"></div>
+                                    <span>Loading tests, panels &amp; packages...</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="right-left2"><i class="fa-solid fa-right-left" aria-hidden="true"></i></div>
-                    <div class="search-section">
-                        <input type="text" placeholder="Type to Search" id="selectedTestDivforSearch">
-                        <div id="test-selected">
-                            <!-- <option>1.3 Fitness Advance</option> -->
+                        <div class="right-left2"><i class="fa-solid fa-right-left" aria-hidden="true"></i></div>
+                        <div class="search-section">
+                            <input type="text" placeholder="Filter Selected Tests" id="selectedTestDivforSearch">
+                            <div id="test-selected">
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="details-section">
+                    <div class="box-card-header">
+                        <i class="fas fa-barcode"></i>
+                        <span>Sample Type &amp; Barcode Mapping</span>
+                    </div>
                     <table id="booking-table">
                         <thead>
                             <tr>

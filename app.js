@@ -14,6 +14,7 @@ import userRouter from "./src/routes/user.routes.js";
 import qrReportRouter from "./src/routes/qrReport.routes.js";
 import offlineReportRouter from "./src/routes/offlineReport.routes.js";
 import marketingRouter from "./src/routes/marketing.routes.js";
+import offlineMigrationRouter from "./src/routes/offlineMigration.routes.js";
 import {
     verifyJWT,
     verifySuperAdmin,
@@ -562,6 +563,7 @@ app.use("/api/v1/copilot", copilotRouter);
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/qr-reports", qrReportRouter);
 app.use("/api/v1/offline-reports", offlineReportRouter);
+app.use("/api/v1/offline-migration", offlineMigrationRouter);
 app.use("/r", qrReportRouter);
 app.use("/api/v1/target", targetRouter);
 app.use("/", marketingRouter);

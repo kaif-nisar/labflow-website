@@ -4,6 +4,14 @@
     let selectedTests = new Map(); // testName -> { sampleType, testId }
     let uniqueSampleTypes = new Set();
     let currentSampleType = null;
+    const getCheckboxValue = (id) => Boolean(document.getElementById(id)?.checked);
+    const extractArray = (payload) => {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload?.categories)) return payload.categories;
+        if (Array.isArray(payload?.tests)) return payload.tests;
+        return [];
+    };
 
     // Initialize CKEditor
     if (typeof editorInit === 'function') {
@@ -63,6 +71,8 @@
         uniqueSampleTypes.clear();
         currentSampleType = null;
         tagsContainer.innerHTML = '';
+        const shortNameInput = document.getElementById("short-name");
+        if (shortNameInput) shortNameInput.value = '';
     }
 
     // ===========================
@@ -70,14 +80,14 @@
     // ===========================
     async function fetchCategories() {
         try {
-            const res = await fetch(`${BASE_URL}/api/v1/user/category-list`, { method: "GET" });
-            if (!res.ok) throw new Error("Failed to fetch categories");
+            const res = await fetch(`${BASE_URL}/api/v1/user/category-list-tenant`, { method: "GET" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || "Failed to fetch categories");
 
-            const data = await res.json();
-            categoryArray = data.categories || data || [];
+            categoryArray = extractArray(data);
             const selectEl = document.getElementById("category");
             selectEl.innerHTML = "";
-            categoryArray.data.forEach(cat => {
+            categoryArray.forEach(cat => {
                 const opt = document.createElement("option");
                 opt.value = cat.category;
                 opt.textContent = cat.category;
@@ -94,11 +104,13 @@
     // ===========================
     async function loadTests() {
         try {
-            const res = await fetch(`${BASE_URL}/api/v1/user/test-database`, { method: "POST" });
-            const data = await res.json();
+            const res = await fetch(`${BASE_URL}/api/v1/user/test-database-tenant`, { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || "Failed to load tests");
+            const tests = extractArray(data);
             testList.innerHTML = '';
 
-            data.forEach(test => {
+            tests.forEach(test => {
                 const testEl = document.createElement('div');
                 testEl.className = "test-item";
                 testEl.id = "tests-name-div";
@@ -203,13 +215,14 @@
     function savePanel() {
         document.querySelector('.save').addEventListener('click', async () => {
             const nameField = document.getElementById('name');
+            const shortName = document.getElementById('short-name')?.value?.trim() || '';
             const price = document.getElementById("price").value;
             const finalPrice = document.getElementById("final-price").value;
             const interpretation = typeof getEditorData === 'function' ? getEditorData() : '';
-            const category = categoryArray.data.find(cat => cat.category === document.getElementById('category').value);
-            const hideInterpretation = document.getElementById('hide-interpretation').checked;
-            const hideMethodInstrument = document.getElementById('hide-method-instrument').checked;
-            const hidePanelInterpretation = document.getElementById('hide-panel-interpretation').checked;
+            const category = categoryArray.find(cat => cat.category === document.getElementById('category').value);
+            const hideInterpretation = getCheckboxValue('hide-interpretation');
+            const hideMethodInstrument = getCheckboxValue('hide-method-instrument');
+            const hidePanelInterpretation = getCheckboxValue('hide-panel-interpretation');
 
             if (nameField.value.trim().includes(",")) {
                 document.querySelector('.errormessage').style.display = "block";
@@ -230,12 +243,14 @@
             }
 
             try {
-                const res = await fetch(`${BASE_URL}/api/v1/user/add-panels`, {
+                const res = await fetch(`${BASE_URL}/api/v1/user/add-panels-tenant`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         pannelname: nameField.value.trim(),
-                        rawPrice: price,
+                        Short_name: shortName,
+                        shortName: shortName,
+                        price,
                         final_price: finalPrice,
                         category,
                         inputarray: selectedTestNames,
@@ -253,7 +268,7 @@
                 if (res.ok) {
                     resetSelections();
                     showAlert(data.message, "success");
-                    setTimeout(() => window.location.href = `/superAdmin/superAdmin.html?page=testPanels` , 3500);
+                    setTimeout(() => window.location.href = "/admin/admin.html?page=testPanels", 3500);
                 } else {
                     showAlert(data.message, "danger");
                 }

@@ -81,6 +81,14 @@ Specific tests with issues:
 ${JSON.stringify(contextData.databaseAudit.issues.slice(0, 15), null, 2)}
 You have FULL AUTHORITY to propose BATCH_FIX_TESTS or FIX_TEST to fix and enrich these tests in the database.`);
   }
+  if (contextData?.panelAudit) {
+    contextNotes.push(`[ACTUAL LAB DATABASE PANEL AUDIT DATA]:
+Total panels in this lab: ${contextData.panelAudit.totalPanels}.
+Panels missing short names: ${contextData.panelAudit.totalIssuesFound}.
+Panels to fix:
+${JSON.stringify(contextData.panelAudit.fixes.slice(0, 15), null, 2)}
+You have FULL AUTHORITY to propose BATCH_FIX_PANELS with fixes array to assign clinical standard short names (LFT, KFT, LIPID, CBC, TFT, etc.) to all panels!`);
+  }
   if (contextData?.missingCatalogTests?.length) {
     contextNotes.push(`[ESSENTIAL STANDARD TESTS MISSING FROM THIS LAB'S DATABASE]:
 The following standard clinical tests are NOT present in this lab's catalog:

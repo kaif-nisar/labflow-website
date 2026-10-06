@@ -335,6 +335,7 @@ export const STANDARD_PATHOLOGY_TESTS = {
 export const STANDARD_PATHOLOGY_PANELS = {
   "lft": {
     name: "Liver Function Test (LFT)",
+    shortName: "LFT",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["lft", "liver function test", "liver profile", "hepatic profile", "liver panel"],
@@ -353,6 +354,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "kft": {
     name: "Kidney Function Test (KFT)",
+    shortName: "KFT",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["kft", "kidney function test", "renal function test", "rft", "renal profile", "kidney profile", "renal panel"],
@@ -370,6 +372,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "rft": {
     name: "Renal Function Test (RFT)",
+    shortName: "RFT",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["rft", "renal function test", "kidney function test", "kft"],
@@ -387,6 +390,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "lipid": {
     name: "Lipid Profile",
+    shortName: "LIPID",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["lipid profile", "lipid panel", "cholesterol profile", "lipid test"],
@@ -401,6 +405,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "thyroid": {
     name: "Thyroid Profile (TFT)",
+    shortName: "TFT",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["thyroid profile", "tft", "thyroid panel", "thyroid function test", "t3 t4 tsh"],
@@ -412,6 +417,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "electrolytes": {
     name: "Serum Electrolytes",
+    shortName: "ELECTRO",
     category: "Biochemistry",
     sampleType: "Serum",
     aliases: ["serum electrolytes", "electrolytes panel", "electrolyte profile", "na k cl"],
@@ -423,6 +429,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "cbc": {
     name: "Complete Blood Count (CBC)",
+    shortName: "CBC",
     category: "Hematology",
     sampleType: "EDTA Whole Blood",
     aliases: ["complete blood count", "cbc", "hemogram", "complete hemogram", "cbc with esr"],
@@ -445,6 +452,7 @@ export const STANDARD_PATHOLOGY_PANELS = {
   },
   "urine": {
     name: "Urine Routine & Microscopic Examination",
+    shortName: "URINE-RE",
     category: "Clinical Pathology",
     sampleType: "Urine",
     aliases: ["urine routine", "urine r/e", "urine examination", "urine analysis", "urinalysis"],
@@ -1074,6 +1082,10 @@ export async function executeCreateTest({ testData, tenantId, userId, role }) {
 export async function executeCreatePanel({ panelData, tenantId, userId, role }) {
   const {
     name,
+    Short_name,
+    shortName,
+    short_name,
+    code,
     categoryName,
     price,
     final_price,
@@ -1238,12 +1250,16 @@ export async function executeCreatePanel({ panelData, tenantId, userId, role }) 
   );
 
   const effectivePrice = Number(final_price || price || 500);
+  const resolvedShortName = String(
+    Short_name ?? shortName ?? short_name ?? code ?? matchedPanelDef?.shortName ?? ""
+  ).trim();
 
   try {
     const createdPanel = await addPannel.create({
       order: nextOrder,
       bookingCode: nextBookingCode,
       name: cleanPanelName,
+      Short_name: resolvedShortName,
       category: {
         _id: catDoc._id,
         category: catDoc.category,
@@ -2816,6 +2832,21 @@ export async function executeUpdatePanel({ updateData, tenantId, userId, role })
     setFields.sample_types = stArr.filter(Boolean).map(s => String(s).trim());
   }
 
+  // Short Name update (e.g. LFT, KFT, RFT)
+  const candidateShortName =
+    mergedUpdates.Short_name !== undefined ? mergedUpdates.Short_name :
+    mergedUpdates.shortName !== undefined ? mergedUpdates.shortName :
+    mergedUpdates.short_name !== undefined ? mergedUpdates.short_name :
+    mergedUpdates.code !== undefined ? mergedUpdates.code :
+    updateData?.Short_name !== undefined ? updateData?.Short_name :
+    updateData?.shortName !== undefined ? updateData?.shortName :
+    updateData?.short_name !== undefined ? updateData?.short_name :
+    updateData?.code;
+
+  if (candidateShortName !== undefined && candidateShortName !== null) {
+    setFields.Short_name = String(candidateShortName).trim();
+  }
+
   // CRITICAL TOGGLES
   if (mergedUpdates.hideInterpretation !== undefined) {
     setFields.hideInterpretation = Boolean(mergedUpdates.hideInterpretation);
@@ -2892,13 +2923,14 @@ export async function executeUpdatePanel({ updateData, tenantId, userId, role })
 
   const isRenamed = updatedPanel.name !== existingPanel.name;
   const renameNote = isRenamed ? ` (Name changed: '${existingPanel.name}' ➔ '${updatedPanel.name}')` : '';
+  const shortNameNote = updatedPanel.Short_name ? ` (Short Name: '${updatedPanel.Short_name}')` : '';
 
   return {
     success: true,
     updatedItem: updatedPanel,
     createdItem: updatedPanel,
     panel: updatedPanel,
-    message: `Panel '${updatedPanel.name}' successfully update ho gaya hai!${renameNote} (Individual Test Notes/Interpretations Hidden: ${updatedPanel.hideInterpretation ? "Yes" : "No"}, Method/Instrument Hidden: ${updatedPanel.hideMethodInstrument ? "Yes" : "No"}, Panel Interpretation Hidden: ${updatedPanel.hidePanelInterpretation ? "Yes" : "No"})`
+    message: `Panel '${updatedPanel.name}' successfully update ho gaya hai!${renameNote}${shortNameNote} (Individual Test Notes/Interpretations Hidden: ${updatedPanel.hideInterpretation ? "Yes" : "No"}, Method/Instrument Hidden: ${updatedPanel.hideMethodInstrument ? "Yes" : "No"}, Panel Interpretation Hidden: ${updatedPanel.hidePanelInterpretation ? "Yes" : "No"})`
   };
 }
 
@@ -3077,3 +3109,145 @@ export async function executeBatchFixTests({ fixes = [], tenantId, userId, role 
   };
 }
 
+
+
+
+/**
+ * Resolve standard short name for a panel based on standard pathology profiles
+ */
+export function resolveStandardPanelShortName(panelName) {
+  if (!panelName || typeof panelName !== "string") return "";
+  const clean = panelName.trim();
+  const lower = clean.toLowerCase();
+
+  // 1. Direct parentheses extraction if already has abbreviation like "Liver Function Test (LFT)" or "COMPLETE BLOOD COUNT (CBC)"
+  const parenMatch = clean.match(/\(([A-Za-z0-9\s\-_+]+)\)/);
+  if (parenMatch && parenMatch[1].trim().length <= 8) {
+    const candidate = parenMatch[1].trim().toUpperCase();
+    if (!["ANIMALS", "BASIC", "SERUM", "URINE"].includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 2. Check STANDARD_PATHOLOGY_PANELS aliases
+  for (const [key, panelDef] of Object.entries(STANDARD_PATHOLOGY_PANELS)) {
+    const aliases = [key, panelDef.name.toLowerCase(), panelDef.shortName.toLowerCase(), ...(panelDef.aliases || []).map(a => a.toLowerCase())];
+    if (aliases.some(a => lower === a || lower.includes(a) || a.includes(lower))) {
+      return panelDef.shortName;
+    }
+  }
+
+  // 3. Common clinical mappings
+  if (lower.includes("liver") || lower.includes("hepatic")) return "LFT";
+  if (lower.includes("kidney") || lower.includes("renal")) return "KFT";
+  if (lower.includes("lipid") || lower.includes("cholesterol")) return "LIPID";
+  if (lower.includes("thyroid") || lower.includes("t3 t4 tsh")) return "TFT";
+  if (lower.includes("blood count") || lower.includes("cbc") || lower.includes("hemogram") || lower.includes("blood picture") || lower.includes("cbp")) return "CBC";
+  if (lower.includes("electrolyte")) return "ELECTRO";
+  if (lower.includes("urine examination") || lower.includes("urine routine") || lower.includes("cue") || lower.includes("urinalysis")) return "URINE-RE";
+  if (lower.includes("viral marker") || lower.includes("viral")) return "VIRAL";
+  if (lower.includes("bilirubin")) return "BILIRUBIN";
+  if (lower.includes("differential") || lower.includes("dlc")) return "DLC";
+
+  // 4. Fallback: generate clean 3-5 character acronym from uppercase initials
+  const words = clean.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(w => w.length > 0 && !["AND", "THE", "OF", "FOR", "IN"].includes(w.toUpperCase()));
+  if (words.length >= 2 && words.length <= 5) {
+    return words.map(w => w[0].toUpperCase()).join("");
+  }
+
+  return clean.slice(0, 5).toUpperCase();
+}
+
+/**
+ * Audit panels in database for missing Short_name
+ */
+export async function auditPanelsInDatabase({ tenantId, userId, role }) {
+  const targetTenantId = tenantId ? new mongoose.Types.ObjectId(tenantId) : null;
+  const targetUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
+  const scope = (targetTenantId && targetUserId)
+    ? { $or: [{ tenantId: targetTenantId }, { createdBy: targetUserId }] }
+    : (targetTenantId ? { tenantId: targetTenantId } : (targetUserId ? { $or: [{ createdBy: targetUserId }, { createdByRole: "superAdmin" }, { isBasePanel: true }] } : {}));
+
+  const panels = await addPannel.find(scope).lean();
+
+  const issues = [];
+  const fixes = [];
+
+  for (const p of panels) {
+    const isShortNameMissing = !p.Short_name || String(p.Short_name).trim() === "";
+    if (isShortNameMissing) {
+      const suggestedShort = resolveStandardPanelShortName(p.name);
+      const fixItem = {
+        panelId: String(p._id),
+        name: p.name,
+        currentName: p.name,
+        panelName: p.name,
+        category: p.category?.category || p.category || "Biochemistry",
+        currentShortName: "",
+        suggestedShortName: suggestedShort,
+        updates: {
+          Short_name: suggestedShort
+        }
+      };
+      issues.push(fixItem);
+      fixes.push(fixItem);
+    }
+  }
+
+  return {
+    totalPanels: panels.length,
+    totalIssuesFound: issues.length,
+    issues,
+    fixes
+  };
+}
+
+/**
+ * Execute batch updates for panels (e.g. adding Short_name to all panels)
+ */
+export async function executeBatchUpdatePanels({ fixes = [], tenantId, userId, role }) {
+  if (!Array.isArray(fixes) || fixes.length === 0) {
+    throw new Error("No panel fixes provided for batch update");
+  }
+
+  let updatedCount = 0;
+  for (const fix of fixes) {
+    if (!fix.updates && !fix.Short_name && !fix.suggestedShortName) continue;
+    const rawId = fix?.panelId || fix?.id || fix?._id;
+    let query = null;
+
+    if (rawId && typeof rawId === "string" && /^[0-9a-fA-F]{24}$/.test(rawId)) {
+      query = { _id: new mongoose.Types.ObjectId(rawId) };
+    } else if (fix?.panelName || fix?.name || fix?.currentName) {
+      const cName = fix.panelName || fix.name || fix.currentName;
+      const targetTenantId = tenantId ? new mongoose.Types.ObjectId(tenantId) : null;
+      const targetUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
+      const scope = (targetTenantId && targetUserId)
+        ? { $or: [{ tenantId: targetTenantId }, { createdBy: targetUserId }] }
+        : (targetTenantId ? { tenantId: targetTenantId } : (targetUserId ? { createdBy: targetUserId } : {}));
+      query = { name: makeExactCaseInsensitiveRegex(cName.trim()), ...scope };
+    }
+
+    if (!query) continue;
+
+    const setObj = {};
+    if (fix.updates) {
+      Object.assign(setObj, fix.updates);
+    }
+    if (fix.Short_name) setObj.Short_name = String(fix.Short_name).trim();
+    if (fix.suggestedShortName && !setObj.Short_name) setObj.Short_name = String(fix.suggestedShortName).trim();
+
+    try {
+      const res = await addPannel.updateOne(query, { $set: setObj });
+      if (res.modifiedCount > 0) updatedCount++;
+    } catch (err) {
+      console.warn("Failed to apply panel fix for:", fix?.panelId || fix?.name, err.message);
+    }
+  }
+
+  return {
+    success: true,
+    updatedCount,
+    message: `${updatedCount} panel(s) in your lab catalog were successfully updated with short names and are now searchable in booking!`
+  };
+}

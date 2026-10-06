@@ -95,7 +95,7 @@ async function populatePannelsTable(pannels) {
         row.innerHTML = `
             <td><input type="checkbox" class="row-checkbox" value="${pannel._id}" onchange="toggleBulkDeleteBtn()"></td>
             <td class="order"><i class="fa-solid fa-up-down"></i>${pannel.order}</td>
-            <td>${pannel.name}</td>
+            <td>${pannel.name}${pannel.Short_name || pannel.shortName ? ` (${pannel.Short_name || pannel.shortName})` : ''}</td>
             <td>${pannel.category.category}</td>
             <td>${pannel.price}</td>
             <td class="pannelTests">${pannel.tests}</td>

@@ -4,6 +4,13 @@ async function addpannelfun() {
     const tagsDiv = document.getElementById("middle-tag-div");
     const testList = document.getElementById('search-hint');
     const testsInput = document.getElementById("tests");
+    const getCheckboxValue = (id) => Boolean(document.getElementById(id)?.checked);
+    const setCheckboxState = (id, value) => {
+        const checkbox = document.getElementById(id);
+        if (checkbox) {
+            checkbox.checked = value === true || value === "true" || value === 1 || value === "1";
+        }
+    };
 
     let selectedTests = new Map(); // testName -> { sampleType, testId }
     let selectedSampleTypes = new Set();
@@ -18,7 +25,7 @@ async function addpannelfun() {
     }
 
     const params = new URLSearchParams(window.location.search);
-    const name = params.get('Name');
+    const name = params.get('Name') || params.get('_id');
 
     const extractArray = (payload) => {
         if (Array.isArray(payload)) {
@@ -42,7 +49,7 @@ async function addpannelfun() {
 
     async function fetchCategories() {
         try {
-            const res = await fetch(`${BASE_URL}/api/v1/user/category-list`, { method: "GET" });
+            const res = await fetch(`${BASE_URL}/api/v1/user/category-list-tenant`, { method: "GET" });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || "Failed to fetch categories");
 
@@ -68,7 +75,10 @@ async function addpannelfun() {
     // ===========================
     async function fetchPanelData(name) {
         try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/one-Pannel/${name}`, { method: "POST" });
+            const response = await fetch(`${BASE_URL}/api/v1/user/one-Pannel/${name}`, {
+                method: "POST",
+                cache: "no-store"
+            });
             const panelData = await response.json().catch(() => ({}));
 
             if (!response.ok) {
@@ -87,11 +97,13 @@ async function addpannelfun() {
     function populateFields(panelData) {
         populateSelectedTests(panelData);
         panelNameInput.value = panelData.name;
+        const shortNameInput = document.getElementById("short-name");
+        if (shortNameInput) shortNameInput.value = panelData.Short_name || panelData.shortName || '';
         document.getElementById("price").value = panelData.price;
         document.getElementById("final-price").value = panelData.final_price;
-        document.getElementById('hide-interpretation').checked = panelData.hideInterpretation;
-        document.getElementById('hide-method-instrument').checked = panelData.hideMethodInstrument;
-        document.getElementById('hide-panel-interpretation').checked = panelData.hidePanelInterpretation;
+        setCheckboxState('hide-interpretation', panelData.hideInterpretation);
+        setCheckboxState('hide-method-instrument', panelData.hideMethodInstrument);
+        setCheckboxState('hide-panel-interpretation', panelData.hidePanelInterpretation ?? panelData.hidepanelinterpretation);
         document.getElementById('category').value = panelData.category?.category || '';
 
         if (!setEditorData(panelData.interpretation || "")) {
@@ -101,7 +113,7 @@ async function addpannelfun() {
 
     async function loadCategories() {
         try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/category-list`);
+            const response = await fetch(`${BASE_URL}/api/v1/user/category-list-tenant`);
             const categories = await response.json().catch(() => ({}));
 
             if (!response.ok) {
@@ -142,7 +154,7 @@ async function addpannelfun() {
 
     async function loadTests() {
         try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/test-database`, { method: "POST" });
+            const response = await fetch(`${BASE_URL}/api/v1/user/test-database-tenant`, { method: "POST" });
             const testsPayload = await response.json().catch(() => ({}));
             if (!response.ok) {
                 throw new Error(testsPayload.message || "Failed to load tests");
@@ -258,7 +270,11 @@ async function addpannelfun() {
     }
 
     async function initialize() {
-        if (name) await fetchPanelData(name);
+        if (!name) {
+            console.error("Missing panel id for edit page.");
+            return;
+        }
+        await fetchPanelData(name);
         await loadTests();
         setupSearch();
     }
@@ -299,13 +315,14 @@ async function addpannelfun() {
 
             try {
                 const pannelname = namefield.value.trim();
+                const shortName = document.getElementById('short-name')?.value?.trim() || '';
                 const price = document.getElementById("price").value;
                 const final_price = document.getElementById("final-price").value;
                 const interpretation = typeof getEditorData === 'function' ? getEditorData() : '';
                 const category = categoryArray.find(cat => cat.category === document.getElementById('category').value);
-                const hideInterpretation = document.getElementById('hide-interpretation').checked;
-                const hideMethodInstrument = document.getElementById('hide-method-instrument').checked;
-                const hidePanelInterpretation = document.getElementById('hide-panel-interpretation').checked;
+                const hideInterpretation = getCheckboxValue('hide-interpretation');
+                const hideMethodInstrument = getCheckboxValue('hide-method-instrument');
+                const hidePanelInterpretation = getCheckboxValue('hide-panel-interpretation');
 
                 const testsId = Array.from(selectedTests.values()).map(test => test.testId);
                 const uniqueSampleTypes = Array.from(selectedSampleTypes);
@@ -318,11 +335,13 @@ async function addpannelfun() {
                     return;
                 }
 
-                const response = await fetch(`${BASE_URL}/api/v1/user/edit-Pannel/${name}`, {
+                const response = await fetch(`${BASE_URL}/api/v1/user/edit-Pannel-tenant/${name}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         pannelname,
+                        Short_name: shortName,
+                        shortName: shortName,
                         category,
                         price,
                         inputarray: uniqueInputArray,
@@ -343,7 +362,7 @@ async function addpannelfun() {
                     tagsDiv.innerHTML = '';
                     alert.innerHTML = `${data.message}<button data-dismiss="alert" class="alert-dismissible close">✖</button>`;
                     alert.classList.add("alert-success", "show");
-                    setTimeout(() => window.location.href = `/superAdmin/superAdmin.html?page=testPanels`, 3500);
+                    setTimeout(() => window.location.href = "/admin/admin.html?page=testPanels", 3500);
                 } else {
                     alert.innerHTML = `${data.message}<button data-dismiss="alert" class="alert-dismissible close">✖</button>`;
                     alert.classList.add("alert-danger", "show");
@@ -361,7 +380,7 @@ async function addpannelfun() {
     addPanelToDatabase();
 
     document.querySelector('.cancel').addEventListener('click', function () {
-        window.location.href = `${BASE_URL}/superAdmin/superAdmin.html?page=testPanels`;
+        window.location.href = `${BASE_URL}/admin.html?page=testPanels`;
     });
 }
 

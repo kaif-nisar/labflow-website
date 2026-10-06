@@ -2373,16 +2373,214 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
 });
 
 const getDashboardDataController = asyncHandler(async (req, res) => {
-    const tenantId = new mongoose.Types.ObjectId(req.user.tenantId._id);
-    const userRole = req.user.role;
-    const permissions = req.user.permissions || {};
+    // 1. Strict Tenant ID resolution - strictly prevent data leaks across tenants
+    const rawTenantId = req.user?.tenantId?._id || req.user?.tenantId;
+    if (!rawTenantId) {
+        throw new ApiError(401, "Tenant ID not found in session");
+    }
+    const tenantObjId = mongoose.Types.ObjectId.isValid(rawTenantId)
+        ? new mongoose.Types.ObjectId(rawTenantId)
+        : rawTenantId;
+    const tenantIdStr = String(rawTenantId);
+    const userRole = req.user?.role;
+    const permissions = req.user?.permissions || {};
+
+    // 2. Parse date range parameters
+    const { range, days, startDate, endDate, timezone } = req.query;
+    const clientTimezone = timezone || "Asia/Kolkata";
+    const now = new Date();
+
+    let start = null;
+    let end = now;
+    const isTodayRequested = range === "today" || range === "1_day" || range === "one_day" || (days && Number(days) === 1);
+
+    if (startDate && endDate) {
+        const pStart = new Date(startDate);
+        const pEnd = new Date(endDate);
+        if (!isNaN(pStart.getTime()) && !isNaN(pEnd.getTime())) {
+            start = pStart;
+            end = pEnd;
+        }
+    } else if (days && Number(days) > 0) {
+        const numDays = Math.max(1, parseInt(days, 10));
+        if (numDays === 1 || isTodayRequested) {
+            // For 1 day / today: start of today in local date
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            end = now;
+        } else {
+            start = new Date(now.getTime() - numDays * 24 * 60 * 60 * 1000);
+            end = now;
+        }
+    } else if (range) {
+        switch (range) {
+            case "today":
+            case "1_day":
+            case "one_day": {
+                // Today: from start of today (00:00:00.000) up to current exact moment `now`
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                end = now;
+                break;
+            }
+            case "yesterday": {
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+                end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+                break;
+            }
+            case "2_days": {
+                start = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+                end = now;
+                break;
+            }
+            case "3_days": {
+                start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+                end = now;
+                break;
+            }
+            case "last_7_days":
+            case "7_days": {
+                start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                end = now;
+                break;
+            }
+            case "15_days": {
+                start = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+                end = now;
+                break;
+            }
+            case "1_month":
+            case "one_month": {
+                const d = new Date(now);
+                d.setMonth(d.getMonth() - 1);
+                start = d;
+                end = now;
+                break;
+            }
+            case "2_month":
+            case "two_month": {
+                const d = new Date(now);
+                d.setMonth(d.getMonth() - 2);
+                start = d;
+                end = now;
+                break;
+            }
+            case "3_month":
+            case "three_month": {
+                const d = new Date(now);
+                d.setMonth(d.getMonth() - 3);
+                start = d;
+                end = now;
+                break;
+            }
+            case "6_month":
+            case "six_month": {
+                const d = new Date(now);
+                d.setMonth(d.getMonth() - 6);
+                start = d;
+                end = now;
+                break;
+            }
+            case "1_year":
+            case "one_year": {
+                const d = new Date(now);
+                d.setFullYear(d.getFullYear() - 1);
+                start = d;
+                end = now;
+                break;
+            }
+            case "5_year":
+            case "five_year": {
+                const d = new Date(now);
+                d.setFullYear(d.getFullYear() - 5);
+                start = d;
+                end = now;
+                break;
+            }
+            case "all_time":
+            case "all": {
+                start = null;
+                end = now;
+                break;
+            }
+            default: {
+                // Default to last 30 days
+                const d = new Date(now);
+                d.setMonth(d.getMonth() - 1);
+                start = d;
+                end = now;
+                break;
+            }
+        }
+    } else {
+        // Default: last 30 days
+        const d = new Date(now);
+        d.setMonth(d.getMonth() - 1);
+        start = d;
+        end = now;
+    }
+
+    // 3. Build indexed $match filter - strictly bound to this tenantId
+    const bookingMatch = {
+        tenantId: { $in: [tenantObjId, tenantIdStr] }
+    };
+
+    // Tenant user scoping: non-admin users only see their own bookings
+    if (!canManageBookingsAcrossTenant(req)) {
+        const effectiveUserId = getEffectiveBookingUserId(req);
+        const userObjId = mongoose.Types.ObjectId.isValid(effectiveUserId)
+            ? new mongoose.Types.ObjectId(effectiveUserId)
+            : effectiveUserId;
+        bookingMatch.createdBy = { $in: [userObjId, String(effectiveUserId)] };
+    }
+
+    // Date range filter: support createdAt (canonical) and date (legacy fallback)
+    const dateConditions = [];
+    if (start && end) {
+        dateConditions.push(
+            { createdAt: { $gte: start, $lte: end } },
+            {
+                $and: [
+                    { $or: [{ createdAt: { $exists: false } }, { createdAt: null }] },
+                    { date: { $gte: start, $lte: end } }
+                ]
+            }
+        );
+    } else if (start) {
+        dateConditions.push(
+            { createdAt: { $gte: start } },
+            {
+                $and: [
+                    { $or: [{ createdAt: { $exists: false } }, { createdAt: null }] },
+                    { date: { $gte: start } }
+                ]
+            }
+        );
+    } else if (end) {
+        dateConditions.push(
+            { createdAt: { $lte: end } },
+            {
+                $and: [
+                    { $or: [{ createdAt: { $exists: false } }, { createdAt: null }] },
+                    { date: { $lte: end } }
+                ]
+            }
+        );
+    }
+
+    if (dateConditions.length > 0) {
+        bookingMatch.$or = dateConditions;
+    }
 
     const queries = [];
 
-    // Query 1: High performance DB Aggregation Pipeline for stats and charts
+    // Query 1: High performance DB Aggregation Pipeline for stats and charts strictly for this tenant
     queries.push(
         newBooking.aggregate([
-            { $match: { tenantId } },
+            { $match: bookingMatch },
+            {
+                $addFields: {
+                    bookingDate: { $ifNull: ["$createdAt", "$date"] }
+                }
+            },
             {
                 $facet: {
                     stats: [
@@ -2390,35 +2588,111 @@ const getDashboardDataController = asyncHandler(async (req, res) => {
                             $group: {
                                 _id: null,
                                 totalBookings: { $sum: 1 },
-                                totalRevenue: { $sum: { $ifNull: ["$total", 0] } },
+                                totalRevenue: {
+                                    $sum: {
+                                        $cond: [
+                                            { $in: ["$status", ["cancelled", "Cancelled", "canceled", "Canceled", "rejected", "Rejected"]] },
+                                            0,
+                                            { $ifNull: ["$total", 0] }
+                                        ]
+                                    }
+                                },
                                 pendingTests: {
                                     $sum: {
-                                        $cond: [{ $eq: ["$status", "pending"] }, 1, 0]
+                                        $cond: [
+                                            { $in: ["$status", ["pending", "On Hold", "on hold", "Pending", "created", "in progress", "In Progress"]] },
+                                            1,
+                                            0
+                                        ]
+                                    }
+                                },
+                                completedTests: {
+                                    $sum: {
+                                        $cond: [
+                                            { $in: ["$status", ["completed", "Completed", "Report Ready", "report ready", "ready", "Ready"]] },
+                                            1,
+                                            0
+                                        ]
+                                    }
+                                },
+                                cancelledBookings: {
+                                    $sum: {
+                                        $cond: [
+                                            { $in: ["$status", ["cancelled", "Cancelled", "canceled", "Canceled"]] },
+                                            1,
+                                            0
+                                        ]
                                     }
                                 }
                             }
                         }
                     ],
                     monthlyRevenue: [
-                        { $match: { date: { $exists: true, $ne: null } } },
+                        {
+                            $match: {
+                                bookingDate: { $exists: true, $ne: null },
+                                status: { $nin: ["cancelled", "Cancelled", "canceled", "Canceled"] }
+                            }
+                        },
                         {
                             $group: {
-                                _id: { $dateToString: { format: "%Y-%m", date: "$date" } },
-                                revenue: { $sum: { $ifNull: ["$total", 0] } }
+                                _id: {
+                                    $dateToString: {
+                                        format: "%Y-%m",
+                                        date: "$bookingDate",
+                                        timezone: clientTimezone
+                                    }
+                                },
+                                revenue: { $sum: { $ifNull: ["$total", 0] } },
+                                count: { $sum: 1 }
                             }
                         },
                         { $sort: { _id: 1 } }
                     ],
                     dailyRevenue: [
-                        { $match: { date: { $exists: true, $ne: null } } },
                         {
-                            $group: {
-                                _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-                                revenue: { $sum: { $ifNull: ["$total", 0] } }
+                            $match: {
+                                bookingDate: { $exists: true, $ne: null },
+                                status: { $nin: ["cancelled", "Cancelled", "canceled", "Canceled"] }
                             }
                         },
-                        { $sort: { _id: -1 } },
-                        { $limit: 30 }
+                        {
+                            $group: {
+                                _id: {
+                                    $dateToString: {
+                                        format: "%Y-%m-%d",
+                                        date: "$bookingDate",
+                                        timezone: clientTimezone
+                                    }
+                                },
+                                revenue: { $sum: { $ifNull: ["$total", 0] } },
+                                count: { $sum: 1 }
+                            }
+                        },
+                        { $sort: { _id: 1 } },
+                        { $limit: 365 }
+                    ],
+                    hourlyRevenue: [
+                        {
+                            $match: {
+                                bookingDate: { $exists: true, $ne: null },
+                                status: { $nin: ["cancelled", "Cancelled", "canceled", "Canceled"] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: {
+                                    $dateToString: {
+                                        format: "%H:00",
+                                        date: "$bookingDate",
+                                        timezone: clientTimezone
+                                    }
+                                },
+                                revenue: { $sum: { $ifNull: ["$total", 0] } },
+                                count: { $sum: 1 }
+                            }
+                        },
+                        { $sort: { _id: 1 } }
                     ],
                     topTests: [
                         { $unwind: "$tableData" },
@@ -2430,22 +2704,37 @@ const getDashboardDataController = asyncHandler(async (req, res) => {
                             }
                         },
                         { $sort: { count: -1 } },
-                        { $limit: 4 }
+                        { $limit: 8 }
+                    ],
+                    recentBookings: [
+                        { $sort: { bookingDate: -1 } },
+                        { $limit: 20 },
+                        {
+                            $project: {
+                                bookingId: 1,
+                                patientName: 1,
+                                patientPhone: 1,
+                                status: 1,
+                                total: 1,
+                                createdAt: "$bookingDate",
+                                createdbyuser: 1
+                            }
+                        }
                     ]
                 }
             }
         ])
     );
 
-    // Query 2: Fetch franchisees only if user has permission
+    // Query 2: Fetch franchisees strictly for this tenant
     if (permissions.canManageUsers || userRole !== 'staff') {
         queries.push(
             User.find({
-                tenantId,
-                role: { $ne: 'staff' },
+                tenantId: { $in: [tenantObjId, tenantIdStr] },
+                role: { $in: ['franchisee', 'subFranchisee', 'superFranchisee'] },
                 isActive: true
             })
-            .select('fullName address phoneNo email isActive')
+            .select('fullName address phoneNo email isActive role city state')
             .lean()
         );
     } else {
@@ -2454,33 +2743,80 @@ const getDashboardDataController = asyncHandler(async (req, res) => {
 
     const [aggResult, franchisees] = await Promise.all(queries);
     const facetData = aggResult[0] || {};
-    const statsData = facetData.stats?.[0] || { totalBookings: 0, totalRevenue: 0, pendingTests: 0 };
+    const statsData = facetData.stats?.[0] || {
+        totalBookings: 0,
+        totalRevenue: 0,
+        pendingTests: 0,
+        completedTests: 0,
+        cancelledBookings: 0
+    };
 
     const monthlyEntries = facetData.monthlyRevenue || [];
-    const dailyEntries = (facetData.dailyRevenue || []).slice().reverse();
+    const dailyEntries = facetData.dailyRevenue || [];
+    const hourlyEntries = facetData.hourlyRevenue || [];
     const topTestEntries = facetData.topTests || [];
+    const recentBookings = facetData.recentBookings || [];
+
+    const isTodayMode = isTodayRequested || range === 'today';
+
+    let dailyChartLabels = [];
+    let dailyChartData = [];
+    let dailyChartCounts = [];
+    let dailyMode = isTodayMode ? "hourly" : "daily";
+
+    if (isTodayMode) {
+        // Continuous hourly timeline from 00:00 up to current hour in client time
+        const currentHourNum = (end instanceof Date && !isNaN(end.getTime())) ? end.getHours() : now.getHours();
+        const hourlyMap = new Map(hourlyEntries.map(item => [item._id, item]));
+
+        for (let h = 0; h <= currentHourNum; h++) {
+            const slotLabel = `${String(h).padStart(2, '0')}:00`;
+            const entry = hourlyMap.get(slotLabel);
+            dailyChartLabels.push(slotLabel);
+            dailyChartData.push(entry ? Math.round(entry.revenue) : 0);
+            dailyChartCounts.push(entry ? entry.count : 0);
+        }
+    } else {
+        dailyChartLabels = dailyEntries.map(item => item._id);
+        dailyChartData = dailyEntries.map(item => Math.round(item.revenue));
+        dailyChartCounts = dailyEntries.map(item => item.count);
+    }
 
     const response = {
+        filter: {
+            range: range || (days ? "custom" : "1_month"),
+            days: days ? Number(days) : null,
+            startDate: start ? start.toISOString() : null,
+            endDate: end ? end.toISOString() : null,
+            isToday: isTodayMode,
+            timezone: clientTimezone
+        },
         stats: {
-            totalBookings: statsData.totalBookings,
-            totalRevenue: Math.round(statsData.totalRevenue),
-            pendingTests: statsData.pendingTests,
+            totalBookings: statsData.totalBookings || 0,
+            totalRevenue: Math.round(statsData.totalRevenue || 0),
+            pendingTests: statsData.pendingTests || 0,
+            completedTests: statsData.completedTests || 0,
+            cancelledBookings: statsData.cancelledBookings || 0,
             activeFranchises: franchisees.length
         },
         charts: {
             monthlyRevenue: {
                 labels: monthlyEntries.map(item => item._id),
-                data: monthlyEntries.map(item => Math.round(item.revenue))
+                data: monthlyEntries.map(item => Math.round(item.revenue)),
+                counts: monthlyEntries.map(item => item.count)
             },
             dailyRevenue: {
-                labels: dailyEntries.map(item => item._id),
-                data: dailyEntries.map(item => Math.round(item.revenue))
+                labels: dailyChartLabels,
+                data: dailyChartData,
+                counts: dailyChartCounts,
+                mode: dailyMode
             },
             topTests: {
                 labels: topTestEntries.map(item => item._id),
                 data: topTestEntries.map(item => item.count)
             }
         },
+        recentBookings,
         franchisees
     };
 

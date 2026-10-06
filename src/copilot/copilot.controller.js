@@ -11,6 +11,8 @@ import {
   executeUpdatePackage,
   repairPreviousCopilotBookings,
   auditTestsInDatabase,
+  auditPanelsInDatabase,
+  executeBatchUpdatePanels,
   findMissingStandardTests,
   executeFixTest,
   executeBatchFixTests,
@@ -40,11 +42,13 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
   let contextTests = [];
   let contextPanels = [];
   let databaseAudit = null;
+  let panelAudit = null;
   let missingCatalogTests = null;
 
   // Identify user query intents
   const isMissingTestsIntent = /(kaun sa test|missing test|nahi hai|kya hona chahiye|suggest test|gap analysis|missing in database|kya kami hai|add karna chahiye|tests chahiye|kaun se test)/i.test(message || "");
   const isMethodInstrumentIntent = /(method|instrument|machine|tarika|equip|analyzer|उपकरण|विधि|inst|खाली|empty)/i.test(message || "");
+  const isPanelShortNameIntent = /(short\s*name|short_name|shortcode|short\s*code|शॉर्ट\s*नेम|शॉर्ट\s*कोड|शार्ट\s*नाम|शॉर्ट\s*नाम|शार्ट\s*कोड|छोटा\s*नाम)/i.test(message || "") && /(panel|pannel|पैनल|all|sab|sabhi|सभी|unke|unka|inme|inhe|इन्हे|उनका|इनके)/i.test(message || "");
   const isAuditIntent = isMethodInstrumentIntent || /(audit|check|review|kami|chuti|missing|galat|fix|database|sudhar|sahi|error|inspect)/i.test(message || "");
 
   try {
@@ -57,19 +61,19 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
 
     const testDocs = await testSchema
       .find(tenantId ? { tenantId } : { createdBy: userId })
-      .select("Name")
+      .select("Name Short_name")
       .sort({ createdAt: -1 })
       .limit(40)
       .lean();
-    contextTests = testDocs.map(t => t.Name).filter(Boolean);
+    contextTests = testDocs.map(t => t.Short_name ? `${t.Name} (Short: ${t.Short_name})` : t.Name).filter(Boolean);
 
     const panelDocs = await addPannel
       .find(tenantId ? { $or: [{ tenantId }, { createdBy: userId }] } : { createdBy: userId })
-      .select("name")
+      .select("name Short_name")
       .sort({ createdAt: -1 })
       .limit(30)
       .lean();
-    contextPanels = panelDocs.map(p => p.name).filter(Boolean);
+    contextPanels = panelDocs.map(p => p.Short_name ? `${p.name} (Short: ${p.Short_name})` : p.name).filter(Boolean);
 
     // If user is asking which tests are missing, run catalog gap analysis
     if (isMissingTestsIntent) {
@@ -79,6 +83,11 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
     // If user is asking to audit/check/fix the database or methods/instruments, run actual audit
     if (isAuditIntent && !isMissingTestsIntent) {
       databaseAudit = await auditTestsInDatabase({ tenantId, userId, role });
+    }
+
+    // If user is asking to add/fix short names on panels, run panel audit
+    if (isPanelShortNameIntent) {
+      panelAudit = await auditPanelsInDatabase({ tenantId, userId, role });
     }
   } catch (err) {
     console.warn("Context fetch warning:", err.message);
@@ -93,6 +102,7 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
       existingTests: contextTests,
       existingPanels: contextPanels,
       databaseAudit,
+      panelAudit,
       missingCatalogTests
     },
     images
@@ -123,8 +133,34 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
     }
   }
 
+  // Panel Short Name Batch Fix Guarantee:
+  // If user asked to add short names to panels and we found panels needing short names
+  if (panelAudit && panelAudit.fixes && panelAudit.fixes.length > 0 && isPanelShortNameIntent) {
+    response.action = {
+      type: "BATCH_FIX_PANELS",
+      summary: "Add Short Names to All Pathology Panels",
+      data: {
+        totalPanels: panelAudit.totalPanels,
+        issuesFound: panelAudit.totalIssuesFound,
+        fixes: panelAudit.fixes
+      }
+    };
+    response.message = `Mainne aapke catalog ke **${panelAudit.fixes.length} panels** pehchan liye hain jinke Short Names missing the (jaise LFT, KFT, LIPID, CBC, TFT aadi). Maine in sabhi ke clinical standard short names generate kar diye hain.\n\nNeeche diye gaye **"Auto-Fix All Panels with Short Names"** button par click karke aap inhein ek sath database me save kar sakte hain, jisse patient booking page par ye short name se turant search ho sakein!`;
+  } else if (panelAudit && panelAudit.totalIssuesFound === 0 && isPanelShortNameIntent) {
+    response.action = {
+      type: "BATCH_FIX_PANELS",
+      summary: "All Panels Already Have Short Names",
+      data: {
+        totalPanels: panelAudit.totalPanels,
+        issuesFound: 0,
+        fixes: []
+      }
+    };
+    response.message = `Aapke sabhi panels me pehle se hi Short Names maujood hain! Kisi bhi panel me short name missing nahi hai.`;
+  }
+
   // Database Method / Instrument Audit Guarantee
-  if (databaseAudit) {
+  if (databaseAudit && !isPanelShortNameIntent) {
     if (
       databaseAudit.fixes &&
       databaseAudit.fixes.length > 0 &&
@@ -273,6 +309,11 @@ export const executeCopilotAction = asyncHandler(async (req, res) => {
       result = await executeBatchFixTests({ fixes: data.fixes, tenantId, userId, role });
       break;
 
+    case "BATCH_FIX_PANELS":
+    case "BATCH_UPDATE_PANELS":
+      result = await executeBatchUpdatePanels({ fixes: data.fixes, tenantId, userId, role });
+      break;
+
     default:
       return res.status(400).json({
         success: false,
@@ -283,7 +324,7 @@ export const executeCopilotAction = asyncHandler(async (req, res) => {
   return res.status(200).json({
     success: result.success !== false,
     message: result.message || "Action successfully executed.",
-    data: result
+    data: result.createdItem || result.updatedItem || result.panel || result.test || result.package || result.booking || result
   });
 });
 

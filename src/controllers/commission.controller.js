@@ -530,7 +530,7 @@ const getAssignedPanels = async (req, res) => {
       // Get all tests
       const panels = await addPannel
         .find({ tenantId: req.user.tenantId })
-        .select("name price final_price assignedPrices sample_types createdAt")
+        .select("name Short_name price final_price assignedPrices sample_types createdAt")
         .lean();
       // Map all tests with either assigned price to the franchisee or default price
       const result = panels.map((panel) => {
@@ -542,6 +542,8 @@ const getAssignedPanels = async (req, res) => {
         return {
           panelId: panel._id,
           panelName: panel.name,
+          Short_name: panel.Short_name || "",
+          shortName: panel.Short_name || "",
           basePrice: panel.price || 0,
           tests: panel.tests,
           // If there's an assigned price for the franchisee, use it; otherwise use default
@@ -574,7 +576,7 @@ const getAssignedPanels = async (req, res) => {
             },
           ],
         })
-        .select("name tests price final_price assignedPrices sample_types createdAt")
+        .select("name Short_name tests price final_price assignedPrices sample_types createdAt")
         .lean();
     }
 
@@ -595,6 +597,8 @@ const getAssignedPanels = async (req, res) => {
       return {
         panelId: panel._id, // From pannelSchema
         panelName: panel.name, // From pannelSchema
+        Short_name: panel.Short_name || "",
+        shortName: panel.Short_name || "",
         tests: panel.tests, // From pannelSchema
         basePrice: panel.price, // From pannelSchema
         mrpPrice: panel.final_price,

@@ -97,7 +97,8 @@ const getDocumentNameByType = (doc, itemType) => {
 };
 
 const getDocumentShortNameByType = (doc, itemType) => {
-  if (itemType === "test") return doc.Short_name || "";
+  if (itemType === "test") return doc.Short_name || doc.shortName || "";
+  if (itemType === "panel") return doc.Short_name || doc.shortName || doc.short_name || "";
   return "";
 };
 
@@ -358,6 +359,7 @@ const fetchCatalogDocuments = async ({ req, bookingUserId, itemIdsByType = null 
         $project: {
           _id: 1,
           name: 1,
+          Short_name: 1,
           bookingCode: 1,
           order: 1,
           sample_types: 1,

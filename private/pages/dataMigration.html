@@ -1,0 +1,695 @@
+<div class="data-migration-wrapper">
+    <style>
+        .data-migration-wrapper {
+            padding: 24px;
+            color: #1e293b;
+            font-family: inherit;
+        }
+
+        .dm-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .dm-title-box h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dm-title-box p {
+            color: #64748b;
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .dm-header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .dm-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 18px;
+            border-radius: 8px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            text-decoration: none;
+        }
+
+        .dm-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .dm-btn-primary {
+            background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(67, 97, 238, 0.25);
+        }
+
+        .dm-btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(67, 97, 238, 0.35);
+            color: white;
+        }
+
+        .dm-btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .dm-btn-success:hover:not(:disabled) {
+            background: #059669;
+            color: white;
+        }
+
+        .dm-btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .dm-btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+            color: white;
+        }
+
+        .dm-btn-outline {
+            background: white;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+        }
+
+        .dm-btn-outline:hover:not(:disabled) {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+
+        /* KPI Cards Grid */
+        .dm-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .dm-kpi-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dm-kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #e2e8f0;
+        }
+
+        .dm-kpi-card.kpi-blue::before { background: #3b82f6; }
+        .dm-kpi-card.kpi-green::before { background: #10b981; }
+        .dm-kpi-card.kpi-amber::before { background: #f59e0b; }
+        .dm-kpi-card.kpi-purple::before { background: #8b5cf6; }
+
+        .dm-kpi-title {
+            font-size: 13px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .dm-kpi-val {
+            font-size: 26px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+
+        .dm-kpi-sub {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* Main Config Section */
+        .dm-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .dm-card-header {
+            padding: 16px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .dm-card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
+        }
+
+        .dm-card-body {
+            padding: 20px;
+        }
+
+        /* Tenant Selector Panel */
+        .dm-tenant-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .dm-tenant-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .dm-select {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1.5px solid #cbd5e1;
+            font-size: 14px;
+            color: #1e293b;
+            background: white;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .dm-select:focus {
+            border-color: #4361ee;
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
+        }
+
+        .dm-input-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .dm-checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13.5px;
+            color: #334155;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+            margin-top: 8px;
+        }
+
+        .dm-checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #4361ee;
+            cursor: pointer;
+        }
+
+        /* Action Toolbar */
+        .dm-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .dm-preset-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .dm-filter-chips {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .dm-chip {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid #cbd5e1;
+            background: white;
+            color: #475569;
+            transition: all 0.15s ease;
+        }
+
+        .dm-chip.active {
+            background: #4361ee;
+            color: white;
+            border-color: #4361ee;
+        }
+
+        .dm-search-box {
+            position: relative;
+            min-width: 240px;
+        }
+
+        .dm-search-box input {
+            width: 100%;
+            padding: 8px 12px 8px 34px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .dm-search-box i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+        /* Table Styles */
+        .dm-table-responsive {
+            overflow-x: auto;
+        }
+
+        .dm-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13.5px;
+        }
+
+        .dm-table th {
+            background: #f8fafc;
+            padding: 12px 16px;
+            font-weight: 700;
+            color: #475569;
+            border-bottom: 1.5px solid #e2e8f0;
+            text-transform: uppercase;
+            font-size: 11.5px;
+            letter-spacing: 0.5px;
+        }
+
+        .dm-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+            vertical-align: middle;
+        }
+
+        .dm-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .dm-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11.5px;
+            font-weight: 700;
+        }
+
+        .dm-badge-master {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .dm-badge-junk {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .dm-badge-synced {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .dm-badge-diff {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .dm-badge-missing {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        /* Modal Styles */
+        .dm-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .dm-modal-overlay.active {
+            display: flex;
+        }
+
+        .dm-modal {
+            background: white;
+            border-radius: 16px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+            animation: dmModalFadeIn 0.2s ease-out;
+        }
+
+        @keyframes dmModalFadeIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .dm-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dm-modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dm-modal-close {
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #64748b;
+        }
+
+        .dm-modal-body {
+            padding: 24px;
+        }
+
+        .dm-modal-footer {
+            padding: 16px 24px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Progress Bar */
+        .dm-progress-box {
+            display: none;
+            margin-bottom: 20px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .dm-progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            color: #3730a3;
+            margin-bottom: 8px;
+        }
+
+        .dm-progress-bar {
+            height: 8px;
+            background: #cbd5e1;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .dm-progress-fill {
+            height: 100%;
+            background: #4361ee;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .dm-callout {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 16px;
+            font-size: 13.5px;
+            color: #166534;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .dm-callout-warning {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
+        }
+    </style>
+
+    <!-- Header Section -->
+    <div class="dm-header">
+        <div class="dm-title-box">
+            <h1><i class="fas fa-database text-primary"></i> Offline Data Migration & Seed Manager</h1>
+            <p>Export latest online MongoDB master data & clean up junk data for offline installer builds (<code>LabflowOfflineexe</code>).</p>
+        </div>
+        <div class="dm-header-actions">
+            <button class="dm-btn dm-btn-outline" id="btnRefreshStatus" title="Reload live database status">
+                <i class="fas fa-sync-alt"></i> Refresh Status
+            </button>
+            <a href="/api/v1/offline-migration/download-zip" class="dm-btn dm-btn-outline" id="btnDownloadZip" title="Download backup zip bundle">
+                <i class="fas fa-file-archive"></i> Download ZIP
+            </a>
+        </div>
+    </div>
+
+    <!-- Live KPI Summary -->
+    <div class="dm-kpi-grid">
+        <div class="dm-kpi-card kpi-blue">
+            <div class="dm-kpi-title">Online Database</div>
+            <div class="dm-kpi-val" id="kpiOnlineCount">--</div>
+            <div class="dm-kpi-sub" id="kpiOnlineSub">Loading collections...</div>
+        </div>
+        <div class="dm-kpi-card kpi-green">
+            <div class="dm-kpi-title">Offline Seed Backup</div>
+            <div class="dm-kpi-val" id="kpiOfflineSize">--</div>
+            <div class="dm-kpi-sub" id="kpiOfflineDocs">-- total documents</div>
+        </div>
+        <div class="dm-kpi-card kpi-amber">
+            <div class="dm-kpi-title">Package Cleanliness</div>
+            <div class="dm-kpi-val" id="kpiHealthStatus">--</div>
+            <div class="dm-kpi-sub" id="kpiJunkWarning">Checking for junk collections...</div>
+        </div>
+        <div class="dm-kpi-card kpi-purple">
+            <div class="dm-kpi-title">Last Backup Created</div>
+            <div class="dm-kpi-val" id="kpiLastBackup" style="font-size: 16px; padding-top: 8px;">--</div>
+            <div class="dm-kpi-sub">Target: <code>labflow-database-backup</code></div>
+        </div>
+    </div>
+
+    <!-- Active Progress Indicator -->
+    <div class="dm-progress-box" id="dmProgressBox">
+        <div class="dm-progress-header">
+            <span id="dmProgressText">Exporting collections to offline seed...</span>
+            <span id="dmProgressPercent">0%</span>
+        </div>
+        <div class="dm-progress-bar">
+            <div class="dm-progress-fill" id="dmProgressFill"></div>
+        </div>
+    </div>
+
+    <!-- User / Tenant Selection Panel -->
+    <div class="dm-card">
+        <div class="dm-card-header">
+            <h2 class="dm-card-title">
+                <i class="fas fa-user-tag text-primary"></i> Step 1: Select User / Tenant Source Context
+            </h2>
+            <span class="dm-badge dm-badge-synced" id="tenantBadge">Global Master Mode</span>
+        </div>
+        <div class="dm-card-body">
+            <div class="dm-tenant-grid">
+                <div>
+                    <label class="dm-input-label" for="tenantSelect">Select Source Tenant / User for Scoped Data:</label>
+                    <select id="tenantSelect" class="dm-select">
+                        <option value="">🌐 Global / System Master Data (All Base Tests & Categories)</option>
+                    </select>
+                    <label class="dm-checkbox-label">
+                        <input type="checkbox" id="chkIncludeBaseMaster" checked>
+                        <span>Always include SuperAdmin Master Base Tests & Standard Templates</span>
+                    </label>
+                </div>
+                <div style="background: #f8fafc; padding: 14px 18px; border-radius: 8px; border: 1px dashed #cbd5e1; max-width: 380px;">
+                    <div style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 4px;">
+                        <i class="fas fa-info-circle text-primary"></i> Multi-User Sync Tip:
+                    </div>
+                    <div style="font-size: 12.5px; color: #64748b; line-height: 1.4;">
+                        Aap kisi specific tenant ke custom tests sync kar sakte hain, aur baad me kisi doosre tenant ki report templates add kar sakte hain bina pura data reset kiye.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Collections Selection & Actions -->
+    <div class="dm-card">
+        <div class="dm-card-header">
+            <h2 class="dm-card-title">
+                <i class="fas fa-layer-group text-primary"></i> Step 2: Choose Collections to Sync or Clean
+            </h2>
+            <div style="display: flex; gap: 10px;">
+                <button class="dm-btn dm-btn-danger" id="btnWipeJunk" title="Delete old patient bookings, reports, 180MB customization, etc.">
+                    <i class="fas fa-broom"></i> Wipe Faltu/Junk Data
+                </button>
+                <button class="dm-btn dm-btn-primary" id="btnSyncSelected">
+                    <i class="fas fa-cloud-download-alt"></i> Sync Selected Collections to Offline
+                </button>
+            </div>
+        </div>
+
+        <!-- Presets and Search Toolbar -->
+        <div class="dm-toolbar">
+            <div class="dm-preset-buttons">
+                <button class="dm-btn dm-btn-success dm-btn-sm" id="btnPresetMasterOnly" style="padding: 6px 14px; font-size: 12.5px;">
+                    <i class="fas fa-check-circle"></i> ✨ Recommended Clean Master Data
+                </button>
+                <button class="dm-btn dm-btn-outline dm-btn-sm" id="btnSelectAll" style="padding: 6px 12px; font-size: 12.5px;">
+                    Select All
+                </button>
+                <button class="dm-btn dm-btn-outline dm-btn-sm" id="btnDeselectAll" style="padding: 6px 12px; font-size: 12.5px;">
+                    Deselect All
+                </button>
+            </div>
+
+            <div class="dm-filter-chips">
+                <span class="dm-chip active" data-filter="all">All</span>
+                <span class="dm-chip" data-filter="master">Master Only (🟢)</span>
+                <span class="dm-chip" data-filter="junk">Junk Only (🔴)</span>
+                <span class="dm-chip" data-filter="outdated">Outdated / Missing</span>
+            </div>
+
+            <div class="dm-search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="collectionSearch" placeholder="Search collection name...">
+            </div>
+        </div>
+
+        <!-- Collections Table -->
+        <div class="dm-table-responsive">
+            <table class="dm-table" id="collectionsTable">
+                <thead>
+                    <tr>
+                        <th style="width: 40px; text-align: center;">
+                            <input type="checkbox" id="chkMasterAll" style="width: 16px; height: 16px; accent-color: #4361ee; cursor: pointer;">
+                        </th>
+                        <th>Collection Name</th>
+                        <th>Category</th>
+                        <th style="text-align: right;">Online DB Count</th>
+                        <th style="text-align: right;">Offline Seed Count</th>
+                        <th style="text-align: right;">Offline File Size</th>
+                        <th>Status</th>
+                        <th style="text-align: center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="collectionsTableBody">
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 40px; color: #94a3b8;">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <div style="margin-top: 10px;">Loading database collections...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Build Exe Instructions Callout -->
+    <div class="dm-callout" style="background: #f8fafc; border-color: #e2e8f0; color: #334155;">
+        <i class="fas fa-terminal fa-lg text-primary" style="margin-top: 2px;"></i>
+        <div>
+            <strong style="color: #0f172a;">Next Step After Data Sync:</strong>
+            <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">
+                Jab aapka desired data sync ho jaye aur junk data clean ho jaye, tab terminal me <code>C:\Users\kaifx\Desktop\labflowlis.com\LabflowOfflineexe</code> path par jayein aur naya installer build karne ke liye ye command chalayein:
+                <br>
+                <code style="background: #1e293b; color: #38bdf8; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 6px;">npm run build:electron:setup</code>
+            </p>
+        </div>
+    </div>
+
+    <!-- Summary Modal -->
+    <div class="dm-modal-overlay" id="summaryModal">
+        <div class="dm-modal">
+            <div class="dm-modal-header">
+                <h3 class="dm-modal-title" id="summaryModalTitle">
+                    <i class="fas fa-check-circle text-success"></i> Operation Completed
+                </h3>
+                <button class="dm-modal-close" id="btnCloseSummaryModal">&times;</button>
+            </div>
+            <div class="dm-modal-body" id="summaryModalBody">
+                <!-- Dynamic summary injected here -->
+            </div>
+            <div class="dm-modal-footer">
+                <button class="dm-btn dm-btn-primary" id="btnOkSummaryModal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>

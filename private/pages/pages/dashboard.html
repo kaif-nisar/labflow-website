@@ -1,9 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard</title>
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
   <style>
     :root {
       --bg-1: #f6f8fd;
@@ -51,48 +52,67 @@
     .dash-wrap > * { min-width: 0; }
 
     /* ─── HEADER ───────────────────────────────────────────── */
+    /* ─── HEADER CONTAINER ─────────────────────────────────── */
     .head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      background: rgba(255, 255, 255, 0.88);
+      background: rgba(255, 255, 255, 0.95);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: var(--pad);
+      padding: 16px 20px;
       box-shadow: var(--shadow);
-      backdrop-filter: blur(6px);
-      flex-wrap: wrap;
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       min-width: 0;
     }
 
-    .head > div:first-child { min-width: 0; }
-
-    .head h1 {
-      margin: 0;
-      font-size: clamp(16px, 2.5vw, 22px);
-      line-height: 1.2;
-      letter-spacing: 0.2px;
-      font-weight: 700;
+    .head-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
     }
 
-    .head p {
-      margin: 6px 0 0;
+    .head-title-wrap h1 {
+      margin: 0;
+      font-size: clamp(16px, 2.2vw, 21px);
+      line-height: 1.2;
+      font-weight: 700;
+      color: #101c2e;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .head-title-wrap h1 i {
+      color: #0f62fe;
+      font-size: 18px;
+    }
+
+    .head-title-wrap p {
+      margin: 4px 0 0;
       color: var(--muted);
-      font-size: clamp(11px, 1.5vw, 13px);
+      font-size: clamp(11px, 1.3vw, 12.5px);
+    }
+
+    .head-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .badge {
       border: 1px solid var(--line);
       border-radius: 999px;
-      padding: 7px 12px;
+      padding: 5px 12px;
       background: #fff;
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--muted);
-      white-space: normal;
-      overflow-wrap: anywhere;
-      max-width: 100%;
+      white-space: nowrap;
       flex-shrink: 0;
+      font-weight: 600;
     }
 
     /* ─── METRIC CARDS ─────────────────────────────────────── */
@@ -476,13 +496,340 @@
       table { min-width: 440px; }
     }
 
-    /* Very small mobile (≤359px) */
-    @media (max-width: 359px) {
-      :root { --gap: 6px; --pad: 8px; }
-      .metrics { grid-template-columns: 1fr; }
-      .kv { grid-template-columns: 1fr; }
-      .metric-card { min-height: 80px; }
-      .chart-box { height: 180px; }
+    /* ─── COMPACT MINIMALIST FILTER TOOLBAR (Inside Header) ─────── */
+    .head-filter-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-top: 14px;
+      border-top: 1px solid #e9edf4;
+      margin-top: 2px;
+    }
+
+    .toolbar-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .control-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-item label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+      white-space: nowrap;
+    }
+
+    .select-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .filter-select-compact {
+      appearance: none;
+      -webkit-appearance: none;
+      height: 36px;
+      padding: 0 32px 0 12px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #1e293b;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .filter-select-compact:hover {
+      border-color: #0f62fe;
+    }
+
+    .filter-select-compact:focus {
+      border-color: #0f62fe;
+      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+    }
+
+    .select-chevron {
+      position: absolute;
+      right: 11px;
+      font-size: 10px;
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    /* Date range cluster with From and To inside */
+    .date-range-cluster {
+      display: inline-flex;
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 2px 8px;
+      height: 36px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      gap: 6px;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .date-range-cluster:focus-within {
+      border-color: #0f62fe;
+      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+    }
+
+    .date-field-unit {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .date-field-tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #475569;
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 2px 5px;
+      line-height: 1.2;
+      user-select: none;
+      letter-spacing: 0.3px;
+    }
+
+    .filter-date-input {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      color: #1e293b;
+      padding: 0;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .date-range-divider {
+      color: #94a3b8;
+      font-size: 10px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 1px;
+    }
+
+    .toolbar-actions-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-compact-apply {
+      height: 36px;
+      padding: 0 14px;
+      background: #0f62fe;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+      white-space: nowrap;
+      box-shadow: 0 2px 5px rgba(15, 98, 254, 0.22);
+    }
+
+    .btn-compact-apply:hover {
+      background: #0043ce;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(15, 98, 254, 0.3);
+    }
+
+    .btn-compact-apply:active {
+      transform: translateY(0);
+    }
+
+    .btn-compact-today {
+      height: 36px;
+      padding: 0 12px;
+      background: #0b7f5e;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.16s ease, transform 0.12s ease;
+      white-space: nowrap;
+      box-shadow: 0 2px 5px rgba(11, 127, 94, 0.2);
+    }
+
+    .btn-compact-today:hover {
+      background: #08664b;
+      transform: translateY(-1px);
+    }
+
+    .btn-compact-today:active {
+      transform: translateY(0);
+    }
+
+    .btn-compact-refresh {
+      height: 36px;
+      width: 36px;
+      padding: 0;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      border-radius: 8px;
+      font-size: 12.5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.16s ease;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .btn-compact-refresh:hover {
+      background: #f8fafc;
+      color: #0f62fe;
+      border-color: #0f62fe;
+    }
+
+    .toolbar-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-active-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1d4ed8;
+      white-space: nowrap;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #107c41;
+      display: inline-block;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 124, 65, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 124, 65, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 124, 65, 0); }
+    }
+
+    .filter-loader-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #0f62fe;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .spinner-small {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(15, 98, 254, 0.2);
+      border-top-color: #0f62fe;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 900px) {
+      .head-filter-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .toolbar-controls {
+        width: 100%;
+      }
+      .toolbar-status {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .toolbar-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .control-item {
+        width: 100%;
+        display: flex;
+      }
+      .control-item .select-wrapper,
+      .control-item .date-range-cluster {
+        flex: 1;
+        width: 100%;
+      }
+      .filter-select-compact {
+        width: 100%;
+      }
+      .date-range-cluster {
+        justify-content: space-between;
+      }
+      .toolbar-actions-group {
+        width: 100%;
+        display: flex;
+      }
+      .btn-compact-apply {
+        flex: 1;
+        justify-content: center;
+      }
+      .btn-compact-today {
+        flex: 1;
+        justify-content: center;
+      }
+    }
+
+    @media (max-width: 440px) {
+      .date-range-cluster {
+        flex-direction: column;
+        height: auto;
+        padding: 6px 8px;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .date-range-divider {
+        display: none;
+      }
+      .date-field-unit {
+        justify-content: space-between;
+      }
     }
   </style>
 </head>
@@ -491,11 +838,78 @@
     <div class="dash-wrap">
 
       <header class="head">
-        <div>
-          <h1>Operations &amp; Subscription Dashboard</h1>
-          <p id="dashSubtitle">Realtime tenant and booking performance summary.</p>
+        <div class="head-top">
+          <div class="head-title-wrap">
+            <h1><i class="fa-solid fa-chart-line"></i> Operations &amp; Subscription Dashboard</h1>
+            <p id="dashSubtitle">Realtime tenant and booking performance summary.</p>
+          </div>
+          <div class="head-badges">
+            <span class="tenant-scope-pill"><i class="fa-solid fa-shield-halved"></i> Tenant Isolated Data</span>
+            <div class="badge" id="dashLastUpdated">Last sync: --</div>
+          </div>
         </div>
-        <div class="badge" id="dashLastUpdated">Last update: --</div>
+
+        <!-- ── COMPACT MINIMALIST FILTER TOOLBAR ── -->
+        <div class="head-filter-toolbar" id="dashFilterSection">
+          <div class="toolbar-controls">
+            <!-- 1. Selection Box (Strictly requested presets) -->
+            <div class="control-item">
+              <label for="dashPresetSelect"><i class="fa-regular fa-clock"></i> Period:</label>
+              <div class="select-wrapper">
+                <select id="dashPresetSelect" class="filter-select-compact">
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="last_7_days">Last 7 Days</option>
+                  <option value="one_month" selected>One Month</option>
+                  <option value="six_month">Six Month</option>
+                  <option value="one_year">One Year</option>
+                  <option value="five_year">Five Year</option>
+                  <option value="all_time">All Time</option>
+                  <option value="custom">Custom Date Range</option>
+                </select>
+                <i class="fa-solid fa-chevron-down select-chevron"></i>
+              </div>
+            </div>
+
+            <!-- 2. Date Range Picker (From / To labels inside) -->
+            <div class="control-item">
+              <div class="date-range-cluster">
+                <div class="date-field-unit">
+                  <span class="date-field-tag">From</span>
+                  <input type="date" id="dashStartDate" class="filter-date-input" aria-label="From Date" />
+                </div>
+                <span class="date-range-divider"><i class="fa-solid fa-arrow-right"></i></span>
+                <div class="date-field-unit">
+                  <span class="date-field-tag">To</span>
+                  <input type="date" id="dashEndDate" class="filter-date-input" aria-label="To Date" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Action Buttons -->
+            <div class="toolbar-actions-group">
+              <button type="button" id="dashApplyBtn" class="btn-compact-apply" title="Apply filter">
+                <i class="fa-solid fa-filter"></i> Apply
+              </button>
+              <button type="button" id="dashTodayBtn" class="btn-compact-today" title="Instant Today (Exact realtime)">
+                <i class="fa-solid fa-bolt"></i> Today
+              </button>
+              <button type="button" id="dashRefreshBtn" class="btn-compact-refresh" title="Refresh current view">
+                <i class="fa-solid fa-rotate"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar-status">
+            <div class="filter-active-pill" id="activeFilterBadge">
+              <span class="pulse-dot"></span>
+              <span id="activeFilterText">One Month</span>
+            </div>
+            <div id="filterLoadingIndicator" class="filter-loader-inline" style="display: none;">
+              <span class="spinner-small"></span> <span>Syncing...</span>
+            </div>
+          </div>
+        </div>
       </header>
 
       <!-- ── METRIC CARDS ─────────────────────────────────── -->
@@ -630,6 +1044,39 @@
           </div>
           <p class="scroll-hint">← Scroll table to see more →</p>
         </article>
+      </section>
+
+      <!-- ── RECENT TENANT BOOKINGS ──────────────────────────── -->
+      <section class="panel" id="recentBookingsPanel" data-permission="canManageBookings">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h2 style="margin: 0; display: inline-flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-list-check" style="color: #0f62fe;"></i>
+              <span>Recent Tenant Bookings</span>
+            </h2>
+            <p class="muted" style="margin: 4px 0 0;">Recent bookings recorded strictly under this tenant.</p>
+          </div>
+          <span class="filter-active-badge" id="recentBookingsCount">0 Bookings</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Patient Name</th>
+                <th>Phone No</th>
+                <th>Total (₹)</th>
+                <th>Status</th>
+                <th>Booking Date &amp; Time</th>
+              </tr>
+            </thead>
+            <tbody id="recentBookingsTbody">
+              <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 14px;">Loading bookings...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="scroll-hint">← Scroll table to see more →</p>
       </section>
 
     </div>

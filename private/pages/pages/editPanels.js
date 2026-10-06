@@ -97,6 +97,8 @@ async function addpannelfun() {
     function populateFields(panelData) {
         populateSelectedTests(panelData);
         panelNameInput.value = panelData.name;
+        const shortNameInput = document.getElementById("short-name");
+        if (shortNameInput) shortNameInput.value = panelData.Short_name || panelData.shortName || '';
         document.getElementById("price").value = panelData.price;
         document.getElementById("final-price").value = panelData.final_price;
         setCheckboxState('hide-interpretation', panelData.hideInterpretation);
@@ -313,6 +315,7 @@ async function addpannelfun() {
 
             try {
                 const pannelname = namefield.value.trim();
+                const shortName = document.getElementById('short-name')?.value?.trim() || '';
                 const price = document.getElementById("price").value;
                 const final_price = document.getElementById("final-price").value;
                 const interpretation = typeof getEditorData === 'function' ? getEditorData() : '';
@@ -337,6 +340,8 @@ async function addpannelfun() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         pannelname,
+                        Short_name: shortName,
+                        shortName: shortName,
                         category,
                         price,
                         inputarray: uniqueInputArray,

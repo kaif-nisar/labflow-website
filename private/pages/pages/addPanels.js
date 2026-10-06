@@ -71,6 +71,8 @@
         uniqueSampleTypes.clear();
         currentSampleType = null;
         tagsContainer.innerHTML = '';
+        const shortNameInput = document.getElementById("short-name");
+        if (shortNameInput) shortNameInput.value = '';
     }
 
     // ===========================
@@ -213,6 +215,7 @@
     function savePanel() {
         document.querySelector('.save').addEventListener('click', async () => {
             const nameField = document.getElementById('name');
+            const shortName = document.getElementById('short-name')?.value?.trim() || '';
             const price = document.getElementById("price").value;
             const finalPrice = document.getElementById("final-price").value;
             const interpretation = typeof getEditorData === 'function' ? getEditorData() : '';
@@ -245,6 +248,8 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         pannelname: nameField.value.trim(),
+                        Short_name: shortName,
+                        shortName: shortName,
                         price,
                         final_price: finalPrice,
                         category,

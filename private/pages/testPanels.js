@@ -1,9 +1,55 @@
+
+// async function fetchingPannelsfromDatabase() {
+//     try {
+//         const response = await fetch(`${BASE_URL}/api/v1/user/all-pannels`,{method:"POST"})
+
+//         if(!response.ok) {
+//             throw new Error("something went wrong while fetching details")
+//         }
+
+//         const allpannels = await response.json();
+//         printPannelsInTable(allpannels);
+
+//     } catch (error) {
+//         console.log(error);
+//     }
+// }
+
+// function printPannelsInTable(allpannels) {
+//     const pannelTableBody = document.querySelector('#pannel-table tbody');
+//     pannelTableBody.innerHTML = '';
+//     let orderId = 0;
+
+//     allpannels.forEach(pannel => {
+//         const row = document.createElement('tr');
+//         orderId++;
+
+//         row.innerHTML = `
+//         <td>${orderId}</td>
+//         <td>${pannel.name}</td>
+//         <td>${pannel.category}</td>
+//         <td>${pannel.price}</td>
+//         <td>${pannel.tests}</td>
+//         <td>${pannel.sample_types}</td>
+//          <td class="actions">
+//                 <a href="#" onclick="loadPage('editPanels', '${pannel._id}')">Edit</a>
+//             </td>`
+
+//         pannelTableBody.appendChild(row);
+//     })
+// }
+
+// fetchingPannelsfromDatabase();
+
+
+
+
 async function fetchingPannelsfromDatabase() {
     const loader = document.querySelector(".loader");
     loader.style.display = "block";
 
     try {
-        const response = await fetch(`${BASE_URL}/api/v1/user/all-pannels`, { method: "POST" });
+        const response = await fetch(`${BASE_URL}/api/v1/user/all-pannels-tenant`, { method: "POST" });
 
         if (!response.ok) {
             throw new Error("Something went wrong while fetching details");
@@ -11,17 +57,17 @@ async function fetchingPannelsfromDatabase() {
 
         const panelData = await response.json();
 
-        populatePannelsTable(panelData);
+        populatePannelsTable(panelData.panels);
 
     } catch (error) {
         console.log(error);
     } finally {
-        loader.style.display = "none";
+    loader.style.display = "none";
     }
 }
 
 async function populatePannelsTable(pannels) {
-    // console.log(pannels)
+    console.log(pannels)
     const tbody = document.querySelector("#pannel-table tbody");
     tbody.innerHTML = "";
 
@@ -49,7 +95,7 @@ async function populatePannelsTable(pannels) {
         row.innerHTML = `
             <td><input type="checkbox" class="row-checkbox" value="${pannel._id}" onchange="toggleBulkDeleteBtn()"></td>
             <td class="order"><i class="fa-solid fa-up-down"></i>${pannel.order}</td>
-            <td>${pannel.name}</td>
+            <td>${pannel.name}${pannel.Short_name || pannel.shortName ? ` (${pannel.Short_name || pannel.shortName})` : ''}</td>
             <td>${pannel.category.category}</td>
             <td>${pannel.price}</td>
             <td class="pannelTests">${pannel.tests}</td>
@@ -67,7 +113,7 @@ async function populatePannelsTable(pannels) {
 }
 
 function addDragAndDropListeners() {
-    const rows = document.querySelectorAll("#pannel-table tbody tr");
+    const rows = document.querySelectorAll("#pannel-table tbody tr:not(#noMatch)");
     let draggedRow = null;
 
     rows.forEach(row => {
@@ -151,7 +197,7 @@ async function saveOrderToServer(updatedOrder) {
     // Hide the table container
     tableContainer.style.display = "none";
     try {
-        const response = await fetch(`${BASE_URL}/api/v1/user/updatePannelOrdersuper`, {
+        const response = await fetch(`${BASE_URL}/api/v1/user/updatePannelOrder`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -172,7 +218,7 @@ async function saveOrderToServer(updatedOrder) {
     } finally {
         // Show the table container and hide the loading animation
         tableContainer.style.display = "block";
-        loader.style.display = "none";
+    loader.style.display = "none";
     }
 }
 fetchingPannelsfromDatabase();

@@ -673,7 +673,8 @@
                     itemId: item.panelId || item._id,
                     collectionName: 'addPannel',
                     itemName: item.panelName || item.name || '',
-                    sampleTypes: normalizeLegacySampleTypes(item.sampleType),
+                    shortName: item.shortName || item.Short_name || item.short_name || '',
+                    sampleTypes: normalizeLegacySampleTypes(item.sampleType || item.sample_types),
                     basePrice: item.myPrice ?? item.franchiseePrice ?? item.basePrice ?? item.price ?? 0,
                     mrpPrice: item.mrpPrice ?? item.final_price ?? 0,
                     price: item.myPrice ?? item.franchiseePrice ?? item.basePrice ?? item.price ?? 0,
@@ -1202,13 +1203,46 @@
             });
         }
 
+        function scoreSearchMatch(item, query) {
+            if (!query) return 0;
+            const q = query.trim().toLowerCase();
+            const sName = String(item.shortName || '').trim().toLowerCase();
+            const iName = String(item.itemName || '').trim().toLowerCase();
+            const bCode = String(item.bookingCode || '').trim().toLowerCase();
+
+            // 1. Exact match on Short Name (Highest priority - e.g. "LIPID" matches "LIPID PROFILE (LIPID)")
+            if (sName && sName === q) return 10000;
+            // 2. Short Name starts with query (e.g. "LIP" matches "LIPID")
+            if (sName && sName.startsWith(q)) return 8000;
+            // 3. Exact booking code match
+            if (bCode && bCode === q) return 7000;
+            // 4. Short Name contains query
+            if (sName && sName.includes(q)) return 6000;
+            // 5. Exact match on full Item Name
+            if (iName === q) return 5000;
+            // 6. Item Name starts with query (e.g. "Lipid Profile" when searching "lipid")
+            if (iName.startsWith(q)) return 4000;
+            // 7. Individual word in Item Name equals query or starts with query
+            const words = iName.split(/[^a-z0-9]+/);
+            if (words.some(w => w === q)) return 3000;
+            if (words.some(w => w.startsWith(q))) return 2000;
+            // 8. Panels / Packages slight boost over individual minor parameters if matched
+            let boost = 0;
+            if (item.itemType === 'panel') boost = 150;
+            if (item.itemType === 'package') boost = 100;
+            // 9. Item Name substring match
+            if (iName.includes(q)) return 1000 + boost;
+            // 10. Default substring search match
+            return 100 + boost;
+        }
+
         function getFilteredAvailableItems(query = String(refs.availableSearch?.value || '').trim().toLowerCase()) {
             const blockedKeys = new Set([
                 ...Array.from(state.lockedItems.keys()),
                 ...Array.from(state.newSelectedItems.keys()),
             ]);
 
-            return state.catalogItems.filter((item) => {
+            const matched = state.catalogItems.filter((item) => {
                 const key = buildItemKey(item.itemType, item.itemId);
                 if (blockedKeys.has(key)) {
                     return false;
@@ -1227,6 +1261,20 @@
                 ].join(' ').toLowerCase();
 
                 return searchPool.includes(query);
+            });
+
+            if (!query) {
+                return matched;
+            }
+
+            // Sort matched items by Short Name & relevance priority
+            return matched.sort((a, b) => {
+                const scoreA = scoreSearchMatch(a, query);
+                const scoreB = scoreSearchMatch(b, query);
+                if (scoreB !== scoreA) {
+                    return scoreB - scoreA;
+                }
+                return String(a.itemName || '').localeCompare(String(b.itemName || ''));
             });
         }
 
@@ -1336,7 +1384,7 @@
                 return `
                     <span class="tests-name-option" data-action="select-item" data-item-key="${escapeHtml(key)}" style="justify-content:space-between;gap:10px;">
                         <span style="display:flex;flex-direction:column;">
-                            <strong>${escapeHtml(item.itemName)}</strong>
+                            <strong>${escapeHtml(item.itemName)}${item.shortName ? ` (${escapeHtml(item.shortName)})` : ''}</strong>
                             <small>${escapeHtml(item.itemType)} | ${escapeHtml(sampleText)} | ${escapeHtml(sourceLabel)}${escapeHtml(codeLabel)}</small>
                         </span>
                         <span>Rs. ${formatCurrency(item.price)}</span>
@@ -1378,7 +1426,7 @@
                         style="justify-content:space-between;gap:10px;${item.isRemovable ? '' : 'opacity:0.7;cursor:default;'}"
                     >
                         <span style="display:flex;flex-direction:column;">
-                            <strong>${escapeHtml(item.itemName || key)}</strong>
+                            <strong>${escapeHtml(item.itemName || key)}${item.shortName ? ` (${escapeHtml(item.shortName)})` : ''}</strong>
                             <small>${escapeHtml(item.itemType)} | ${escapeHtml(sourceLabel)} | ${escapeHtml(badgeText)}</small>
                         </span>
                         <span>Rs. ${formatCurrency(item.price)}</span>
