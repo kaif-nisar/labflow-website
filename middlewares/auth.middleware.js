@@ -118,7 +118,6 @@ const normalizeSessionType = (value) => {
 const buildUnauthorizedError = (message, code = "UNAUTHORIZED") => {
   const error = new ApiError(401, message);
   error.code = code;
-  error.clearAuth = true;
   return error;
 };
 
@@ -986,9 +985,22 @@ const requireUserAccess = async (req) => {
       process.env.SUPER_ADMIN_ACCESS_TOKEN_SECRET
     );
 
+    // If token indicates superAdmin role, resolve superAdmin directly
+    if (decodedToken?.role === "superAdmin") {
+      const superAdmin = await loadSuperAdminSession(decodedToken?._id);
+      if (superAdmin) {
+        return superAdmin;
+      }
+    }
+
     const user = await loadUserSession(decodedToken?._id);
 
     if (!user) {
+      // Fallback check in superAdmin collection in case role was omitted from token
+      const superAdmin = await loadSuperAdminSession(decodedToken?._id);
+      if (superAdmin) {
+        return superAdmin;
+      }
       throw buildUnauthorizedError("Invalid or expired token", "INVALID_TOKEN");
     }
 
@@ -1040,11 +1052,20 @@ const requireSuperAdminAccess = async (req) => {
 export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
   const superAdmin = await requireSuperAdminAccess(req);
   req.superAdmin = superAdmin;
+  req.user = superAdmin;
   next();
 });
 
 const verifyJWT = asyncHandler(async (req, res, next) => {
   const user = await requireUserAccess(req);
+
+  // SuperAdmin has global administrative privileges and no tenant subscription locks
+  if (user?.role === "superAdmin") {
+    req.user = user;
+    req.superAdmin = user;
+    return next();
+  }
+
   const gate = getTenantSubscriptionGate(user.tenantId);
 
   await validateUserDeviceSession(req, user);

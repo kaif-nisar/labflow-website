@@ -175,7 +175,9 @@ import {
   getRecentClients,
   getTopFranchiseesByRevenue,
   getRevenueData,
-  getModelUsageData
+  getModelUsageData,
+  getNotifications,
+  markNotificationsAsRead
 } from "../controllers/analytics.controller.js";
 import {
   loadAllBooking,
@@ -361,9 +363,10 @@ router.get("/tenant-staff/activities", verifyJWT,authorizeRoles(["admin", "franc
 router.get("/dashboard/stats", verifySuperAdmin, getDashboardStats);
 router.get("/dashboard/recent-clients", verifySuperAdmin, getRecentClients);
 router.get("/dashboard/top-franchisees", verifySuperAdmin, getTopFranchiseesByRevenue);
-// router.get("/dashboard/notifications", verifySuperAdmin, getNotifications);
+router.get("/dashboard/notifications", verifySuperAdmin, getNotifications);
+router.post("/dashboard/notifications/mark-read", verifySuperAdmin, markNotificationsAsRead);
 router.get("/dashboard/revenue-data", verifySuperAdmin, getRevenueData);
-router.get("/dashboard/model-usage", verifySuperAdmin, getModelUsageData)
+router.get("/dashboard/model-usage", verifySuperAdmin, getModelUsageData);
 
 // subscription routes
 router.get("/recharge-options", verifyJWT, authorizeRoles(["superAdmin", "admin", "superFranchisee", "franchisee", "subFranchisee", "staff"]), getRechargeOptions);

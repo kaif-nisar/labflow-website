@@ -19,7 +19,7 @@ export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
 
         console.log("decodedToken",decodedToken)
         // console.log("Decoded token:", decodedToken);
-        if (!decodedToken._id || decodedToken.role !== "superAdmin") {
+        if (!decodedToken._id || (decodedToken.role !== "superAdmin" && decodedToken.role !== "staff")) {
             console.log("Access forbidden: Role is not superAdmin");
             return res.status(403).json({ 
                 success: false,
@@ -27,7 +27,7 @@ export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
             });
         }
 
-        // Fetch superAdmin from the database (optional: you can skip this step if it's already decoded in token)
+        // Fetch superAdmin from the database
         const superAdmin = await SuperAdmin.findById(decodedToken._id).select("-password -refreshToken");
 
         if (!superAdmin) {
@@ -38,7 +38,7 @@ export const verifySuperAdmin = asyncHandler(async (req, res, next) => {
             });
         }
         req.user = superAdmin;
-        console.log("req.user",req.user)
+        req.superAdmin = superAdmin;
         next(); // Proceed to the next middleware/route handler
     } catch (error) {
         console.error("Error in verifying Super Admin:", error);

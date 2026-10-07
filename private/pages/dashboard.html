@@ -1,1090 +1,466 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard</title>
-  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
-  <style>
-    :root {
-      --bg-1: #f6f8fd;
-      --bg-2: #eaf0fb;
-      --card: #ffffff;
-      --line: #d9e2ef;
-      --text: #142033;
-      --muted: #5d6b82;
-      --radius: 14px;
-      --shadow: 0 10px 28px rgba(14, 32, 60, 0.08);
-      --gap: 16px;
-      --pad: 16px;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; }
-
-    html { -webkit-text-size-adjust: 100%; }
-    body { margin: 0; }
-
-
-    /* ─── WRAPPER ──────────────────────────────────────────── */
-    #ops-dashboard {
-      color: var(--text);
-      font-family: "Segoe UI", "Arial", sans-serif;
-      /* background:
-        radial-gradient(circle at 8% -14%, #d8e5ff 0%, transparent 42%),
-        radial-gradient(circle at 95% 8%, #d9fbf1 0%, transparent 35%),
-        linear-gradient(180deg, var(--bg-1), var(--bg-2)); */
-      min-height: 100vh;
-      width: 100%;
-      max-width: 100%;
-      overflow-x: hidden;
-      /* padding: clamp(8px, 1.4vw, 16px); */
-    }
-
-    .dash-wrap {
-      width: 100%;
-      max-width: 1440px;
-      margin: 0 auto;
-      display: grid;
-      gap: var(--gap);
-      min-width: 0;
-    }
-
-    .dash-wrap > * { min-width: 0; }
-
-    /* ─── HEADER ───────────────────────────────────────────── */
-    /* ─── HEADER CONTAINER ─────────────────────────────────── */
-    .head {
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    .head-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .head-title-wrap h1 {
-      margin: 0;
-      font-size: clamp(16px, 2.2vw, 21px);
-      line-height: 1.2;
-      font-weight: 700;
-      color: #101c2e;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-    }
-
-    .head-title-wrap h1 i {
-      color: #0f62fe;
-      font-size: 18px;
-    }
-
-    .head-title-wrap p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: clamp(11px, 1.3vw, 12.5px);
-    }
-
-    .head-badges {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .badge {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 5px 12px;
-      background: #fff;
-      font-size: 11.5px;
-      color: var(--muted);
-      white-space: nowrap;
-      flex-shrink: 0;
-      font-weight: 600;
-    }
-
-    /* ─── METRIC CARDS ─────────────────────────────────────── */
-    .metrics {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      min-width: 0;
-    }
-
-    .metric-card {
-      position: relative;
-      border-radius: var(--radius);
-      padding: 14px;
-      box-shadow: var(--shadow);
-      min-height: 100px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.55);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      min-width: 0;
-    }
-
-    .metric-card::before {
-      content: "";
-      position: absolute;
-      inset: -35% auto auto -20%;
-      width: 160px;
-      height: 160px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.42);
-      filter: blur(0.2px);
-      pointer-events: none;
-    }
-
-    .metric-card::after {
-      content: "";
-      position: absolute;
-      inset: auto -20% -46% auto;
-      width: 190px;
-      height: 170px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.34);
-      pointer-events: none;
-    }
-
-    .tone-1 { background: linear-gradient(145deg, #e9f0ff, #dce7ff); }
-    .tone-2 { background: linear-gradient(145deg, #e8fbff, #d3f5fb); }
-    .tone-3 { background: linear-gradient(145deg, #fff1e8, #ffe4d6); }
-    .tone-4 { background: linear-gradient(145deg, #ecfbe8, #daf4d1); }
-    .tone-5 { background: linear-gradient(145deg, #f3efff, #e8ddff); }
-    .tone-6 { background: linear-gradient(145deg, #fff2f6, #ffe2ec); }
-
-    .metric-head {
-      position: relative;
-      z-index: 2;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 6px;
-      min-width: 0;
-    }
-
-    .metric-head > div { min-width: 0; }
-
-    .metric-head .k {
-      font-size: clamp(9px, 1.2vw, 11px);
-      color: #44536b;
-      text-transform: uppercase;
-      letter-spacing: 0.42px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .metric-head .v {
-      font-size: clamp(16px, 2.2vw, 24px);
-      line-height: 1.05;
-      font-weight: 700;
-      color: #0f2038;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-    }
-
-    .trend-chip {
-      font-size: clamp(9px, 1vw, 11px);
-      border-radius: 999px;
-      padding: 4px 8px;
-      font-weight: 700;
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(18, 38, 63, 0.08);
-      color: #274266;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    .spark {
-      position: relative;
-      z-index: 2;
-      margin-top: 8px;
-      height: 28px;
-      width: 100%;
-    }
-
-    .spark polyline {
-      fill: none;
-      stroke-width: 2.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    /* ─── LAYOUT (Subscription + Plans) ───────────────────── */
-    .layout {
-      display: grid;
-      gap: var(--gap);
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      align-items: start;
-      min-width: 0;
-    }
-
-    /* ─── PANELS ───────────────────────────────────────────── */
-    .panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: var(--pad);
-      min-width: 0;
-      overflow: hidden;
-    }
-
-    .panel h2 {
-      margin: 0 0 10px;
-      font-size: clamp(14px, 1.8vw, 16px);
-      letter-spacing: 0.2px;
-    }
-
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 8px;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-    }
-
-    .state-pill {
-      font-size: 11px;
-      border-radius: 999px;
-      padding: 6px 10px;
-      border: 1px solid;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-
-    .state-pill.active,
-    .state-pill.paid  { color: #0b7f5e; background: #e7f9f3; border-color: #bde8da; }
-    .state-pill.grace,
-    .state-pill.pending { color: #9a6107; background: #fff3df; border-color: #f1d6aa; }
-    .state-pill.expired,
-    .state-pill.failed,
-    .state-pill.inactive { color: #9f2d36; background: #ffe8ea; border-color: #f1c2c7; }
-    .state-pill.na { color: #455569; background: #eef3f8; border-color: #d6e0ec; }
-
-    .kv {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .kv div {
-      position: relative;
-      border: 1px solid #e3eaf4;
-      border-radius: 11px;
-      padding: 10px;
-      background: linear-gradient(180deg, #fbfdff 0%, #f6f9ff 100%);
-      min-height: 60px;
-      overflow: hidden;
-      min-width: 0;
-    }
-
-    .kv div::after {
-      content: "";
-      position: absolute;
-      inset: auto -18px -18px auto;
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: rgba(15, 98, 254, 0.08);
-      pointer-events: none;
-    }
-
-    .kv dt {
-      font-size: 10px;
-      color: #617088;
-      margin: 0 0 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.35px;
-      font-weight: 700;
-      position: relative;
-      z-index: 2;
-    }
-
-    .kv dd {
-      margin: 0;
-      font-size: clamp(11px, 1.4vw, 13px);
-      font-weight: 700;
-      word-break: break-word;
-      color: var(--text);
-      position: relative;
-      z-index: 2;
-    }
-
-    /* ─── TABLES ───────────────────────────────────────────── */
-    .plans-table-wrap,
-    .table-wrap {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fff;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 520px;
-      max-width: 100%;
-    }
-
-    th, td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid #edf2f8;
-      font-size: clamp(11px, 1.3vw, 13px);
-      white-space: nowrap;
-    }
-
-    th {
-      background: #f4f7fc;
-      color: #2d3b52;
-      font-weight: 700;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.35px;
-    }
-
-    /* ─── CHARTS SECTION ───────────────────────────────────── */
-    .charts {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--gap);
-      align-items: stretch;
-      min-width: 0;
-    }
-
-    .chart-panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: var(--pad);
-      min-height: 280px;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      overflow: hidden;
-    }
-
-    .chart-panel h3 {
-      margin: 0 0 10px;
-      font-size: clamp(13px, 1.6vw, 15px);
-    }
-
-    .chart-box {
-      position: relative;
-      height: 220px;
-      flex: 1;
-      min-width: 0;
-      width: 100%;
-    }
-
-    .chart-panel.top-tests .chart-box {
-      height: 260px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .chart-panel.top-tests canvas {
-      max-height: 250px !important;
-      max-width: 100%;
-    }
-
-    #ops-dashboard canvas {
-      display: block;
-      width: 100% !important;
-      max-width: 100%;
-    }
-
-    .muted {
-      color: var(--muted);
-      font-size: 12px;
-      margin: 8px 0 0;
-    }
-
-    /* ─── SCROLL HINT for tables on small screens ──────────── */
-    .scroll-hint {
-      display: none;
-      font-size: 11px;
-      color: var(--muted);
-      text-align: center;
-      padding: 4px 0 0;
-    }
-
-    /* ════════════════════════════════════════════════════════
-       RESPONSIVE BREAKPOINTS
-    ════════════════════════════════════════════════════════ */
-
-    /* Large desktop (≥1400px): already wide — no extra changes needed */
-
-    /* Desktop (1200–1399px) */
-    @media (max-width: 1399px) {
-      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-
-    /* Laptop / large tablet landscape (1024–1199px) */
-    @media (max-width: 1199px) {
-      .layout  { grid-template-columns: 1fr; }
-      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-
-    /* Tablet landscape + small laptop (768–1023px) */
-    @media (max-width: 1023px) {
-      :root { --gap: 14px; --pad: 14px; }
-      .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .kv     { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-
-    /* Tablet portrait (600–767px) */
-    @media (max-width: 767px) {
-      :root { --gap: 12px; --pad: 12px; }
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .charts  { grid-template-columns: 1fr; }
-      .layout  { grid-template-columns: 1fr; }
-      .chart-panel.top-tests .chart-box { height: 230px; }
-      .scroll-hint { display: block; }
-    }
-
-    /* Large mobile (480–599px) */
-    @media (max-width: 599px) {
-      :root { --gap: 10px; --pad: 12px; }
-      #ops-dashboard { padding: 10px; }
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .head    { flex-direction: column; align-items: stretch; }
-      .badge   { align-self: flex-start; }
-      .kv      { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .metric-head .v { font-size: 18px; }
-    }
-
-    /* Small mobile (360–479px) */
-    @media (max-width: 479px) {
-      :root { --gap: 8px; --pad: 10px; }
-      #ops-dashboard { padding: 8px; }
-      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .metric-card { min-height: 90px; padding: 10px; }
-      .metric-head .v { font-size: 16px; }
-      .trend-chip { padding: 3px 6px; font-size: 9px; }
-      .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .kv div { min-height: 52px; padding: 8px; }
-      .kv dt  { font-size: 9px; }
-      .kv dd  { font-size: 11px; }
-      .chart-box { height: 200px; }
-      .chart-panel { min-height: 250px; }
-      .chart-panel.top-tests .chart-box { height: 210px; }
-      table { min-width: 440px; }
-    }
-
-    /* ─── COMPACT MINIMALIST FILTER TOOLBAR (Inside Header) ─────── */
-    .head-filter-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      padding-top: 14px;
-      border-top: 1px solid #e9edf4;
-      margin-top: 2px;
-    }
-
-    .toolbar-controls {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .control-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .control-item label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.35px;
-      white-space: nowrap;
-    }
-
-    .select-wrapper {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-    }
-
-    .filter-select-compact {
-      appearance: none;
-      -webkit-appearance: none;
-      height: 36px;
-      padding: 0 32px 0 12px;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      font-size: 12.5px;
-      font-weight: 600;
-      color: #1e293b;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.16s ease, box-shadow 0.16s ease;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-    }
-
-    .filter-select-compact:hover {
-      border-color: #0f62fe;
-    }
-
-    .filter-select-compact:focus {
-      border-color: #0f62fe;
-      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
-    }
-
-    .select-chevron {
-      position: absolute;
-      right: 11px;
-      font-size: 10px;
-      color: #64748b;
-      pointer-events: none;
-    }
-
-    /* Date range cluster with From and To inside */
-    .date-range-cluster {
-      display: inline-flex;
-      align-items: center;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 2px 8px;
-      height: 36px;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-      gap: 6px;
-      transition: border-color 0.16s ease, box-shadow 0.16s ease;
-    }
-
-    .date-range-cluster:focus-within {
-      border-color: #0f62fe;
-      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
-    }
-
-    .date-field-unit {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .date-field-tag {
-      font-size: 10.5px;
-      font-weight: 700;
-      color: #475569;
-      background: #f1f5f9;
-      border-radius: 4px;
-      padding: 2px 5px;
-      line-height: 1.2;
-      user-select: none;
-      letter-spacing: 0.3px;
-    }
-
-    .filter-date-input {
-      border: none;
-      outline: none;
-      background: transparent;
-      font-size: 12px;
-      font-weight: 600;
-      color: #1e293b;
-      padding: 0;
-      font-family: inherit;
-      cursor: pointer;
-    }
-
-    .date-range-divider {
-      color: #94a3b8;
-      font-size: 10px;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 1px;
-    }
-
-    .toolbar-actions-group {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .btn-compact-apply {
-      height: 36px;
-      padding: 0 14px;
-      background: #0f62fe;
-      color: #ffffff;
-      border: none;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: background 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
-      white-space: nowrap;
-      box-shadow: 0 2px 5px rgba(15, 98, 254, 0.22);
-    }
-
-    .btn-compact-apply:hover {
-      background: #0043ce;
-      transform: translateY(-1px);
-      box-shadow: 0 3px 8px rgba(15, 98, 254, 0.3);
-    }
-
-    .btn-compact-apply:active {
-      transform: translateY(0);
-    }
-
-    .btn-compact-today {
-      height: 36px;
-      padding: 0 12px;
-      background: #0b7f5e;
-      color: #ffffff;
-      border: none;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      transition: background 0.16s ease, transform 0.12s ease;
-      white-space: nowrap;
-      box-shadow: 0 2px 5px rgba(11, 127, 94, 0.2);
-    }
-
-    .btn-compact-today:hover {
-      background: #08664b;
-      transform: translateY(-1px);
-    }
-
-    .btn-compact-today:active {
-      transform: translateY(0);
-    }
-
-    .btn-compact-refresh {
-      height: 36px;
-      width: 36px;
-      padding: 0;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      color: #475569;
-      border-radius: 8px;
-      font-size: 12.5px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.16s ease;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-    }
-
-    .btn-compact-refresh:hover {
-      background: #f8fafc;
-      color: #0f62fe;
-      border-color: #0f62fe;
-    }
-
-    .toolbar-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .filter-active-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      border-radius: 999px;
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      font-size: 11px;
-      font-weight: 700;
-      color: #1d4ed8;
-      white-space: nowrap;
-    }
-
-    .pulse-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #107c41;
-      display: inline-block;
-      animation: pulse 1.8s infinite;
-    }
-
-    @keyframes pulse {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 124, 65, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(16, 124, 65, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 124, 65, 0); }
-    }
-
-    .filter-loader-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      color: #0f62fe;
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .spinner-small {
-      width: 13px;
-      height: 13px;
-      border: 2px solid rgba(15, 98, 254, 0.2);
-      border-top-color: #0f62fe;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    @media (max-width: 900px) {
-      .head-filter-toolbar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .toolbar-controls {
-        width: 100%;
-      }
-      .toolbar-status {
-        width: 100%;
-        justify-content: flex-start;
-      }
-    }
-
-    @media (max-width: 680px) {
-      .toolbar-controls {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .control-item {
-        width: 100%;
-        display: flex;
-      }
-      .control-item .select-wrapper,
-      .control-item .date-range-cluster {
-        flex: 1;
-        width: 100%;
-      }
-      .filter-select-compact {
-        width: 100%;
-      }
-      .date-range-cluster {
-        justify-content: space-between;
-      }
-      .toolbar-actions-group {
-        width: 100%;
-        display: flex;
-      }
-      .btn-compact-apply {
-        flex: 1;
-        justify-content: center;
-      }
-      .btn-compact-today {
-        flex: 1;
-        justify-content: center;
-      }
-    }
-
-    @media (max-width: 440px) {
-      .date-range-cluster {
-        flex-direction: column;
-        height: auto;
-        padding: 6px 8px;
-        align-items: stretch;
-        gap: 6px;
-      }
-      .date-range-divider {
-        display: none;
-      }
-      .date-field-unit {
-        justify-content: space-between;
-      }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <script src="/vendor/chart.js/chart.umd.min.js"></script>
+    <style>
+        .tk{
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .dashboard-container {
+            max-width: 975px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .page-title {
+            font-size: 2.5rem;
+            color: #2d3748;
+            margin-bottom: 30px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 15px;
+            padding: 25px;
+            color: white;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .stat-card:hover::before {
+            left: 100%;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-icon {
+            font-size: 3rem;
+            margin-right: 20px;
+            opacity: 0.8;
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            opacity: 0.9;
+            color: white;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .chart-actions button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            margin-left: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .chart-actions button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        .tables-container {
+            /* display: grid; */
+            /* grid-template-columns: 1fr 1fr;
+            gap: 25px; */
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 40px;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .table-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .table-actions a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .table-actions a:hover {
+            color: #764ba2;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 15px 10px;
+            color: #4a5568;
+            font-weight: 600;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .data-table td {
+            padding: 15px 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .data-table tr:hover {
+            background-color: #f7fafc;
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+        }
+
+        .table-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .user-email {
+            font-size: 0.85rem;
+            color: #718096;
+        }
+
+        .status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-pending {
+            background: #fef5e7;
+            color: #c05621;
+        }
+
+        .status-inactive {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            padding: 8px;
+            margin: 0 2px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #718096;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .notifications-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .notification-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .notification-actions a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .notification-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 15px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .notification-item:last-child {
+            border-bottom: none;
+        }
+
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .icon-info {
+            background: #bee3f8;
+            color: #2b6cb7;
+        }
+
+        .icon-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .icon-warning {
+            background: #fef5e7;
+            color: #c05621;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-message {
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .notification-time {
+            color: #718096;
+            font-size: 0.85rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            color: #e53e3e;
+            text-align: center;
+            padding: 20px;
+            background: #fed7d7;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .charts-container,
+            .tables-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-  <section id="ops-dashboard">
-    <div class="dash-wrap">
-
-      <header class="head">
-        <div class="head-top">
-          <div class="head-title-wrap">
-            <h1><i class="fa-solid fa-chart-line"></i> Operations &amp; Subscription Dashboard</h1>
-            <p id="dashSubtitle">Realtime tenant and booking performance summary.</p>
-          </div>
-          <div class="head-badges">
-            <span class="tenant-scope-pill"><i class="fa-solid fa-shield-halved"></i> Tenant Isolated Data</span>
-            <div class="badge" id="dashLastUpdated">Last sync: --</div>
-          </div>
+    <div class="dashboard-container">
+        <h1 class="page-title">Dashboard</h1>
+        
+        <!-- Stats Overview -->
+        <div class="stats-container" id="statsContainer">
+            <div class="loading" style="grid-column: 1/-1; justify-self: center;"></div>
         </div>
 
-        <!-- ── COMPACT MINIMALIST FILTER TOOLBAR ── -->
-        <div class="head-filter-toolbar" id="dashFilterSection">
-          <div class="toolbar-controls">
-            <!-- 1. Selection Box (Strictly requested presets) -->
-            <div class="control-item">
-              <label for="dashPresetSelect"><i class="fa-regular fa-clock"></i> Period:</label>
-              <div class="select-wrapper">
-                <select id="dashPresetSelect" class="filter-select-compact">
-                  <option value="today">Today</option>
-                  <option value="yesterday">Yesterday</option>
-                  <option value="last_7_days">Last 7 Days</option>
-                  <option value="one_month" selected>One Month</option>
-                  <option value="six_month">Six Month</option>
-                  <option value="one_year">One Year</option>
-                  <option value="five_year">Five Year</option>
-                  <option value="all_time">All Time</option>
-                  <option value="custom">Custom Date Range</option>
-                </select>
-                <i class="fa-solid fa-chevron-down select-chevron"></i>
-              </div>
-            </div>
-
-            <!-- 2. Date Range Picker (From / To labels inside) -->
-            <div class="control-item">
-              <div class="date-range-cluster">
-                <div class="date-field-unit">
-                  <span class="date-field-tag">From</span>
-                  <input type="date" id="dashStartDate" class="filter-date-input" aria-label="From Date" />
+        <!-- Charts Section -->
+        <div class="charts-container">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">Revenue Overview</div>
+                    <div class="chart-actions">
+                        <button onclick="updateRevenueChart('weekly')">Weekly</button>
+                        <button onclick="updateRevenueChart('monthly')">Monthly</button>
+                        <button onclick="updateRevenueChart('yearly')">Yearly</button>
+                    </div>
                 </div>
-                <span class="date-range-divider"><i class="fa-solid fa-arrow-right"></i></span>
-                <div class="date-field-unit">
-                  <span class="date-field-tag">To</span>
-                  <input type="date" id="dashEndDate" class="filter-date-input" aria-label="To Date" />
+                <div class="chart-container">
+                    <canvas id="revenueChart"></canvas>
                 </div>
-              </div>
             </div>
-
-            <!-- 3. Action Buttons -->
-            <div class="toolbar-actions-group">
-              <button type="button" id="dashApplyBtn" class="btn-compact-apply" title="Apply filter">
-                <i class="fa-solid fa-filter"></i> Apply
-              </button>
-              <button type="button" id="dashTodayBtn" class="btn-compact-today" title="Instant Today (Exact realtime)">
-                <i class="fa-solid fa-bolt"></i> Today
-              </button>
-              <button type="button" id="dashRefreshBtn" class="btn-compact-refresh" title="Refresh current view">
-                <i class="fa-solid fa-rotate"></i>
-              </button>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title">Model Usage</div>
+                    <div class="chart-actions">
+                        <button onclick="exportModelData()">Export</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="modelUsageChart"></canvas>
+                </div>
             </div>
-          </div>
-
-          <div class="toolbar-status">
-            <div class="filter-active-pill" id="activeFilterBadge">
-              <span class="pulse-dot"></span>
-              <span id="activeFilterText">One Month</span>
-            </div>
-            <div id="filterLoadingIndicator" class="filter-loader-inline" style="display: none;">
-              <span class="spinner-small"></span> <span>Syncing...</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- ── METRIC CARDS ─────────────────────────────────── -->
-      <section class="metrics" id="metricsGrid">
-        <article class="metric-card tone-1" data-permission="canManageBookings">
-          <div class="metric-head">
-            <div><div class="k">Total Bookings</div><div class="v" id="totalBookings">--</div></div>
-            <span class="trend-chip" id="trend-totalBookings">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-totalBookings">
-            <polyline points="0,20 20,18 40,16 60,13 80,11 100,12 120,9" stroke="#3763f4"></polyline>
-          </svg>
-        </article>
-
-        <article class="metric-card tone-2" data-permission="canManagePayments canViewReports">
-          <div class="metric-head">
-            <div><div class="k">Total Revenue</div><div class="v" id="totalRevenue">--</div></div>
-            <span class="trend-chip" id="trend-totalRevenue">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-totalRevenue">
-            <polyline points="0,21 20,19 40,17 60,12 80,10 100,9 120,8" stroke="#17a786"></polyline>
-          </svg>
-        </article>
-
-        <article class="metric-card tone-3" id="metric-remainingDays">
-          <div class="metric-head">
-            <div><div class="k">Remaining Days</div><div class="v" id="remainingDaysTop">--</div></div>
-            <span class="trend-chip" id="trend-remainingDays">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-remainingDays">
-            <polyline points="0,19 20,17 40,15 60,15 80,14 100,13 120,12" stroke="#ca7c22"></polyline>
-          </svg>
-        </article>
-
-        <article class="metric-card tone-4" data-permission="canManageBookings">
-          <div class="metric-head">
-            <div><div class="k">Pending Tests</div><div class="v" id="pendingTests">--</div></div>
-            <span class="trend-chip" id="trend-pendingTests">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-pendingTests">
-            <polyline points="0,15 20,16 40,18 60,14 80,17 100,13 120,16" stroke="#4aa942"></polyline>
-          </svg>
-        </article>
-
-        <article class="metric-card tone-5" id="metric-endDate">
-          <div class="metric-head">
-            <div><div class="k">End Date</div><div class="v" id="subscriptionEndTop">--</div></div>
-            <span class="trend-chip" id="trend-endDate">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-endDate">
-            <polyline points="0,20 20,18 40,19 60,15 80,14 100,12 120,13" stroke="#6f56db"></polyline>
-          </svg>
-        </article>
-
-        <article class="metric-card tone-6" id="metric-planType">
-          <div class="metric-head">
-            <div><div class="k">Plan Type</div><div class="v" id="planTypeTop">--</div></div>
-            <span class="trend-chip" id="trend-planType">--</span>
-          </div>
-          <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" id="spark-planType">
-            <polyline points="0,22 20,18 40,17 60,16 80,13 100,12 120,10" stroke="#d74483"></polyline>
-          </svg>
-        </article>
-      </section>
-
-      <!-- ── SUBSCRIPTION + PLANS ROW ─────────────────────── -->
-      <section class="layout">
-        <article class="panel" id="subscriptionPanel">
-          <h2>Subscription Snapshot</h2>
-          <div class="status-row">
-            <span class="state-pill na" id="subStatusPill">STATUS: --</span>
-            <span class="state-pill na" id="payStatusPill">PAYMENT: --</span>
-          </div>
-          <dl class="kv">
-            <div><dt>Plan Type</dt><dd id="subPlanType">--</dd></div>
-            <div><dt>Plan Layer</dt><dd id="subPlanLayer">--</dd></div>
-            <div><dt>Duration (Days)</dt><dd id="subDuration">--</dd></div>
-            <div><dt>Price</dt><dd id="subPrice">--</dd></div>
-            <div><dt>Start Date</dt><dd id="subStart">--</dd></div>
-            <div><dt>End Date</dt><dd id="subEnd">--</dd></div>
-            <div><dt>Effective End</dt><dd id="subEffectiveEnd">--</dd></div>
-            <div><dt>Days Remaining</dt><dd id="subDays">--</dd></div>
-            <div><dt>Grace Period</dt><dd id="subGrace">--</dd></div>
-            <div><dt>Tenant Status</dt><dd id="tenantStatus">--</dd></div>
-            <div><dt>Tenant Name</dt><dd id="tenantName">--</dd></div>
-            <div><dt>Tenant Code</dt><dd id="tenantCode">--</dd></div>
-          </dl>
-          <p class="muted" id="subMessage">--</p>
-        </article>
-
-        <article class="panel" id="rechargePanel">
-          <h2>Recharge Plans (From Server)</h2>
-          <div class="plans-table-wrap">
-            <table>
-              <thead>
-                <tr><th>Plan</th><th>Duration</th><th>Total</th><th>Base</th><th>GST</th><th>Select</th></tr>
-              </thead>
-              <tbody id="plansTbody"></tbody>
-            </table>
-          </div>
-          <p class="scroll-hint">← Scroll table to see more →</p>
-          <p class="muted" id="plansMeta">--</p>
-        </article>
-      </section>
-
-      <!-- ── CHARTS + FRANCHISE ────────────────────────────── -->
-      <section class="charts" id="chartsSection">
-        <article class="chart-panel" data-permission="canManagePayments canViewReports">
-          <h3>Monthly Revenue Trend</h3>
-          <div class="chart-box"><canvas id="revenueChart"></canvas></div>
-        </article>
-
-        <article class="chart-panel" data-permission="canManagePayments canViewReports">
-          <h3>Daily Revenue (Last 30 Days)</h3>
-          <div class="chart-box"><canvas id="samplesChart"></canvas></div>
-        </article>
-
-        <article class="chart-panel top-tests" data-permission="canManageBookings canViewReports">
-          <h3>Top Test Categories</h3>
-          <div class="chart-box"><canvas id="testCategoriesChart"></canvas></div>
-        </article>
-
-        <article class="chart-panel" id="franchisePanel" data-permission="canManageUsers">
-          <h3>Franchise Details</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Name</th><th>Location</th><th>Contact</th><th>Status</th></tr>
-              </thead>
-              <tbody id="tbody"></tbody>
-            </table>
-          </div>
-          <p class="scroll-hint">← Scroll table to see more →</p>
-        </article>
-      </section>
-
-      <!-- ── RECENT TENANT BOOKINGS ──────────────────────────── -->
-      <section class="panel" id="recentBookingsPanel" data-permission="canManageBookings">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-          <div>
-            <h2 style="margin: 0; display: inline-flex; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-list-check" style="color: #0f62fe;"></i>
-              <span>Recent Tenant Bookings</span>
-            </h2>
-            <p class="muted" style="margin: 4px 0 0;">Recent bookings recorded strictly under this tenant.</p>
-          </div>
-          <span class="filter-active-badge" id="recentBookingsCount">0 Bookings</span>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Booking ID</th>
-                <th>Patient Name</th>
-                <th>Phone No</th>
-                <th>Total (₹)</th>
-                <th>Status</th>
-                <th>Booking Date &amp; Time</th>
-              </tr>
-            </thead>
-            <tbody id="recentBookingsTbody">
-              <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 14px;">Loading bookings...</td></tr>
-            </tbody>
-          </table>
+        <!-- Recent Activity Tables -->
+        <div class="tables-container">
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title">Recent Clients</div>
+                    <div class="table-actions">
+                        <a href="#" onclick="viewAllClients()">View All <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </div>
+                <div id="clientsTableContainer">
+                    <div class="loading"></div>
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title">Top Franchisees</div>
+                    <div class="table-actions">
+                        <a href="#" onclick="viewAllFranchisees()">View All <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </div>
+                <div id="franchiseesTableContainer">
+                    <div class="loading"></div>
+                </div>
+            </div>
         </div>
-        <p class="scroll-hint">← Scroll table to see more →</p>
-      </section>
 
+        <!-- Notifications Section -->
+        <div class="notifications-section">
+            <div class="notification-header">
+                <div class="notification-title">Recent Notifications</div>
+                <div class="notification-actions">
+                    <a href="#" onclick="markAllAsRead()">Mark All as Read</a>
+                </div>
+            </div>
+            <div id="notificationsContainer">
+                <div class="loading"></div>
+            </div>
+        </div>
     </div>
-  </section>
-
-  <!-- Chart.js CDN -->
-  <script src="/vendor/chart.js/chart.umd.min.js"></script>
-
-  <!-- ── DASHBOARD LOGIC (unchanged from original) ─────────── -->
 </body>
 </html>

@@ -179,15 +179,26 @@
         status = 401,
         homePath,
     } = {}) => {
-        redirectToErrorPage({
-            status,
-            title,
-            message,
-            loginPath: loginPath || state.config.loginPath,
-            homePath: homePath || state.config.homePath,
-            clearSession: true,
-            returnTo: `${window.location.pathname}${window.location.search}`,
+        if (state.redirectScheduled) {
+            return;
+        }
+
+        state.redirectScheduled = true;
+        clearStoredSession();
+
+        const targetLogin = loginPath || state.config.loginPath || "/login.html";
+        const currentPath = `${window.location.pathname}${window.location.search}`;
+
+        if (window.location.pathname.toLowerCase().includes("login")) {
+            return;
+        }
+
+        const query = buildSearchParams({
+            sessionExpired: "1",
+            returnTo: currentPath,
         });
+
+        window.location.replace(`${targetLogin}?${query}`);
     };
 
     const installFetchGuard = () => {
@@ -261,25 +272,17 @@
                     }
 
                     if (recoveredSession?.transient) {
-                        redirectToErrorPage({
-                            status: 503,
-                            title: "Server Busy",
-                            message:
-                                "We could not verify your session because the server is temporarily unavailable. Your login is still saved - please retry in a few moments.",
-                            loginPath: payload?.loginPath || state.config.loginPath,
-                            homePath: payload?.homePath || state.config.homePath,
-                            returnTo: `${window.location.pathname}${window.location.search}`,
-                            clearSession: false,
-                        });
-
                         return response;
                     }
 
-                    handleSessionFailure({
-                        loginPath: payload?.loginPath || state.config.loginPath,
-                        message: payload?.message,
-                        homePath: payload?.homePath || state.config.homePath,
-                    });
+                    // Only trigger session failure redirect if session lookup explicitly confirmed invalid session
+                    if (recoveredSession?.authenticated === false && !recoveredSession?.transient) {
+                        handleSessionFailure({
+                            loginPath: payload?.loginPath || state.config.loginPath,
+                            message: payload?.message,
+                            homePath: payload?.homePath || state.config.homePath,
+                        });
+                    }
                 }
             } catch (error) {
                 console.error("Portal fetch guard error:", error);
