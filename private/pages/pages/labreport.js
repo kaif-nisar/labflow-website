@@ -533,111 +533,143 @@ async function loadfunction() {
     };
     const LEGACY_FORMULA_CONFIGS = [
         {
-            targetNames: ["Neutrophils-Absolute Count"],
+            targetNames: [
+                "Hematocrit (HCT)",
+                "Hematocrit",
+                "PACKED CELL VOLUME (PCV)",
+                "PCV",
+                "HCT",
+                "Hematocrit (COMPLETE BLOOD COUNT (CBC))",
+            ],
+            displayExpression: "Hemoglobin * 3",
+            expressionTemplate: "{{hemoglobin}} * 3",
+            dependencies: {
+                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB", "Hemoglobin (COMPLETE BLOOD COUNT (CBC))"],
+            },
+        },
+        {
+            targetNames: [
+                "Neutrophils-Absolute Count",
+                "Neutrophils (Abs)",
+                "Neutrophils (Abs) (COMPLETE BLOOD COUNT (CBC))",
+                "Absolute Neutrophil Count",
+                "ANC",
+            ],
             displayExpression: "(Total Leucocytes Count / 100) * Neutrophils Percentage",
             expressionTemplate: "({{tlc}} / 100) * {{neutrophilsPercentage}}",
             dependencies: {
-                tlc: ["Total Leucocytes Count"],
-                neutrophilsPercentage: ["Neutrophils Percentage"],
+                tlc: ["Total Leucocytes Count", "TOTAL COUNT (WBC)", "TLC", "TOTAL COUNT (WBC) (COMPLETE BLOOD COUNT (CBC))"],
+                neutrophilsPercentage: ["Neutrophils Percentage", "Neutrophils (%)", "Neutrophils", "Neutrophils (%) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Lymphocytes-Absolute Count"],
+            targetNames: [
+                "Lymphocytes-Absolute Count",
+                "Lymphocytes (Abs)",
+                "Lymphocytes (Abs) (COMPLETE BLOOD COUNT (CBC))",
+                "Absolute Lymphocyte Count",
+                "ALC",
+            ],
             displayExpression: "(Lymphocyte Percentage / 100) * Total Leucocytes Count",
             expressionTemplate: "({{lymphocytePercentage}} / 100) * {{tlc}}",
             dependencies: {
-                lymphocytePercentage: ["Lymphocyte Percentage"],
-                tlc: ["Total Leucocytes Count"],
+                lymphocytePercentage: ["Lymphocyte Percentage", "Lymphocytes Percentage", "Lymphocytes (%)", "Lymphocytes", "Lymphocytes (%) (COMPLETE BLOOD COUNT (CBC))"],
+                tlc: ["Total Leucocytes Count", "TOTAL COUNT (WBC)", "TLC", "TOTAL COUNT (WBC) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Eosinophil-Absolute Count"],
+            targetNames: [
+                "Eosinophil-Absolute Count",
+                "Eosinophils-Absolute Count",
+                "Eosinophils (Abs)",
+                "Eosinophils (Abs) (COMPLETE BLOOD COUNT (CBC))",
+                "Absolute Eosinophil Count",
+                "AEC",
+            ],
             displayExpression: "(Eosinophils Percentage / 100) * Total Leucocytes Count",
             expressionTemplate: "({{eosinophilsPercentage}} / 100) * {{tlc}}",
             dependencies: {
-                eosinophilsPercentage: ["Eosinophils Percentage"],
-                tlc: ["Total Leucocytes Count"],
+                eosinophilsPercentage: ["Eosinophils Percentage", "Eosinophil Percentage", "Eosinophils (%)", "Eosinophils", "Eosinophils (%) (COMPLETE BLOOD COUNT (CBC))"],
+                tlc: ["Total Leucocytes Count", "TOTAL COUNT (WBC)", "TLC", "TOTAL COUNT (WBC) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Monocyte- Absolute Count"],
+            targetNames: [
+                "Monocyte- Absolute Count",
+                "Monocyte-Absolute Count",
+                "Monocytes (Abs)",
+                "Monocytes (Abs) (COMPLETE BLOOD COUNT (CBC))",
+                "Absolute Monocyte Count",
+                "AMC",
+            ],
             displayExpression: "(Monocytes Percentage / 100) * Total Leucocytes Count",
             expressionTemplate: "({{monocytesPercentage}} / 100) * {{tlc}}",
             dependencies: {
-                monocytesPercentage: ["Monocytes Percentage"],
-                tlc: ["Total Leucocytes Count"],
+                monocytesPercentage: ["Monocytes Percentage", "Monocyte Percentage", "Monocytes (%)", "Monocytes", "Monocytes (%) (COMPLETE BLOOD COUNT (CBC))"],
+                tlc: ["Total Leucocytes Count", "TOTAL COUNT (WBC)", "TLC", "TOTAL COUNT (WBC) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Basophils-Absolute Count"],
+            targetNames: [
+                "Basophils-Absolute Count",
+                "Basophils (Abs)",
+                "Basophils (Abs) (COMPLETE BLOOD COUNT (CBC))",
+                "Absolute Basophil Count",
+                "ABC",
+            ],
             displayExpression: "(Basophils Percentage / 100) * Total Leucocytes Count",
             expressionTemplate: "({{basophilsPercentage}} / 100) * {{tlc}}",
             dependencies: {
-                basophilsPercentage: ["Basophils Percentage"],
-                tlc: ["Total Leucocytes Count"],
+                basophilsPercentage: ["Basophils Percentage", "Basophil Percentage", "Basophils (%)", "Basophils", "Basophils (%) (COMPLETE BLOOD COUNT (CBC))"],
+                tlc: ["Total Leucocytes Count", "TOTAL COUNT (WBC)", "TLC", "TOTAL COUNT (WBC) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Neutrophil Lymphocyte Ratio"],
+            targetNames: ["Neutrophil Lymphocyte Ratio", "NLR"],
             displayExpression: "Neutrophils-Absolute Count / Lymphocytes-Absolute Count",
             expressionTemplate: "{{neutrophilsAbsolute}} / {{lymphocytesAbsolute}}",
             dependencies: {
-                neutrophilsAbsolute: ["Neutrophils-Absolute Count"],
-                lymphocytesAbsolute: ["Lymphocytes-Absolute Count"],
+                neutrophilsAbsolute: ["Neutrophils-Absolute Count", "Neutrophils (Abs)", "Neutrophils Percentage", "Neutrophils (%)"],
+                lymphocytesAbsolute: ["Lymphocytes-Absolute Count", "Lymphocytes (Abs)", "Lymphocyte Percentage", "Lymphocytes (%)"],
             },
         },
         {
-            targetNames: ["Mean Corpuscular Volume (MCV)"],
+            targetNames: [
+                "Mean Corpuscular Volume (MCV)",
+                "MCV",
+                "MCV (COMPLETE BLOOD COUNT (CBC))",
+            ],
             displayExpression: "Hematocrit (HCT) * 10 / Total Red Blood Cell Count",
             expressionTemplate: "({{hct}} * 10) / {{rbcCount}}",
             dependencies: {
-                hct: ["Hematocrit (HCT)", "PACKED CELL VOLUME (PCV)", "PCV"],
-                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC"],
+                hct: ["Hematocrit (HCT)", "Hematocrit", "PACKED CELL VOLUME (PCV)", "PCV", "HCT", "Hematocrit (COMPLETE BLOOD COUNT (CBC))"],
+                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC", "RBC Count (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Mean Corpuscular Hemoglobin (MCH)"],
+            targetNames: [
+                "Mean Corpuscular Hemoglobin (MCH)",
+                "MCH",
+                "MCH (COMPLETE BLOOD COUNT (CBC))",
+            ],
             displayExpression: "Hemoglobin * 10 / Total Red Blood Cell Count",
             expressionTemplate: "({{hemoglobin}} * 10) / {{rbcCount}}",
             dependencies: {
-                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB"],
-                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC"],
+                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB", "Hemoglobin (COMPLETE BLOOD COUNT (CBC))"],
+                rbcCount: ["Total Red Blood Cell Count", "RBC COUNT", "RBC", "RBC Count (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
-            targetNames: ["Mean Corpuscular Hemoglobin Concentration (MCHC)"],
+            targetNames: [
+                "Mean Corpuscular Hemoglobin Concentration (MCHC)",
+                "MCHC",
+                "MCHC (COMPLETE BLOOD COUNT (CBC))",
+            ],
             displayExpression: "Hemoglobin * 100 / Hematocrit (HCT)",
             expressionTemplate: "({{hemoglobin}} * 100) / {{hct}}",
             dependencies: {
-                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB"],
-                hct: ["Hematocrit (HCT)", "PACKED CELL VOLUME (PCV)", "PCV"],
-            },
-        },
-        {
-            targetNames: ["MCV"],
-            displayExpression: "PACKED CELL VOLUME (PCV) * 10 / RBC COUNT",
-            expressionTemplate: "({{pcv}} * 10) / {{rbcCount}}",
-            dependencies: {
-                pcv: ["PACKED CELL VOLUME (PCV)", "Hematocrit (HCT)", "PCV"],
-                rbcCount: ["RBC COUNT", "Total Red Blood Cell Count", "RBC"],
-            },
-        },
-        {
-            targetNames: ["MCH"],
-            displayExpression: "HAEMOGLOBIN (HB) * 10 / RBC COUNT",
-            expressionTemplate: "({{hemoglobin}} * 10) / {{rbcCount}}",
-            dependencies: {
-                hemoglobin: ["HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "Hemoglobin", "HB"],
-                rbcCount: ["RBC COUNT", "Total Red Blood Cell Count", "RBC"],
-            },
-        },
-        {
-            targetNames: ["MCHC"],
-            displayExpression: "HAEMOGLOBIN (HB) * 100 / PACKED CELL VOLUME (PCV)",
-            expressionTemplate: "({{hemoglobin}} * 100) / {{pcv}}",
-            dependencies: {
-                hemoglobin: ["HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "Hemoglobin", "HB"],
-                pcv: ["PACKED CELL VOLUME (PCV)", "Hematocrit (HCT)", "PCV"],
+                hemoglobin: ["Hemoglobin", "HAEMOGLOBIN (HB)", "HEMOGLOBIN (HB)", "HB", "Hemoglobin (COMPLETE BLOOD COUNT (CBC))"],
+                hct: ["Hematocrit (HCT)", "Hematocrit", "PACKED CELL VOLUME (PCV)", "PCV", "HCT", "Hematocrit (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
@@ -828,6 +860,16 @@ async function loadfunction() {
                 continue;
             }
 
+            if (char === "{" && source[index + 1] !== "{") {
+                const endIndex = source.indexOf("}", index + 1);
+                if (endIndex !== -1) {
+                    const parameterId = source.slice(index + 1, endIndex).trim();
+                    tokens.push({ type: "variable", value: parameterId });
+                    index = endIndex + 1;
+                    continue;
+                }
+            }
+
             if (/\d|\./.test(char)) {
                 let endIndex = index + 1;
                 while (endIndex < source.length && /[\d.]/.test(source[endIndex])) {
@@ -1001,7 +1043,9 @@ async function loadfunction() {
 
     async function loadTenantFormulas() {
         try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/formulas/active`);
+            const response = await fetch(`${BASE_URL}/api/v1/user/formulas/active`, {
+                credentials: "include",
+            });
             const result = await response.json();
 
             if (!response.ok) {
@@ -1009,10 +1053,106 @@ async function loadfunction() {
             }
 
             formulaState.formulas = Array.isArray(result.data) ? result.data : [];
+            console.log(`[Formula Engine] Loaded ${formulaState.formulas.length} active formula(s) from server`);
         } catch (error) {
             formulaState.formulas = [];
             console.error("Error loading formulas:", error);
         }
+    }
+
+    const CLINICAL_ALIAS_MAP = {
+        hematocrit: ["hct", "pcv", "packedcellvolume", "hematocrit", "haematocrit", "hematocrithct", "packedcellvolumepcv"],
+        pcv: ["hct", "hematocrit", "haematocrit", "packedcellvolume", "pcv", "hematocrithct"],
+        mcv: ["meancorpuscularvolume", "mcv", "meancorpuscularvolumemcv"],
+        mch: ["meancorpuscularhemoglobin", "mch", "meancorpuscularhemoglobinmch", "meancorpuscularhaemoglobin"],
+        mchc: ["meancorpuscularhemoglobinconcentration", "mchc", "meancorpuscularhemoglobinconcentrationmchc", "meancorpuscularhaemoglobinconcentration"],
+        hemoglobin: ["haemoglobin", "hemoglobin", "hb", "haemoglobinhb", "hemoglobinhb"],
+        rbc: ["totalredbloodcellcount", "rbccount", "rbc", "redbloodcells", "redcell", "redbloodcell"],
+        tlc: ["totalleucocytescount", "totalleukocytecount", "tlc", "wbc", "totalcountwbc", "totalcount", "whitebloodcells"],
+        neutrophils: ["neutrophilspercentage", "neutrophilpercentage", "neutrophils%", "neutrophils"],
+        lymphocytes: ["lymphocytepercentage", "lymphocytespercentage", "lymphocytes%", "lymphocytes"],
+        monocytes: ["monocytespercentage", "monocytepercentage", "monocytes%", "monocytes"],
+        eosinophils: ["eosinophilspercentage", "eosinophilpercentage", "eosinophils%", "eosinophils"],
+        basophils: ["basophilspercentage", "basophilpercentage", "basophils%", "basophils"],
+        neutrophilsabs: ["neutrophilsabsolutecount", "neutrophilsabs", "absoluteneutrophilcount", "anc", "neutrophilsabsolutecountanc"],
+        lymphocytesabs: ["lymphocytesabsolutecount", "lymphocytesabs", "absolutelymphocytecount", "alc", "lymphocytesabsolutecountalc"],
+        monocytesabs: ["monocyteabsolutecount", "monocytesabs", "absolutemonocytecount", "amc", "monocyteabsolutecountamc"],
+        eosinophilsabs: ["eosinophilabsolutecount", "eosinophilsabs", "absoluteeosinophilcount", "aec", "eosinophilsabsolutecountaec"],
+        basophilsabs: ["basophilsabsolutecount", "basophilsabs", "absolutebasophilcount", "abc", "basophilsabsolutecountabc"],
+        nlr: ["neutrophillymphocyteratio", "nlr"],
+        vldl: ["vldlcholesterol", "vldl"],
+        ldl: ["ldlcholesterol", "ldl"],
+        nonhdl: ["nonhdlcholesterol", "nonhdl"],
+        totalcholesterol: ["totalcholesterol", "cholesteroltotal", "cholesterol"],
+        hdl: ["hdlcholesterol", "hdl"],
+        triglycerides: ["triglycerides", "triglyceride", "tg"],
+        bilirubintotal: ["serumbilirubintotal", "bilirubintotal", "totalbilirubin"],
+        bilirubindirect: ["serumbilirubindirect", "bilirubindirect", "directbilirubin"],
+        bilirubinindirect: ["serumbilirubinindirect", "bilirubinindirect", "indirectbilirubin"],
+        totalprotein: ["serumprotein", "totalprotein", "protein"],
+        albumin: ["serumalbumin", "albumin"],
+        globulin: ["serumglobulin", "globulin"],
+        agratio: ["agratio", "a/gratio", "albumin/globulinratio"],
+        urea: ["serumurea", "urea"],
+        creatinine: ["serumcreatinine", "creatinine"],
+        bun: ["bloodureanitrogen", "bun"],
+        hba1c: ["glycatedhaemoglobinhba1c", "hba1c"],
+    };
+
+    function normalizeClinicalName(name) {
+        if (!name) return "";
+        const clean = String(name).toLowerCase().replace(/[^a-z0-9]/g, " ");
+        const s = " " + clean + " ";
+
+        // Prioritize platelet indices so Platelet haematocrit (PCT) does not falsely match red blood cell hematocrit (HCT)
+        if (s.includes(" platelet ") || s.includes(" plt ") || s.includes(" pct ")) {
+            if (s.includes(" haematocrit ") || s.includes(" hematocrit ") || s.includes(" pct ")) return "pct";
+            if (s.includes(" distribution ") || s.includes(" pdw ")) return "pdw";
+            if (s.includes(" volume ") || s.includes(" mpv ")) return "mpv";
+            return "platelet";
+        }
+
+        if (s.includes(" rdw ") || s.includes(" distribution width ") || s.includes(" red cell distribution ")) return "rdw";
+        if (s.includes(" mchc ") || s.includes(" mean corpuscular hemoglobin concentration ") || s.includes(" mean corpuscular haemoglobin concentration ")) return "mchc";
+        if (s.includes(" mch ") || s.includes(" mean corpuscular hemoglobin ") || s.includes(" mean corpuscular haemoglobin ")) return "mch";
+        if (s.includes(" mcv ") || s.includes(" mean corpuscular volume ")) return "mcv";
+        if (s.includes(" hct ") || s.includes(" pcv ") || s.includes(" hematocrit ") || s.includes(" haematocrit ") || s.includes(" packed cell volume ")) return "hematocrit";
+        if (s.includes(" hb ") || s.includes(" hemoglobin ") || s.includes(" haemoglobin ")) return "hemoglobin";
+        if (s.includes(" rbc ") || s.includes(" red blood cell ") || s.includes(" red blood cells ") || s.includes(" red cell ") || s.includes(" erythrocyte ")) return "rbc";
+        if (s.includes(" tlc ") || s.includes(" wbc ") || s.includes(" leukocyte ") || s.includes(" leucocyte ") || s.includes(" total count wbc ") || s.includes(" white blood cell ") || s.includes(" total count ")) return "tlc";
+        if (s.includes(" anc ") || s.includes(" absolute neutrophil ")) return "anc";
+        if (s.includes(" alc ") || s.includes(" absolute lymphocyte ")) return "alc";
+        if (s.includes(" aec ") || s.includes(" absolute eosinophil ")) return "aec";
+        if (s.includes(" amc ") || s.includes(" absolute monocyte ")) return "amc";
+        if (s.includes(" abc ") || s.includes(" absolute basophil ")) return "abc";
+        if (s.includes(" neutrophil ") || s.includes(" neutrophils ")) return "neutrophils";
+        if (s.includes(" lymphocyte ") || s.includes(" lymphocytes ")) return "lymphocytes";
+        if (s.includes(" eosinophil ") || s.includes(" eosinophils ")) return "eosinophils";
+        if (s.includes(" monocyte ") || s.includes(" monocytes ")) return "monocytes";
+        if (s.includes(" basophil ") || s.includes(" basophils ")) return "basophils";
+
+        return clean.replace(/\s+/g, "");
+    }
+
+    function isDifferentialPercentageField(input) {
+        if (!input) return false;
+        const rawName = String(
+            input.dataset?.paramName ||
+            input.dataset?.id ||
+            input.closest("tr")?.querySelector(".test-name-cell")?.textContent ||
+            input.closest("tr")?.children?.[1]?.textContent ||
+            ""
+        ).toLowerCase();
+        const normalized = normalizeFieldIdentity(rawName);
+        if (DIFFERENTIAL_PERCENTAGE_FIELD_SET.has(normalized)) return true;
+        return /neutrophil.*percent|lymphocyte.*percent|eosinophil.*percent|monocyte.*percent|basophil.*percent/.test(normalized);
+    }
+
+    function isAbsoluteCountQuery(names = []) {
+        return names.some((name) => {
+            const lower = String(name || "").toLowerCase();
+            return /\b(abs|absolute|anc|alc|aec|amc|abc)\b/i.test(lower) || /\(abs\)/i.test(lower) || lower.includes("absolute");
+        });
     }
 
     function buildLegacyFieldIndex() {
@@ -1022,13 +1162,31 @@ async function loadfunction() {
             const names = [
                 input.dataset.paramName,
                 input.dataset.id,
+                input.dataset.shortname,
+                input.closest("tr")?.querySelector(".test-name-cell")?.textContent,
                 input.closest("tr")?.children?.[1]?.textContent,
             ];
 
             names.forEach((name) => {
+                if (!name) return;
                 const normalizedName = normalizeFieldIdentity(name);
                 if (normalizedName && !fieldIndex.has(normalizedName)) {
                     fieldIndex.set(normalizedName, input);
+                }
+
+                const coreName = normalizeClinicalName(name);
+                if (coreName && !fieldIndex.has(coreName)) {
+                    fieldIndex.set(coreName, input);
+                }
+
+                // Index clinical alias keys
+                for (const [canonical, aliases] of Object.entries(CLINICAL_ALIAS_MAP)) {
+                    if (canonical === coreName || aliases.includes(coreName) || aliases.includes(normalizedName)) {
+                        if (!fieldIndex.has(canonical)) fieldIndex.set(canonical, input);
+                        aliases.forEach((aliasKey) => {
+                            if (!fieldIndex.has(aliasKey)) fieldIndex.set(aliasKey, input);
+                        });
+                    }
                 }
             });
         });
@@ -1037,26 +1195,203 @@ async function loadfunction() {
     }
 
     function findLegacyInput(fieldIndex, names = []) {
+        if (!fieldIndex) return null;
+        const searchingForAbsolute = isAbsoluteCountQuery(names);
+
+        const checkCandidate = (candInput) => {
+            if (!candInput) return null;
+            // Differential percentage fields are manual technician inputs and must NEVER match absolute count targets
+            if (searchingForAbsolute && isDifferentialPercentageField(candInput)) {
+                return null;
+            }
+            return candInput;
+        };
+
         for (const name of names) {
+            if (!name) continue;
+            const direct = checkCandidate(fieldIndex.get(String(name).trim()));
+            if (direct) return direct;
+
             const normalizedName = normalizeFieldIdentity(name);
-            const matchedInput = fieldIndex.get(normalizedName);
+            const matchedInput = checkCandidate(fieldIndex.get(normalizedName));
             if (matchedInput) {
                 return matchedInput;
+            }
+
+            const coreName = normalizeClinicalName(name);
+            const matchedCore = checkCandidate(fieldIndex.get(coreName));
+            if (matchedCore) {
+                return matchedCore;
+            }
+
+            for (const [canonical, aliases] of Object.entries(CLINICAL_ALIAS_MAP)) {
+                if (canonical === coreName || aliases.includes(coreName) || aliases.includes(normalizedName)) {
+                    for (const candidate of [canonical, ...aliases]) {
+                        const hit = checkCandidate(fieldIndex.get(candidate));
+                        if (hit) return hit;
+                    }
+                }
             }
         }
         return null;
     }
 
-    function buildLegacyFallbackFormulas(savedFormulas) {
-        const fieldIndex = buildLegacyFieldIndex();
+    function adaptSavedFormulasToPage(savedFormulas, fieldIndex) {
+        if (!Array.isArray(savedFormulas) || savedFormulas.length === 0) {
+            return [];
+        }
+
+        const adaptedList = [];
+        const seenTargetMasterKeys = new Set();
+
+        savedFormulas.forEach((formula) => {
+            if (!formula || formula.isActive === false) return;
+
+            function buildCandidateQueryNames(rawLabel) {
+                const list = [];
+                if (!rawLabel) return list;
+                const raw = String(rawLabel).trim();
+                list.push(raw);
+
+                // Trailing parenthesized test/panel qualifier: 'Hematocrit (COMPLETE BLOOD COUNT (CBC))' -> 'Hematocrit'
+                const trailingStripped = raw.replace(/\s*\([^)()]*(?:\([^()]*\)[^)()]*)*\)\s*$/, "").trim();
+                if (trailingStripped && !list.includes(trailingStripped)) {
+                    list.push(trailingStripped);
+                }
+
+                // Strip all parenthesized expressions
+                let allStripped = raw;
+                while (/\([^()]*\)/.test(allStripped)) {
+                    allStripped = allStripped.replace(/\s*\([^()]*\)/g, " ").trim();
+                }
+                allStripped = allStripped.replace(/\s+/g, " ").trim();
+                if (allStripped && !list.includes(allStripped)) {
+                    list.push(allStripped);
+                }
+
+                const withNorms = [];
+                list.forEach((item) => {
+                    withNorms.push(item);
+                    const clin = normalizeClinicalName(item);
+                    if (clin && !withNorms.includes(clin)) withNorms.push(clin);
+                    const fld = normalizeFieldIdentity(item);
+                    if (fld && !withNorms.includes(fld)) withNorms.push(fld);
+                });
+                return withNorms;
+            }
+
+            // 1. Check if the formula's target already exists on the current page by master key or paramId
+            let targetInput = formulaState.inputByMasterKey.get(String(formula.targetMasterKey || ""));
+            if (!targetInput && formula.targetParameterId) {
+                targetInput = formulaState.inputByMasterKey.get(String(formula.targetParameterId));
+            }
+
+            // 2. If not found by master key/paramId, find by targetLabel or clinical name
+            if (!targetInput) {
+                targetInput = findLegacyInput(fieldIndex, buildCandidateQueryNames(formula.targetLabel));
+            }
+
+            if (!targetInput) {
+                return;
+            }
+
+            if (!targetInput.dataset.masterParamKey) {
+                targetInput.dataset.masterParamKey = targetInput.dataset.paramId || targetInput.dataset.testId || `param_${normalizeFieldIdentity(targetInput.dataset.paramName || targetInput.dataset.id || "target")}`;
+            }
+
+            // CRITICAL GUARD: Differential percentage fields must NEVER have a formula attached as a target!
+            if (isDifferentialPercentageField(targetInput)) {
+                return;
+            }
+
+            const pageTargetMasterKey = String(targetInput.dataset.masterParamKey);
+            if (seenTargetMasterKeys.has(pageTargetMasterKey)) {
+                return;
+            }
+
+            // 3. Resolve all dependencies to fields on the current page
+            let adaptedExpression = String(formula.expression || "");
+            const adaptedDependencies = [];
+            let allDependenciesResolved = true;
+
+            (formula.dependencies || []).forEach((dep) => {
+                const origDepKey = String(dep.parameterMasterKey || "");
+                let depInput = origDepKey ? formulaState.inputByMasterKey.get(origDepKey) : null;
+                if (!depInput && dep.parameterId) {
+                    depInput = formulaState.inputByMasterKey.get(String(dep.parameterId));
+                }
+
+                if (!depInput) {
+                    depInput = findLegacyInput(fieldIndex, buildCandidateQueryNames(dep.label));
+                }
+
+                if (!depInput) {
+                    allDependenciesResolved = false;
+                    return;
+                }
+
+                if (!depInput.dataset.masterParamKey) {
+                    depInput.dataset.masterParamKey = depInput.dataset.paramId || depInput.dataset.testId || `param_${normalizeFieldIdentity(depInput.dataset.paramName || depInput.dataset.id || "dep")}`;
+                }
+
+                const pageDepMasterKey = String(depInput.dataset.masterParamKey);
+
+                if (origDepKey && origDepKey !== pageDepMasterKey) {
+                    adaptedExpression = adaptedExpression.split(`{{${origDepKey}}}`).join(`{{${pageDepMasterKey}}}`);
+                    adaptedExpression = adaptedExpression.split(`{${origDepKey}}`).join(`{{${pageDepMasterKey}}}`);
+                }
+                if (dep.parameterId && String(dep.parameterId) !== pageDepMasterKey) {
+                    adaptedExpression = adaptedExpression.split(`{{${dep.parameterId}}}`).join(`{{${pageDepMasterKey}}}`);
+                    adaptedExpression = adaptedExpression.split(`{${dep.parameterId}}`).join(`{{${pageDepMasterKey}}}`);
+                }
+
+                adaptedDependencies.push({
+                    testId: depInput.dataset.testId || dep.testId || null,
+                    parameterId: depInput.dataset.paramId || dep.parameterId || null,
+                    parameterMasterKey: pageDepMasterKey,
+                    label: depInput.dataset.paramName || depInput.dataset.id || dep.label || "",
+                });
+            });
+
+            if (!allDependenciesResolved || !adaptedDependencies.length) {
+                return;
+            }
+
+            seenTargetMasterKeys.add(pageTargetMasterKey);
+
+            adaptedList.push({
+                ...formula,
+                targetMasterKey: pageTargetMasterKey,
+                targetTestId: targetInput.dataset.testId || formula.targetTestId,
+                targetParameterId: targetInput.dataset.paramId || formula.targetParameterId,
+                targetLabel: targetInput.dataset.paramName || formula.targetLabel,
+                expression: adaptedExpression,
+                displayExpression: formula.displayExpression || adaptedExpression,
+                dependencies: adaptedDependencies,
+                precision: Number.isFinite(Number(formula.precision)) ? Number(formula.precision) : 2,
+                isActive: true,
+                allowManualOverride: Boolean(formula.allowManualOverride),
+            });
+        });
+
+        return adaptedList;
+    }
+
+    function buildLegacyFallbackFormulas(savedFormulas, fieldIndex = null) {
+        const resolvedFieldIndex = fieldIndex || buildLegacyFieldIndex();
         const savedTargetIds = new Set(
             (savedFormulas || []).map((formula) => String(formula.targetMasterKey || ""))
         );
         const fallbackFormulas = [];
 
         LEGACY_FORMULA_CONFIGS.forEach((config) => {
-            const targetInput = findLegacyInput(fieldIndex, config.targetNames);
+            const targetInput = findLegacyInput(resolvedFieldIndex, config.targetNames);
             if (!targetInput?.dataset?.masterParamKey) {
+                return;
+            }
+
+            // CRITICAL GUARD: Differential percentage fields must NEVER have a formula attached as a target!
+            if (isDifferentialPercentageField(targetInput)) {
                 return;
             }
 
@@ -1070,7 +1405,7 @@ async function loadfunction() {
             let canBuildFormula = true;
 
             Object.entries(config.dependencies || {}).forEach(([tokenKey, dependencyNames]) => {
-                const dependencyInput = findLegacyInput(fieldIndex, dependencyNames);
+                const dependencyInput = findLegacyInput(resolvedFieldIndex, dependencyNames);
                 if (!dependencyInput?.dataset?.masterParamKey) {
                     canBuildFormula = false;
                     return;
@@ -1089,6 +1424,8 @@ async function loadfunction() {
             if (!canBuildFormula) {
                 return;
             }
+
+            savedTargetIds.add(targetMasterKey);
 
             fallbackFormulas.push({
                 _id: `legacy-${targetMasterKey}`,
@@ -1113,26 +1450,80 @@ async function loadfunction() {
         formulaState.dependentsBySourceMasterKey.clear();
         formulaState.inputByMasterKey.clear();
 
-        document.querySelectorAll(".value-input[data-param-id]").forEach((input) => {
-            if (input.dataset.masterParamKey) {
-                formulaState.inputByMasterKey.set(String(input.dataset.masterParamKey), input);
+        document.querySelectorAll(".value-input").forEach((input) => {
+            if (!input.dataset.masterParamKey) {
+                input.dataset.masterParamKey = input.dataset.paramId || input.dataset.testId || `param_${normalizeFieldIdentity(input.dataset.paramName || input.dataset.id || "field")}`;
+            }
+
+            const rawKeys = [
+                String(input.dataset.masterParamKey || ""),
+                String(input.dataset.paramId || ""),
+                String(input.dataset.testId || ""),
+                normalizeClinicalName(input.dataset.paramName),
+                normalizeFieldIdentity(input.dataset.paramName),
+                normalizeClinicalName(input.dataset.id),
+                normalizeFieldIdentity(input.dataset.id),
+            ].filter(Boolean);
+
+            rawKeys.forEach((key) => {
+                if (!formulaState.inputByMasterKey.has(key)) {
+                    formulaState.inputByMasterKey.set(key, input);
+                }
+            });
+
+            // Also register clinical alias keys for input lookup
+            const coreName = normalizeClinicalName(input.dataset.paramName) || normalizeClinicalName(input.dataset.id);
+            if (coreName) {
+                for (const [canonical, aliases] of Object.entries(CLINICAL_ALIAS_MAP)) {
+                    if (canonical === coreName || aliases.includes(coreName)) {
+                        [canonical, ...aliases].forEach((aliasKey) => {
+                            if (!formulaState.inputByMasterKey.has(aliasKey)) {
+                                formulaState.inputByMasterKey.set(aliasKey, input);
+                            }
+                        });
+                    }
+                }
             }
         });
 
         formulaState.formulas.forEach((formula) => {
             const targetMasterKey = String(formula.targetMasterKey || "");
-            if (!targetMasterKey) return;
+            const targetParamId = String(formula.targetParameterId || "");
+            const targetLabelClinical = normalizeClinicalName(formula.targetLabel);
+            const targetLabelField = normalizeFieldIdentity(formula.targetLabel);
 
-            formulaState.formulaByTargetMasterKey.set(targetMasterKey, formula);
+            [targetMasterKey, targetParamId, targetLabelClinical, targetLabelField].filter(Boolean).forEach((tKey) => {
+                if (!formulaState.formulaByTargetMasterKey.has(tKey)) {
+                    formulaState.formulaByTargetMasterKey.set(tKey, formula);
+                }
+            });
 
             (formula.dependencies || []).forEach((dependency) => {
-                const dependencyMasterKey = String(dependency.parameterMasterKey || "");
-                if (!dependencyMasterKey) return;
+                const depKeys = [
+                    String(dependency.parameterMasterKey || ""),
+                    String(dependency.parameterId || ""),
+                    normalizeClinicalName(dependency.label),
+                    normalizeFieldIdentity(dependency.label),
+                ].filter(Boolean);
 
-                if (!formulaState.dependentsBySourceMasterKey.has(dependencyMasterKey)) {
-                    formulaState.dependentsBySourceMasterKey.set(dependencyMasterKey, []);
+                const depCore = normalizeClinicalName(dependency.label);
+                if (depCore) {
+                    for (const [canonical, aliases] of Object.entries(CLINICAL_ALIAS_MAP)) {
+                        if (canonical === depCore || aliases.includes(depCore)) {
+                            [canonical, ...aliases].forEach((alias) => depKeys.push(alias));
+                        }
+                    }
                 }
-                formulaState.dependentsBySourceMasterKey.get(dependencyMasterKey).push(formula);
+
+                depKeys.forEach((key) => {
+                    if (!formulaState.dependentsBySourceMasterKey.has(key)) {
+                        formulaState.dependentsBySourceMasterKey.set(key, []);
+                    }
+                    const list = formulaState.dependentsBySourceMasterKey.get(key);
+                    if (!list.includes(formula)) {
+                        list.push(formula);
+                    }
+                });
             });
         });
     }
@@ -1147,19 +1538,56 @@ async function loadfunction() {
     }
 
     function addIconsToMatchingRows() {
-        formulaState.formulas = [
-            ...(formulaState.formulas || []),
-            ...buildLegacyFallbackFormulas(formulaState.formulas || []),
-        ];
+        // First map all inputs currently present on the page
         rebuildFormulaIndexes();
-        const rows = document.querySelectorAll(".table tbody tr[data-order]");
+        const fieldIndex = buildLegacyFieldIndex();
 
-        rows.forEach((row) => {
-            const valueColumn = row.querySelector(".formulaIcon");
-            const input = row.querySelector(".value-input[data-param-id]");
-            if (!valueColumn || !input) return;
+        // Adapt formulas saved in DB to current fields (even across panel sub-tests or test variants)
+        const adaptedSaved = adaptSavedFormulasToPage(formulaState.formulas, fieldIndex);
 
-            const formula = formulaState.formulaByTargetMasterKey.get(String(input.dataset.masterParamKey || ""));
+        // Fallback formulas for standard panels not yet saved in DB
+        const fallbackFormulas = buildLegacyFallbackFormulas(adaptedSaved, fieldIndex);
+
+        // Set active formula list and rebuild lookup indexes
+        formulaState.formulas = [...adaptedSaved, ...fallbackFormulas];
+        rebuildFormulaIndexes();
+
+        const allInputs = document.querySelectorAll(".value-input");
+
+        allInputs.forEach((input) => {
+            const row = input.closest("tr");
+            const valueColumn = input.closest(".value-column")?.querySelector(".formulaIcon") || row?.querySelector(".formulaIcon");
+            if (!valueColumn) return;
+
+            // Strict safety: differential percentage fields must never have formulas attached
+            if (isDifferentialPercentageField(input)) {
+                delete input.dataset.formulaField;
+                delete input.dataset.formulaTargetId;
+                input.readOnly = false;
+                input.classList.remove("formula-value-input");
+                const existingIcon = valueColumn.querySelector(".icon");
+                if (existingIcon) existingIcon.remove();
+                return;
+            }
+
+            // Find formula by master key, paramId, or clinical/field alias
+            const possibleKeys = [
+                String(input.dataset.masterParamKey || ""),
+                String(input.dataset.paramId || ""),
+                normalizeClinicalName(input.dataset.paramName),
+                normalizeFieldIdentity(input.dataset.paramName),
+                normalizeClinicalName(input.dataset.id),
+                normalizeFieldIdentity(input.dataset.id),
+            ].filter(Boolean);
+
+            let formula = null;
+            for (const key of possibleKeys) {
+                if (formulaState.formulaByTargetMasterKey.has(key)) {
+                    formula = formulaState.formulaByTargetMasterKey.get(key);
+                    break;
+                }
+            }
+
             if (!formula) {
                 return;
             }
@@ -1168,7 +1596,7 @@ async function loadfunction() {
 
             if (valueColumn.querySelector(".icon")) return;
 
-            const title = row.children[1]?.textContent?.trim() || formula.targetLabel || "Formula";
+            const title = row?.querySelector(".test-name-cell")?.textContent?.trim() || row?.children?.[1]?.textContent?.trim() || formula.targetLabel || input.dataset.paramName || "Formula";
             const icon = document.createElement("div");
             icon.type = "div";
             icon.classList.add("icon", "formula-icon-button", "formula-tooltip-container");
@@ -1239,57 +1667,117 @@ async function loadfunction() {
 
         (formula.dependencies || []).forEach((dependency) => {
             const dependencyMasterKey = String(dependency.parameterMasterKey || "");
-            const dependencyInput = formulaState.inputByMasterKey.get(dependencyMasterKey);
+            let dependencyInput = formulaState.inputByMasterKey.get(dependencyMasterKey);
+            if (!dependencyInput && dependency.parameterId) {
+                dependencyInput = formulaState.inputByMasterKey.get(String(dependency.parameterId));
+            }
+            if (!dependencyInput && dependency.label) {
+                dependencyInput = formulaState.inputByMasterKey.get(normalizeClinicalName(dependency.label)) ||
+                                  formulaState.inputByMasterKey.get(normalizeFieldIdentity(dependency.label));
+            }
+
             const { hasValue, value } = getNumericValueFromInput(dependencyInput);
-            dependencyValues[dependencyMasterKey] = value;
+
+            // Populate all identifier keys for robust lookup in parseFormulaExpression
+            if (dependencyMasterKey) dependencyValues[dependencyMasterKey] = value;
+            if (dependency.parameterId) dependencyValues[String(dependency.parameterId)] = value;
+            if (dependency.label) {
+                dependencyValues[dependency.label] = value;
+                dependencyValues[normalizeClinicalName(dependency.label)] = value;
+                dependencyValues[normalizeFieldIdentity(dependency.label)] = value;
+            }
+
             hasAnyDependencyValue = hasAnyDependencyValue || hasValue;
             hasMissingDependency = hasMissingDependency || !hasValue;
         });
 
+        const prevVal = String(targetInput.value || "").trim();
+
         if (!hasAnyDependencyValue || hasMissingDependency) {
-            clearComputedFormulaValue(targetInput);
+            if (prevVal !== "") {
+                clearComputedFormulaValue(targetInput);
+                return true;
+            }
             return false;
         }
 
         try {
             const computedValue = parseFormulaExpression(formula.expression, (parameterId) => {
-                return dependencyValues[String(parameterId)] || 0;
+                const key = String(parameterId || "").trim();
+                if (key in dependencyValues) return dependencyValues[key];
+                const cleanKey = normalizeFieldIdentity(key);
+                if (cleanKey in dependencyValues) return dependencyValues[cleanKey];
+                const clinicalKey = normalizeClinicalName(key);
+                if (clinicalKey in dependencyValues) return dependencyValues[clinicalKey];
+                return 0;
             });
 
             applyComputedFormulaValue(targetInput, formula, computedValue);
-            return true;
+            const newVal = String(targetInput.value || "").trim();
+            return prevVal !== newVal;
         } catch (error) {
             console.error(`Error evaluating formula for ${formula.targetLabel}:`, error);
-            clearComputedFormulaValue(targetInput);
+            if (prevVal !== "") {
+                clearComputedFormulaValue(targetInput);
+                return true;
+            }
             return false;
         }
     }
 
-    function recalculateFormulaCascadeFromParam(paramId) {
+    function recalculateFormulaCascadeFromParam(paramId, inputElement = null) {
         const queue = [String(paramId || "")];
-        const visitedTargets = new Set();
+        if (inputElement) {
+            if (inputElement.dataset?.paramId) queue.push(String(inputElement.dataset.paramId));
+            if (inputElement.dataset?.paramName) {
+                queue.push(normalizeClinicalName(inputElement.dataset.paramName));
+                queue.push(normalizeFieldIdentity(inputElement.dataset.paramName));
+            }
+            if (inputElement.dataset?.id) {
+                queue.push(normalizeFieldIdentity(inputElement.dataset.id));
+            }
+        }
 
-        while (queue.length) {
-            const sourceMasterKey = queue.shift();
-            const dependentFormulas = formulaState.dependentsBySourceMasterKey.get(sourceMasterKey) || [];
+        const seen = new Set();
+        let steps = 0;
+        const MAX_STEPS = 60;
+
+        while (queue.length && steps < MAX_STEPS) {
+            steps += 1;
+            const sourceKey = queue.shift();
+            if (!sourceKey || seen.has(sourceKey)) continue;
+            seen.add(sourceKey);
+
+            const dependentFormulas = formulaState.dependentsBySourceMasterKey.get(sourceKey) || [];
 
             dependentFormulas.forEach((formula) => {
                 const targetMasterKey = String(formula.targetMasterKey || "");
-                if (!targetMasterKey || visitedTargets.has(targetMasterKey)) {
+                if (!targetMasterKey || targetMasterKey === sourceKey) {
                     return;
                 }
 
-                visitedTargets.add(targetMasterKey);
-                recalculateSingleFormula(formula);
-                queue.push(targetMasterKey);
+                const wasChanged = recalculateSingleFormula(formula);
+                if (wasChanged) {
+                    queue.push(targetMasterKey);
+                }
             });
         }
     }
 
     function recalculateAllFormulas() {
-        formulaState.formulas.forEach((formula) => {
-            recalculateSingleFormula(formula);
-        });
+        let changed = true;
+        let passes = 0;
+        const MAX_PASSES = 10;
+        while (changed && passes < MAX_PASSES) {
+            changed = false;
+            passes += 1;
+            formulaState.formulas.forEach((formula) => {
+                const didChange = recalculateSingleFormula(formula);
+                if (didChange) {
+                    changed = true;
+                }
+            });
+        }
     }
 
     function parseStoredCheckboxFlag(value) {
@@ -2711,7 +3199,7 @@ async function loadfunction() {
                         name="parameterName" 
                         data-test-id="${test._id}" 
                         data-param-id="${param._id || ""}" 
-                        data-master-param-key="${param.masterParameterKey || ""}"
+                        data-master-param-key="${param.masterParameterKey || param._id || test._id || ('param_' + (param.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ''))}"
                         data-param-name="${param.Para_name}" 
                         data-reference-type="${(param.ValueType || (param.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
                         data-Shortname="${test.Short_name}" 
@@ -2797,7 +3285,7 @@ async function loadfunction() {
                     class="value-input" 
                     data-test-id="${test._id}" 
                     data-param-id="${test.parameters?.[0]?._id || ""}" 
-                    data-master-param-key="${test.parameters?.[0]?.masterParameterKey || ""}"
+                    data-master-param-key="${test.parameters?.[0]?.masterParameterKey || test.parameters?.[0]?._id || test._id || ('param_' + (test.parameters?.[0]?.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ''))}"
                     data-param-name="${test.parameters?.[0]?.Para_name || test.Name}" 
                     data-reference-type="${(test.parameters?.[0]?.ValueType || (test.parameters?.[0]?.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
                     data-Shortname="${test.Short_name}" 
@@ -3110,13 +3598,20 @@ async function loadfunction() {
             openTextDropdown(input);
         });
 
-        // Event delegation: single listener for all dynamic .value-input fields.
-        tablesContainer.addEventListener("input", (event) => {
+        // Event delegation on document: ensures listeners are NEVER dropped even if container innerHTML re-renders
+        document.addEventListener("input", (event) => {
             const input = event.target.closest(".value-input");
             if (!input) return;
             if (isTextReferenceInput(input) && event.isTrusted) {
                 input.dataset.isAbnormal = "false";
             }
+            processInput(input);
+            handleInputChange(input);
+        });
+
+        document.addEventListener("change", (event) => {
+            const input = event.target.closest(".value-input");
+            if (!input) return;
             processInput(input);
             handleInputChange(input);
         });
@@ -3227,10 +3722,9 @@ async function loadfunction() {
     // Handle input changes and update formula row
     function handleInputChange(resultInputs) {
         syncDifferentialPercentageValidation();
-        const changedMasterKey = String(resultInputs?.dataset?.masterParamKey || "");
-        if (changedMasterKey) {
-            recalculateFormulaCascadeFromParam(changedMasterKey);
-        }
+        if (!resultInputs) return;
+        const changedMasterKey = String(resultInputs.dataset?.masterParamKey || resultInputs.dataset?.paramId || "");
+        recalculateFormulaCascadeFromParam(changedMasterKey, resultInputs);
     }
     window.__labReportHandleInputChange = handleInputChange;
 
@@ -3480,7 +3974,12 @@ async function loadfunction() {
     syncDifferentialPercentageValidation();
     await lisresult();
     await fetchEnteredResult();
-    // await fetchEnteredResult();
+
+    // Extra safety pass in next frames to guarantee all dynamically rendered or animated rows are attached
+    requestAnimationFrame(() => {
+        addIconsToMatchingRows();
+        recalculateAllFormulas();
+    });
 
     // for fetching previous results
     async function fetchEnteredResult() {
@@ -3540,6 +4039,7 @@ async function loadfunction() {
             }
 
             syncDifferentialPercentageValidation();
+            addIconsToMatchingRows();
             recalculateAllFormulas();
         } catch (error) {
             console.error("Error fetching entered results:", error);

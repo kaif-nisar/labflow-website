@@ -16,7 +16,10 @@ import {
   findMissingStandardTests,
   executeFixTest,
   executeBatchFixTests,
-  searchLabCatalog
+  searchLabCatalog,
+  prepareFormulaContextForCopilot,
+  executeCreateFormula,
+  executeBatchCreateFormulas
 } from "./copilot.tools.js";
 import { categorydb } from "../models/category.model.js";
 import { testSchema } from "../models/newTest.model.js";
@@ -49,7 +52,9 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
   const isMissingTestsIntent = /(kaun sa test|missing test|nahi hai|kya hona chahiye|suggest test|gap analysis|missing in database|kya kami hai|add karna chahiye|tests chahiye|kaun se test)/i.test(message || "");
   const isMethodInstrumentIntent = /(method|instrument|machine|tarika|equip|analyzer|उपकरण|विधि|inst|खाली|empty)/i.test(message || "");
   const isPanelShortNameIntent = /(short\s*name|short_name|shortcode|short\s*code|शॉर्ट\s*नेम|शॉर्ट\s*कोड|शार्ट\s*नाम|शॉर्ट\s*नाम|शार्ट\s*कोड|छोटा\s*नाम)/i.test(message || "") && /(panel|pannel|पैनल|all|sab|sabhi|सभी|unke|unka|inme|inhe|इन्हे|उनका|इनके)/i.test(message || "");
+  const isFormulaIntent = /(formula|formulas|kalkulet|calculate|calculation|फॉर्मूला|फार्मूला|सूत्र|गणित|mcv|mch|mchc|pcv|hematocrit|vldl|a\/g ratio|anion gap|mentzer|absolute neutrophil|anc|alc|aec|formula builder)/i.test(message || "");
   const isAuditIntent = isMethodInstrumentIntent || /(audit|check|review|kami|chuti|missing|galat|fix|database|sudhar|sahi|error|inspect)/i.test(message || "");
+  let formulaContext = null;
 
   try {
     const catDocs = await categorydb
@@ -89,6 +94,11 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
     if (isPanelShortNameIntent) {
       panelAudit = await auditPanelsInDatabase({ tenantId, userId, role });
     }
+
+    // If user is asking about or building formulas, prepare formula context
+    if (isFormulaIntent) {
+      formulaContext = await prepareFormulaContextForCopilot({ message, tenantId, userId });
+    }
   } catch (err) {
     console.warn("Context fetch warning:", err.message);
   }
@@ -103,7 +113,8 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
       existingPanels: contextPanels,
       databaseAudit,
       panelAudit,
-      missingCatalogTests
+      missingCatalogTests,
+      formulaContext
     },
     images
   });
@@ -128,6 +139,15 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
     } else if (act.type === "CREATE_PACKAGE") {
       const pkgName = String(act.data.packageName || act.data.name || "").trim().toLowerCase();
       if (!pkgName || pkgName === "package" || pkgName.length < 2 || isMissingTestsIntent) {
+        response.action = { type: "NONE" };
+      }
+    } else if (act.type === "CREATE_FORMULA" || act.type === "SAVE_FORMULA") {
+      if (!act.data?.expression && !act.data?.displayExpression) {
+        response.action = { type: "NONE" };
+      }
+    } else if (act.type === "BATCH_CREATE_FORMULAS" || act.type === "SAVE_FORMULAS") {
+      const fList = Array.isArray(act.data?.formulas) ? act.data.formulas : [];
+      if (fList.length === 0) {
         response.action = { type: "NONE" };
       }
     }
@@ -185,6 +205,31 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
           fixes: []
         }
       };
+    }
+  }
+
+  // Formula Batch Creation Guarantee:
+  // If user asked to create/build formulas (e.g. for CBC) and we have recommended formulas for the catalog
+  const isBuildFormulaRequest = /(banao|create|build|set karo|add karo|calculate karo|लगाओ|बनाओ|बना दो|बनाएं|formula build|formula lagao)/i.test(message || "");
+  if (
+    formulaContext &&
+    formulaContext.recommendedFormulas &&
+    formulaContext.recommendedFormulas.length > 0 &&
+    isFormulaIntent &&
+    isBuildFormulaRequest &&
+    (!response.action || response.action.type === "NONE" || (response.action.type !== "BATCH_CREATE_FORMULAS" && response.action.type !== "CREATE_FORMULA"))
+  ) {
+    const targetName = formulaContext.matchedTests[0]?.testName || "Complete Blood Count (CBC)";
+    response.action = {
+      type: "BATCH_CREATE_FORMULAS",
+      summary: `${targetName} Formulas (${formulaContext.recommendedFormulas.length} Clinical Formulas Ready)`,
+      data: {
+        panelOrTestName: targetName,
+        formulas: formulaContext.recommendedFormulas
+      }
+    };
+    if (!response.message || response.message.length < 30) {
+      response.message = `Mainne aapke **${targetName}** ke sabhi standard clinical formulas formulate kar diye hain (jaise PCV/Hematocrit, MCV, MCH, MCHC, Absolute Counts, NLR aadi).\n\nNeeche diye gaye **"Confirm & Save Formulas to Database"** button par click karke aap inhein ek sath database me save kar sakte hain, jisse ye Result Entry page par apne-aap calculate hone lagenge!`;
     }
   }
 
@@ -312,6 +357,16 @@ export const executeCopilotAction = asyncHandler(async (req, res) => {
     case "BATCH_FIX_PANELS":
     case "BATCH_UPDATE_PANELS":
       result = await executeBatchUpdatePanels({ fixes: data.fixes, tenantId, userId, role });
+      break;
+
+    case "CREATE_FORMULA":
+    case "SAVE_FORMULA":
+      result = await executeCreateFormula({ formulaData: data, tenantId, userId, role });
+      break;
+
+    case "BATCH_CREATE_FORMULAS":
+    case "SAVE_FORMULAS":
+      result = await executeBatchCreateFormulas({ formulasData: data, tenantId, userId, role });
       break;
 
     default:

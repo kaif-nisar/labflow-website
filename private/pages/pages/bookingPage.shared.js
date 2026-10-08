@@ -1109,7 +1109,9 @@
                             };
                     }
 
-                    const lockedBarcode = state.existingSampleBarcodes.get(normalizedSample);
+                    const lockedBarcode = state.existingSampleBarcodes.get(normalizedSample)
+                        || state.existingSampleBarcodes.get(normalizedSample.toLowerCase())
+                        || (state.existingSampleBarcodes.size === 1 ? Array.from(state.existingSampleBarcodes.values())[0] : '');
                     if (lockedBarcode) {
                         existingRow.barcodeId = lockedBarcode;
                         existingRow.confirmBarcodeId = lockedBarcode;
@@ -1474,9 +1476,15 @@
                 const catalogItem = state.catalogMap.get(key);
                 if (!catalogItem) return;
 
+                const catalogSampleTypes = ensureArray(catalogItem.sampleTypes).filter(Boolean);
+                const mergedSampleTypes = (item.sampleTypes && item.sampleTypes.length > 0)
+                    ? item.sampleTypes
+                    : catalogSampleTypes;
+
                 state.lockedItems.set(key, {
                     ...item,
                     ...catalogItem,
+                    sampleTypes: mergedSampleTypes,
                     selectedViaGroupId: item.selectedViaGroupId || catalogItem.selectedViaGroupId || '',
                     selectedViaGroupName: item.selectedViaGroupName || catalogItem.selectedViaGroupName || '',
                 });
@@ -1917,14 +1925,35 @@
                 const barcode = row.barcodeId || row.confirmBarcodeId || '';
                 if (sampleType && barcode) {
                     state.existingSampleBarcodes.set(sampleType, barcode);
+                    state.existingSampleBarcodes.set(sampleType.toLowerCase(), barcode);
                 }
             });
 
             if (ensureArray(booking?.selectedItems).length > 0) {
+                const itemSampleFromTable = new Map();
+                ensureArray(booking?.tableData).forEach((row) => {
+                    const st = String(row.typeOfSample || '').trim();
+                    if (!st) return;
+                    ensureArray(row.ids).forEach((entry) => {
+                        const iId = toId(entry.id);
+                        if (iId) {
+                            if (!itemSampleFromTable.has(iId)) {
+                                itemSampleFromTable.set(iId, new Set());
+                            }
+                            itemSampleFromTable.get(iId).add(st);
+                        }
+                    });
+                });
+
                 booking.selectedItems.forEach((item) => {
                     const itemType = normalizeItemType(item.itemType || item.collectionName);
                     const itemId = toId(item.itemId || item.id);
                     if (!itemType || !itemId) return;
+
+                    let sampleTypes = ensureArray(item.sampleTypes).map(s => String(s).trim()).filter(Boolean);
+                    if (sampleTypes.length === 0 && itemSampleFromTable.has(itemId)) {
+                        sampleTypes = Array.from(itemSampleFromTable.get(itemId));
+                    }
 
                     const key = buildItemKey(itemType, itemId);
                     state.lockedItems.set(key, {
@@ -1933,7 +1962,7 @@
                         collectionName: item.collectionName || COLLECTION_BY_TYPE[itemType],
                         itemName: item.itemName || '',
                         shortName: item.shortName || '',
-                        sampleTypes: ensureArray(item.sampleTypes),
+                        sampleTypes: sampleTypes,
                         price: toNumber(item.price),
                         selectedViaGroupId: toId(item.selectedViaGroupId),
                         selectedViaGroupName: item.selectedViaGroupName || '',

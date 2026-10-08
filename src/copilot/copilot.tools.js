@@ -11,6 +11,11 @@ import { User } from "../models/user.model.js";
 import { sampleSchema } from "../models/sampletype.model.js";
 import { unitdb } from "../models/category.model.js";
 import { getNextBookingCodeForScope } from "../utils/bookingCode.js";
+import { Formula } from "../models/formula.model.js";
+import {
+  evaluateFormulaExpression,
+  validateFormulaExpression
+} from "../utils/formulaEngine.js";
 
 /**
  * Helper to get clean tenant & user scope
@@ -3245,9 +3250,741 @@ export async function executeBatchUpdatePanels({ fixes = [], tenantId, userId, r
     }
   }
 
-  return {
+    return {
     success: true,
     updatedCount,
     message: `${updatedCount} panel(s) in your lab catalog were successfully updated with short names and are now searchable in booking!`
+  };
+}
+
+/**
+ * =========================================================================
+ * FORMULA BUILDER & CLINICAL ENGINE TOOLS
+ * =========================================================================
+ */
+
+function createMasterParameterKey() {
+  return `param_${new mongoose.Types.ObjectId().toString()}`;
+}
+
+/**
+ * Fetch tenant tests and ensure all parameters have unique masterParameterKey
+ */
+export async function getTenantTestsForFormulas(tenantId, userId) {
+  const targetTenantId = tenantId ? new mongoose.Types.ObjectId(tenantId) : null;
+  const targetUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
+  const scope = (targetTenantId && targetUserId)
+    ? { $or: [{ tenantId: targetTenantId }, { createdBy: targetUserId }] }
+    : (targetTenantId ? { tenantId: targetTenantId } : (targetUserId ? { createdBy: targetUserId } : {}));
+
+  const tests = await testSchema.find(scope).select("_id Name Short_name parameters").exec();
+
+  for (const test of tests) {
+    let hasChanges = false;
+    for (const parameter of Array.isArray(test.parameters) ? test.parameters : []) {
+      const existingKey = String(parameter?.masterParameterKey || "").trim();
+      if (!existingKey) {
+        parameter.masterParameterKey = createMasterParameterKey();
+        hasChanges = true;
+      }
+    }
+    if (hasChanges) {
+      test.markModified("parameters");
+      await test.save();
+    }
+  }
+
+  return tests.map(t => t.toObject());
+}
+
+/**
+ * Clinical formulas knowledge base for matching standard laboratory panel calculations
+ */
+export const CLINICAL_PANEL_FORMULAS = [
+  // --- CBC Formulas ---
+  {
+    panel: "CBC",
+    targetParameter: "PCV / Hematocrit",
+    aliases: ["pcv", "hematocrit", "hct", "packed cell volume", "pcv / hematocrit"],
+    displayExpression: "Hemoglobin * 3",
+    formulaTemplate: "{{Hemoglobin}} * 3",
+    dependencies: ["Hemoglobin"],
+    precision: 1,
+    unit: "%",
+    notes: "Calculated PCV/Hematocrit using Rule of Three (Hb x 3)"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "MCV",
+    aliases: ["mcv", "mean corpuscular volume"],
+    displayExpression: "( PCV * 10 ) / RBC Count",
+    formulaTemplate: "( {{PCV}} * 10 ) / {{RBC Count}}",
+    dependencies: ["PCV", "RBC Count"],
+    precision: 1,
+    unit: "fl",
+    notes: "MCV (fl) = (PCV % x 10) / RBC (10^6/uL)"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "MCH",
+    aliases: ["mch", "mean corpuscular hemoglobin"],
+    displayExpression: "( Hemoglobin * 10 ) / RBC Count",
+    formulaTemplate: "( {{Hemoglobin}} * 10 ) / {{RBC Count}}",
+    dependencies: ["Hemoglobin", "RBC Count"],
+    precision: 1,
+    unit: "pg",
+    notes: "MCH (pg) = (Hb g/dL x 10) / RBC (10^6/uL)"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "MCHC",
+    aliases: ["mchc", "mean corpuscular hemoglobin concentration"],
+    displayExpression: "( Hemoglobin * 100 ) / PCV",
+    formulaTemplate: "( {{Hemoglobin}} * 100 ) / {{PCV}}",
+    dependencies: ["Hemoglobin", "PCV"],
+    precision: 1,
+    unit: "g/dL",
+    notes: "MCHC (g/dL) = (Hb g/dL x 100) / PCV %"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Mentzer Index",
+    aliases: ["mentzer index", "mentzer's index", "mentzer"],
+    displayExpression: "MCV / RBC Count",
+    formulaTemplate: "{{MCV}} / {{RBC Count}}",
+    dependencies: ["MCV", "RBC Count"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Mentzer Index = MCV / RBC (<13 Beta Thalassemia Trait, >13 Iron Deficiency Anemia)"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Platelet haematocrit (PCT)",
+    aliases: ["pct", "platelet haematocrit", "platelet hematocrit", "plateletcrit", "platelet haematocrit (pct)"],
+    displayExpression: "( Platelet Count * MPV ) / 10000",
+    formulaTemplate: "( {{Platelet Count}} * {{MPV}} ) / 10000",
+    dependencies: ["Platelet Count", "MPV"],
+    precision: 2,
+    unit: "%",
+    notes: "Calculated Plateletcrit (PCT) = (Platelet Count x MPV) / 10000"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Absolute Neutrophil Count (ANC)",
+    aliases: ["anc", "absolute neutrophil count", "absolute neutrophils", "neutrophils absolute"],
+    displayExpression: "( Total Leukocyte Count * Neutrophils ) / 100",
+    formulaTemplate: "( {{TLC}} * {{Neutrophils}} ) / 100",
+    dependencies: ["TLC", "Neutrophils"],
+    precision: 0,
+    unit: "cells/cumm",
+    notes: "Calculated ANC = (TLC x Neutrophils %) / 100"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Absolute Lymphocyte Count (ALC)",
+    aliases: ["alc", "absolute lymphocyte count", "absolute lymphocytes", "lymphocytes absolute"],
+    displayExpression: "( Total Leukocyte Count * Lymphocytes ) / 100",
+    formulaTemplate: "( {{TLC}} * {{Lymphocytes}} ) / 100",
+    dependencies: ["TLC", "Lymphocytes"],
+    precision: 0,
+    unit: "cells/cumm",
+    notes: "Calculated ALC = (TLC x Lymphocytes %) / 100"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Absolute Eosinophil Count (AEC)",
+    aliases: ["aec", "absolute eosinophil count", "absolute eosinophils", "eosinophils absolute"],
+    displayExpression: "( Total Leukocyte Count * Eosinophils ) / 100",
+    formulaTemplate: "( {{TLC}} * {{Eosinophils}} ) / 100",
+    dependencies: ["TLC", "Eosinophils"],
+    precision: 0,
+    unit: "cells/cumm",
+    notes: "Calculated AEC = (TLC x Eosinophils %) / 100"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Absolute Monocyte Count (AMC)",
+    aliases: ["amc", "absolute monocyte count", "absolute monocytes", "monocytes absolute"],
+    displayExpression: "( Total Leukocyte Count * Monocytes ) / 100",
+    formulaTemplate: "( {{TLC}} * {{Monocytes}} ) / 100",
+    dependencies: ["TLC", "Monocytes"],
+    precision: 0,
+    unit: "cells/cumm",
+    notes: "Calculated AMC = (TLC x Monocytes %) / 100"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Absolute Basophil Count (ABC)",
+    aliases: ["abc", "absolute basophil count", "absolute basophils", "basophils absolute"],
+    displayExpression: "( Total Leukocyte Count * Basophils ) / 100",
+    formulaTemplate: "( {{TLC}} * {{Basophils}} ) / 100",
+    dependencies: ["TLC", "Basophils"],
+    precision: 0,
+    unit: "cells/cumm",
+    notes: "Calculated ABC = (TLC x Basophils %) / 100"
+  },
+  {
+    panel: "CBC",
+    targetParameter: "Neutrophil to Lymphocyte Ratio (NLR)",
+    aliases: ["nlr", "neutrophil to lymphocyte ratio", "neutrophil-lymphocyte ratio", "neutrophil/lymphocyte ratio"],
+    displayExpression: "Neutrophils / Lymphocytes",
+    formulaTemplate: "{{Neutrophils}} / {{Lymphocytes}}",
+    dependencies: ["Neutrophils", "Lymphocytes"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated NLR = Neutrophils % / Lymphocytes %"
+  },
+
+  // --- Lipid Profile Formulas ---
+  {
+    panel: "LIPID",
+    targetParameter: "VLDL Cholesterol",
+    aliases: ["vldl", "vldl cholesterol", "vldl-c", "very low density lipoprotein"],
+    displayExpression: "Triglycerides / 5",
+    formulaTemplate: "{{Triglycerides}} / 5",
+    dependencies: ["Triglycerides"],
+    precision: 1,
+    unit: "mg/dL",
+    notes: "Calculated VLDL = Triglycerides / 5"
+  },
+  {
+    panel: "LIPID",
+    targetParameter: "LDL Cholesterol",
+    aliases: ["ldl", "ldl cholesterol", "ldl-c", "low density lipoprotein"],
+    displayExpression: "Total Cholesterol - HDL Cholesterol - ( Triglycerides / 5 )",
+    formulaTemplate: "{{Total Cholesterol}} - {{HDL Cholesterol}} - ( {{Triglycerides}} / 5 )",
+    dependencies: ["Total Cholesterol", "HDL Cholesterol", "Triglycerides"],
+    precision: 1,
+    unit: "mg/dL",
+    notes: "Friedewald Equation: LDL = Total Cholesterol - HDL - (Triglycerides / 5)"
+  },
+  {
+    panel: "LIPID",
+    targetParameter: "Total Cholesterol / HDL Ratio",
+    aliases: ["cholesterol / hdl ratio", "chol/hdl ratio", "total cholesterol to hdl ratio", "cholesterol/hdl"],
+    displayExpression: "Total Cholesterol / HDL Cholesterol",
+    formulaTemplate: "{{Total Cholesterol}} / {{HDL Cholesterol}}",
+    dependencies: ["Total Cholesterol", "HDL Cholesterol"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated Cardiac Risk Ratio = Total Cholesterol / HDL"
+  },
+  {
+    panel: "LIPID",
+    targetParameter: "LDL / HDL Ratio",
+    aliases: ["ldl / hdl ratio", "ldl/hdl ratio", "ldl to hdl ratio"],
+    displayExpression: "LDL Cholesterol / HDL Cholesterol",
+    formulaTemplate: "{{LDL Cholesterol}} / {{HDL Cholesterol}}",
+    dependencies: ["LDL Cholesterol", "HDL Cholesterol"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated Atherogenic Risk Ratio = LDL / HDL"
+  },
+  {
+    panel: "LIPID",
+    targetParameter: "Non-HDL Cholesterol",
+    aliases: ["non-hdl cholesterol", "non hdl cholesterol", "non-hdl", "non hdl"],
+    displayExpression: "Total Cholesterol - HDL Cholesterol",
+    formulaTemplate: "{{Total Cholesterol}} - {{HDL Cholesterol}}",
+    dependencies: ["Total Cholesterol", "HDL Cholesterol"],
+    precision: 1,
+    unit: "mg/dL",
+    notes: "Calculated Non-HDL = Total Cholesterol - HDL"
+  },
+
+  // --- Liver Function Test (LFT) Formulas ---
+  {
+    panel: "LFT",
+    targetParameter: "Bilirubin (Indirect)",
+    aliases: ["bilirubin indirect", "indirect bilirubin", "ibil", "i-bil", "unconjugated bilirubin"],
+    displayExpression: "Total Bilirubin - Direct Bilirubin",
+    formulaTemplate: "{{Total Bilirubin}} - {{Direct Bilirubin}}",
+    dependencies: ["Total Bilirubin", "Direct Bilirubin"],
+    precision: 2,
+    unit: "mg/dL",
+    notes: "Indirect Bilirubin = Total Bilirubin - Direct Bilirubin"
+  },
+  {
+    panel: "LFT",
+    targetParameter: "Globulin",
+    aliases: ["globulin", "serum globulin", "total globulin"],
+    displayExpression: "Total Protein - Albumin",
+    formulaTemplate: "{{Total Protein}} - {{Albumin}}",
+    dependencies: ["Total Protein", "Albumin"],
+    precision: 2,
+    unit: "g/dL",
+    notes: "Calculated Globulin = Total Protein - Albumin"
+  },
+  {
+    panel: "LFT",
+    targetParameter: "A/G Ratio",
+    aliases: ["a/g ratio", "ag ratio", "a:g ratio", "albumin globulin ratio", "albumin/globulin ratio"],
+    displayExpression: "Albumin / Globulin",
+    formulaTemplate: "{{Albumin}} / {{Globulin}}",
+    dependencies: ["Albumin", "Globulin"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated Albumin/Globulin Ratio = Albumin / Globulin"
+  },
+  {
+    panel: "LFT",
+    targetParameter: "De Ritis Ratio (AST/ALT)",
+    aliases: ["ast/alt ratio", "sgot/sgpt ratio", "de ritis ratio", "ast:alt ratio"],
+    displayExpression: "SGOT (AST) / SGPT (ALT)",
+    formulaTemplate: "{{SGOT}} / {{SGPT}}",
+    dependencies: ["SGOT", "SGPT"],
+    precision: 2,
+    unit: "ratio",
+    notes: "De Ritis Ratio = SGOT / SGPT"
+  },
+
+  // --- Renal Function Test (KFT / RFT) Formulas ---
+  {
+    panel: "KFT",
+    targetParameter: "Blood Urea Nitrogen (BUN)",
+    aliases: ["bun", "blood urea nitrogen"],
+    displayExpression: "Blood Urea / 2.14",
+    formulaTemplate: "{{Blood Urea}} / 2.14",
+    dependencies: ["Blood Urea"],
+    precision: 2,
+    unit: "mg/dL",
+    notes: "BUN = Blood Urea / 2.14"
+  },
+  {
+    panel: "KFT",
+    targetParameter: "Urea / Creatinine Ratio",
+    aliases: ["urea / creatinine ratio", "urea/creatinine ratio", "urea to creatinine ratio"],
+    displayExpression: "Blood Urea / Serum Creatinine",
+    formulaTemplate: "{{Blood Urea}} / {{Serum Creatinine}}",
+    dependencies: ["Blood Urea", "Serum Creatinine"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated Urea / Creatinine Ratio"
+  },
+  {
+    panel: "KFT",
+    targetParameter: "BUN / Creatinine Ratio",
+    aliases: ["bun / creatinine ratio", "bun/creatinine ratio", "bun to creatinine ratio"],
+    displayExpression: "BUN / Serum Creatinine",
+    formulaTemplate: "{{BUN}} / {{Serum Creatinine}}",
+    dependencies: ["BUN", "Serum Creatinine"],
+    precision: 2,
+    unit: "ratio",
+    notes: "Calculated BUN / Creatinine Ratio"
+  },
+
+  // --- Electrolytes Formulas ---
+  {
+    panel: "ELECTROLYTES",
+    targetParameter: "Anion Gap",
+    aliases: ["anion gap", "serum anion gap"],
+    displayExpression: "( Sodium + Potassium ) - ( Chloride + Bicarbonate )",
+    formulaTemplate: "( {{Sodium}} + {{Potassium}} ) - ( {{Chloride}} + {{Bicarbonate}} )",
+    dependencies: ["Sodium", "Potassium", "Chloride", "Bicarbonate"],
+    precision: 1,
+    unit: "mmol/L",
+    notes: "Anion Gap = (Na + K) - (Cl + HCO3)"
+  },
+  {
+    panel: "CALCIUM",
+    targetParameter: "Corrected Calcium",
+    aliases: ["corrected calcium", "adjusted calcium"],
+    displayExpression: "Serum Calcium + 0.8 * ( 4.0 - Albumin )",
+    formulaTemplate: "{{Serum Calcium}} + 0.8 * ( 4.0 - {{Albumin}} )",
+    dependencies: ["Serum Calcium", "Albumin"],
+    precision: 2,
+    unit: "mg/dL",
+    notes: "Corrected Calcium = Measured Calcium + 0.8 x (4.0 - Serum Albumin)"
+  }
+];
+
+const CLINICAL_DEP_ALIASES = {
+  "PCV": ["pcv", "hematocrit", "hct", "packed cell volume", "hematocrit (hct)"],
+  "Hematocrit": ["hematocrit", "pcv", "hct", "packed cell volume", "hematocrit (hct)"],
+  "Hemoglobin": ["hemoglobin", "haemoglobin", "hb"],
+  "RBC Count": ["total red blood cell count", "rbc count", "rbc", "red blood cells", "red blood cell count"],
+  "TLC": ["total leucocytes count", "total leukocyte count", "tlc", "wbc", "total count (wbc)", "total count wbc", "total wbc"],
+  "Neutrophils": ["neutrophils percentage", "neutrophils (%)", "neutrophils", "neutrophil percentage", "neutrophil", "polymorphs"],
+  "Lymphocytes": ["lymphocyte percentage", "lymphocytes percentage", "lymphocytes (%)", "lymphocyte", "lymphocytes"],
+  "Monocytes": ["monocytes percentage", "monocyte percentage", "monocytes (%)", "monocyte", "monocytes"],
+  "Eosinophils": ["eosinophils percentage", "eosinophil percentage", "eosinophils (%)", "eosinophil", "eosinophils"],
+  "Basophils": ["basophils percentage", "basophil percentage", "basophils (%)", "basophil", "basophils"],
+  "Platelet Count": ["platelet count", "total platelet count", "platelets", "plt", "platelet"],
+  "MPV": ["mean platelet volume", "mpv", "mean platelet volume (mpv)"],
+  "Total Cholesterol": ["total cholesterol", "serum cholesterol"],
+  "HDL Cholesterol": ["hdl cholesterol", "hdl-cholesterol", "hdl"],
+  "Triglycerides": ["triglycerides", "triglyceride", "tg"],
+  "VLDL Cholesterol": ["vldl cholesterol", "vldl"],
+  "LDL Cholesterol": ["ldl cholesterol", "ldl"],
+  "Bilirubin (Total)": ["serum bilirubin (total)", "bilirubin (total)", "bilirubin total", "total bilirubin"],
+  "Bilirubin (Direct)": ["serum bilirubin (direct)", "bilirubin (direct)", "bilirubin direct", "direct bilirubin"],
+  "Protein (Total)": ["serum protein", "total protein", "protein (total)", "protein total"],
+  "Albumin": ["serum albumin", "albumin", "albumin (serum)"],
+  "Globulin": ["serum globulin", "globulin", "globulin (serum)"],
+  "SGOT": ["sgot (ast)", "sgot", "ast", "serum glutamic oxaloacetic transaminase"],
+  "SGPT": ["sgpt (alt)", "sgpt", "alt", "serum glutamic pyruvic transaminase"],
+  "Urea": ["serum urea", "urea", "blood urea"],
+  "Creatinine": ["serum creatinine", "creatinine"],
+  "BUN": ["bun", "blood urea nitrogen"],
+  "HbA1c": ["glycated haemoglobin(hba1c)", "hba1c", "glycated hemoglobin", "hba1c (glycated haemoglobin)"],
+  "Sodium": ["sodium", "serum sodium", "na"],
+  "Potassium": ["potassium", "serum potassium", "k"],
+  "Chloride": ["chloride", "serum chloride", "cl"],
+  "Bicarbonate": ["bicarbonate", "serum bicarbonate", "hco3"],
+};
+
+/**
+ * Standardize parameter search match helper
+ */
+function findMatchingParameterInTest(test, nameOrAliases) {
+  const searchList = Array.isArray(nameOrAliases)
+    ? nameOrAliases.map(s => String(s).toLowerCase().trim())
+    : [String(nameOrAliases).toLowerCase().trim()];
+
+  const params = Array.isArray(test.parameters) ? test.parameters : [];
+  if (!params.length) return null;
+
+  const tName = String(test.Name || "").toLowerCase().trim();
+  const sName = String(test.Short_name || "").toLowerCase().trim();
+
+  // Pass 1: exact literal matches
+  for (const param of params) {
+    const pName = String(param.Para_name || "").toLowerCase().trim();
+    for (const needle of searchList) {
+      if (pName === needle || tName === needle || sName === needle) return param;
+    }
+  }
+
+  // Pass 2: normalized clinical name exact matches (stripping parentheses and punctuation)
+  const normTName = tName.replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+  for (const param of params) {
+    const normPName = String(param.Para_name || "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+    for (const needle of searchList) {
+      const normNeedle = needle.replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+      if (normNeedle && (normPName === normNeedle || normTName === normNeedle)) return param;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Prepares deep formula context for Copilot when the user asks about formulas
+ */
+export async function prepareFormulaContextForCopilot({ message, tenantId, userId }) {
+  const allTests = await getTenantTestsForFormulas(tenantId, userId);
+  const msg = String(message || "").toLowerCase();
+
+  const isCbc = /(cbc|hemogram|blood count|mcv|mch|mchc|pcv|hematocrit)/i.test(msg);
+  const isLipid = /(lipid|cholesterol|triglyceride|vldl|ldl)/i.test(msg);
+  const isLft = /(lft|liver|bilirubin|sgot|sgpt|albumin|globulin|a\/g)/i.test(msg);
+  const isKft = /(kft|rft|kidney|renal|urea|creatinine|bun)/i.test(msg);
+  const isElectrolyte = /(electrolyte|sodium|potassium|chloride|anion gap)/i.test(msg);
+
+  let targetKeywords = [];
+  if (isCbc) targetKeywords.push("cbc", "hemogram", "blood count");
+  if (isLipid) targetKeywords.push("lipid", "cholesterol");
+  if (isLft) targetKeywords.push("liver", "lft");
+  if (isKft) targetKeywords.push("kidney", "kft", "renal", "rft");
+  if (isElectrolyte) targetKeywords.push("electrolyte");
+  if (targetKeywords.length === 0) targetKeywords.push("cbc", "lipid", "lft"); // Default to most common
+
+  // Filter relevant tests in lab - including tests in panels
+  const scope = (tenantId && userId)
+    ? { $or: [{ tenantId: new mongoose.Types.ObjectId(tenantId) }, { createdBy: new mongoose.Types.ObjectId(userId) }] }
+    : (tenantId ? { tenantId: new mongoose.Types.ObjectId(tenantId) } : (userId ? { createdBy: new mongoose.Types.ObjectId(userId) } : {}));
+
+  const matchedPanels = await addPannel.find({
+    ...scope,
+    $or: targetKeywords.map(kw => ({ name: new RegExp(escapeRegex(kw), "i") }))
+  }).lean();
+
+  const panelTestIds = new Set();
+  const panelTestNames = new Set();
+  for (const p of matchedPanels) {
+    (p.testsId || []).forEach(id => panelTestIds.add(String(id)));
+    (p.tests || []).forEach(name => panelTestNames.add(String(name).toLowerCase().trim()));
+  }
+
+  const matchedTests = allTests.filter(t => {
+    const tId = String(t._id);
+    const tName = String(t.Name || "").toLowerCase().trim();
+    const sName = String(t.Short_name || "").toLowerCase().trim();
+
+    if (panelTestIds.has(tId) || panelTestNames.has(tName)) return true;
+    return targetKeywords.some(kw => tName.includes(kw) || sName.includes(kw));
+  });
+
+  const catalogSummary = (matchedTests.length > 0 ? matchedTests : allTests.slice(0, 10)).map(t => ({
+    testId: String(t._id),
+    testName: t.Name,
+    shortName: t.Short_name || "",
+    parameters: (t.parameters || []).map(p => ({
+      parameterId: String(p._id),
+      parameterName: p.Para_name,
+      masterParameterKey: p.masterParameterKey,
+      unit: p.unit || ""
+    }))
+  }));
+
+  // Match standard clinical formulas that can be applied to these tests
+  const applicableFormulas = [];
+  const rawTestsInScope = matchedTests.length > 0 ? matchedTests : allTests;
+
+  // CRITICAL: Prioritize tests that belong directly to the matched panel over non-panel or multi-parameter composite tests
+  const testsInScope = [...rawTestsInScope].sort((a, b) => {
+    const aInPanel = panelTestIds.has(String(a._id));
+    const bInPanel = panelTestIds.has(String(b._id));
+    if (aInPanel && !bInPanel) return -1;
+    if (!aInPanel && bInPanel) return 1;
+    return (a.parameters?.length || 0) - (b.parameters?.length || 0);
+  });
+
+  for (const test of testsInScope) {
+    for (const stdFormula of CLINICAL_PANEL_FORMULAS) {
+      const targetParam = findMatchingParameterInTest(test, [stdFormula.targetParameter, ...stdFormula.aliases]);
+      if (targetParam) {
+        // Find dependencies in the same test or across matched tests in scope
+        const resolvedDeps = [];
+        let allDepsFound = true;
+        let machineExpr = stdFormula.formulaTemplate;
+
+        for (const depName of stdFormula.dependencies) {
+          const depAliases = CLINICAL_DEP_ALIASES[depName] ||
+            CLINICAL_PANEL_FORMULAS.find(f => f.targetParameter === depName)?.aliases ||
+            [depName];
+
+          let depParam = findMatchingParameterInTest(test, [depName, ...depAliases]);
+          let depTest = test;
+
+          if (!depParam) {
+            for (const otherTest of testsInScope) {
+              const candidateParam = findMatchingParameterInTest(otherTest, [depName, ...depAliases]);
+              if (candidateParam) {
+                depParam = candidateParam;
+                depTest = otherTest;
+                break;
+              }
+            }
+          }
+
+          if (depParam) {
+            resolvedDeps.push({
+              name: depName,
+              parameterId: String(depParam._id),
+              masterParameterKey: depParam.masterParameterKey,
+              testId: String(depTest._id)
+            });
+            machineExpr = machineExpr.replaceAll(`{{${depName}}}`, `{{${depParam.masterParameterKey}}}`);
+          } else {
+            allDepsFound = false;
+          }
+        }
+
+        // Validate dependencies: no self-dependency and all dependencies found
+        const hasSelfDependency = resolvedDeps.some(d => d.masterParameterKey === targetParam.masterParameterKey);
+
+        const normTarget = String(targetParam.Para_name || "").toLowerCase().replace(/[^a-z]/g, "");
+        const isDiffParam = ["neutrophilspercentage", "lymphocytepercentage", "monocytespercentage", "eosinophilspercentage", "basophilspercentage"].some(p => normTarget.includes(p)) ||
+          /^(neutrophil|lymphocyte|eosinophil|monocyte|basophil)s?percentage$/.test(normTarget);
+
+        if (allDepsFound && !hasSelfDependency && !isDiffParam && !applicableFormulas.some(f => f.targetMasterKey === targetParam.masterParameterKey)) {
+          // Avoid duplicate formulas for the exact same clinical calculation: prefer tests that belong directly to the panel
+          const existingIdx = applicableFormulas.findIndex(f => f.clinicalTarget === stdFormula.targetParameter);
+          if (existingIdx !== -1) {
+            const newIsInPanel = panelTestIds.has(String(test._id));
+            const oldIsInPanel = panelTestIds.has(String(applicableFormulas[existingIdx].targetTestId));
+            if (newIsInPanel && !oldIsInPanel) {
+              applicableFormulas.splice(existingIdx, 1);
+            } else {
+              continue;
+            }
+          }
+
+          applicableFormulas.push({
+            clinicalTarget: stdFormula.targetParameter,
+            targetTestId: String(test._id),
+            targetTestName: test.Name,
+            targetParameterId: String(targetParam._id),
+            targetParameterName: targetParam.Para_name,
+            targetMasterKey: targetParam.masterParameterKey,
+            displayExpression: stdFormula.displayExpression,
+            expression: machineExpr,
+            dependencyMasterKeys: resolvedDeps.map(d => d.masterParameterKey),
+            precision: stdFormula.precision,
+            notes: stdFormula.notes
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    matchedTestsCount: matchedTests.length,
+    matchedTests: catalogSummary,
+    recommendedFormulasCount: applicableFormulas.length,
+    recommendedFormulas: applicableFormulas
+  };
+}
+
+/**
+ * Execute creation of a single formula
+ */
+export async function executeCreateFormula({ formulaData, tenantId, userId, role }) {
+  if (!formulaData) {
+    throw new Error("Formula data is required.");
+  }
+
+  const tests = await getTenantTestsForFormulas(tenantId, userId);
+  const targetTenantId = tenantId ? new mongoose.Types.ObjectId(tenantId) : null;
+  const targetUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
+
+  // Build catalog maps
+  const paramByMasterKey = new Map();
+  const paramByName = new Map();
+
+  for (const test of tests) {
+    for (const p of Array.isArray(test.parameters) ? test.parameters : []) {
+      const pName = String(p.Para_name || test.Name || "Parameter").trim();
+      const tName = String(test.Name || "Test").trim();
+      const label = (tName.toLowerCase() === pName.toLowerCase() || !tName)
+        ? pName
+        : `${pName} (${tName})`;
+
+      const entry = {
+        testId: String(test._id),
+        testName: test.Name,
+        parameterId: String(p._id),
+        masterParameterKey: p.masterParameterKey,
+        parameterName: p.Para_name,
+        label
+      };
+      paramByMasterKey.set(p.masterParameterKey, entry);
+      paramByName.set(String(p.Para_name).toLowerCase().trim(), entry);
+    }
+  }
+
+  // Resolve target parameter
+  let targetEntry = null;
+  if (formulaData.targetMasterKey && paramByMasterKey.has(formulaData.targetMasterKey)) {
+    targetEntry = paramByMasterKey.get(formulaData.targetMasterKey);
+  } else if (formulaData.targetParameterId) {
+    targetEntry = Array.from(paramByMasterKey.values()).find(e => e.parameterId === String(formulaData.targetParameterId));
+  } else if (formulaData.targetParameterName) {
+    targetEntry = paramByName.get(String(formulaData.targetParameterName).toLowerCase().trim());
+  }
+
+  if (!targetEntry) {
+    throw new Error(`Target parameter "${formulaData.targetParameterName || formulaData.targetMasterKey}" could not be found in laboratory catalog.`);
+  }
+
+  const normTarget = String(targetEntry.parameterName || "").toLowerCase().replace(/[^a-z]/g, "");
+  const isDifferentialPercent = ["neutrophilspercentage", "lymphocytepercentage", "monocytespercentage", "eosinophilspercentage", "basophilspercentage"].some(p => normTarget.includes(p)) ||
+    /^(neutrophil|lymphocyte|eosinophil|monocyte|basophil)s?percentage$/.test(normTarget);
+  if (isDifferentialPercent) {
+    throw new Error(`Differential leukocyte percentages (like "${targetEntry.parameterName}") are manual microscopic/analyzer measurements and cannot be calculated via formula.`);
+  }
+
+  // Normalize expression: if placeholders contain parameter names instead of master keys, replace them
+  let rawExpression = String(formulaData.expression || formulaData.displayExpression || "").trim();
+  rawExpression = rawExpression.replace(/\{\{([^{}]+)\}\}/g, (match, rawKey) => {
+    const trimmed = rawKey.trim();
+    if (paramByMasterKey.has(trimmed)) return `{{${trimmed}}}`;
+    const byName = paramByName.get(trimmed.toLowerCase());
+    if (byName) return `{{${byName.masterParameterKey}}}`;
+    return match;
+  });
+
+  const validation = validateFormulaExpression(rawExpression);
+  const usedMasterKeys = validation.usedIds;
+
+  if (usedMasterKeys.includes(targetEntry.masterParameterKey)) {
+    throw new Error(`Formula for "${targetEntry.parameterName}" cannot depend on itself.`);
+  }
+
+  const dependencies = usedMasterKeys.map(k => {
+    const entry = paramByMasterKey.get(k);
+    if (!entry) throw new Error(`Formula dependency "${k}" not found in tenant tests.`);
+    return {
+      testId: new mongoose.Types.ObjectId(entry.testId),
+      parameterId: new mongoose.Types.ObjectId(entry.parameterId),
+      parameterMasterKey: entry.masterParameterKey,
+      label: entry.label
+    };
+  });
+
+  const payload = {
+    tenantId: targetTenantId || targetUserId,
+    targetTestId: new mongoose.Types.ObjectId(targetEntry.testId),
+    targetParameterId: new mongoose.Types.ObjectId(targetEntry.parameterId),
+    targetMasterKey: targetEntry.masterParameterKey,
+    targetLabel: targetEntry.label,
+    expression: rawExpression,
+    displayExpression: formulaData.displayExpression || rawExpression,
+    dependencies,
+    precision: Number.isFinite(Number(formulaData.precision)) ? Number(formulaData.precision) : 2,
+    notes: String(formulaData.notes || "").trim(),
+    isActive: formulaData.isActive !== false,
+    allowManualOverride: formulaData.allowManualOverride !== false,
+    validationStatus: "valid",
+    lastValidatedAt: new Date(),
+    updatedBy: targetUserId || targetTenantId
+  };
+
+  const saved = await Formula.findOneAndUpdate(
+    {
+      tenantId: targetTenantId || targetUserId,
+      targetMasterKey: targetEntry.masterParameterKey
+    },
+    {
+      $set: payload,
+      $setOnInsert: { createdBy: targetUserId || targetTenantId }
+    },
+    { new: true, upsert: true }
+  );
+
+  return {
+    success: true,
+    message: `Formula for "${targetEntry.parameterName}" (${saved.displayExpression}) successfully saved to database!`,
+    formula: saved
+  };
+}
+
+/**
+ * Execute batch creation of multiple formulas (e.g. for CBC panel or Lipid profile)
+ */
+export async function executeBatchCreateFormulas({ formulasData = {}, tenantId, userId, role }) {
+  const formulasList = Array.isArray(formulasData.formulas)
+    ? formulasData.formulas
+    : (Array.isArray(formulasData) ? formulasData : []);
+
+  if (!formulasList.length) {
+    throw new Error("No formulas provided in batch creation request.");
+  }
+
+  const savedResults = [];
+  const errors = [];
+
+  for (const f of formulasList) {
+    try {
+      const res = await executeCreateFormula({ formulaData: f, tenantId, userId, role });
+      if (res.success) savedResults.push(res.formula);
+    } catch (err) {
+      console.warn("Failed to create individual formula in batch:", f?.targetParameterName, err.message);
+      errors.push(`${f?.targetParameterName || 'Formula'}: ${err.message}`);
+    }
+  }
+
+  if (savedResults.length === 0 && errors.length > 0) {
+    throw new Error(`Failed to save formulas: ${errors.join("; ")}`);
+  }
+
+  const titles = savedResults.map(f => f.targetLabel || f.targetMasterKey).join(", ");
+  return {
+    success: true,
+    count: savedResults.length,
+    message: `Successfully created and saved ${savedResults.length} formula(s) in your laboratory database (${titles})! These will now calculate automatically during result entry and live preview.`,
+    formulas: savedResults,
+    errors: errors.length ? errors : undefined
   };
 }

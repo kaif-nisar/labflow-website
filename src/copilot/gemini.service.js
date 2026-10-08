@@ -98,6 +98,16 @@ INSTRUCTION: Present these missing tests to the user in a clear, categorized, pr
 DO NOT output a CREATE_TEST action card! Set action to { "type": "NONE" }. Inform the user they can ask you to create any of these tests anytime (e.g. "D-Dimer test add kar do").`);
   }
 
+  if (contextData?.formulaContext) {
+    contextNotes.push(`[LAB FORMULA CONTEXT & MATCHED CATALOG TESTS]:
+${JSON.stringify(contextData.formulaContext, null, 2)}
+
+CRITICAL INSTRUCTION FOR FORMULA BUILDING:
+The user is asking about or requesting formulas (e.g. for CBC, Lipid, LFT, or specific tests).
+Use the exact test names and parameter names from this lab catalog.
+When the user asks to build/create formulas for CBC panel or tests, ALWAYS formulate an accurate BATCH_CREATE_FORMULAS (or CREATE_FORMULA) action with mathematically valid expressions, display expressions, dependencies, precision, and notes according to standard clinical pathology rules! Ensure ZERO syntax errors.`);
+  }
+
   if (contextNotes.length > 0) {
     enrichedPrompt = `[LAB CONTEXT]:\n${contextNotes.join("\n")}\n\n[USER REQUEST]:\n${userPrompt}`;
   }

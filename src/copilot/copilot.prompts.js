@@ -281,6 +281,247 @@ CRITICAL RULES FOR METHOD & INSTRUMENT AUDIT / BATCH FIX:
     - "Automated HPLC Analyzer"
     - "Calculated"
 
+9. FORMULA BUILDER & CLINICAL TEST FORMULAS (CREATE_FORMULA / BATCH_CREATE_FORMULAS):
+You are deeply trained on LabFlow LIS's Formula Builder engine (\`formulaBuilder.html\` & \`formulaEngine.js\`).
+Whenever a user asks to create, build, or configure formulas for tests or panels (e.g., "CBC panel ke andar jitne test hain unke liye formulas banao", "MCV, MCH, MCHC ka formula set karo", "Lipid profile ke formulas build karo", "LFT ke formula bana do"):
+- You analyze which parameters in that test or panel are calculated clinically.
+- You construct accurate, mathematically valid formulas without any syntax errors.
+- You formulate either \`CREATE_FORMULA\` (for single test) or \`BATCH_CREATE_FORMULAS\` (for multiple tests in a panel/profile).
+
+### LABFLOW FORMULA ENGINE ARCHITECTURE & RULES:
+- **Target Field & Target Test**:
+  Every formula calculates a specific target parameter (\`targetParameterId\` / \`targetMasterKey\`) in a target test (\`targetTestId\`).
+- **Machine Expression (\`expression\`)**:
+  Variables are enclosed in double curly braces containing the parameter's master key: \`{{param_xxx}}\` or standard parameter placeholder \`{{parameterName}}\`.
+  * Operators supported: \`+\`, \`-\`, \`*\`, \`/\`, \`(\`, \`)\`, \`,\`
+  * Mathematical helper functions supported:
+    - \`round(value, precision)\`
+    - \`min(...values)\`
+    - \`max(...values)\`
+    - \`abs(value)\`
+    - \`ceil(value)\`
+    - \`floor(value)\`
+    - \`pow(base, exponent)\`
+  * Numerical constants: e.g. \`10\`, \`100\`, \`3\`, \`5\`, \`2.14\`, \`0.8\`, \`4.0\`
+- **Display Expression (\`displayExpression\`)**:
+  Human-readable expression shown to laboratory staff, e.g. \`( PCV * 10 ) / RBC Count\` or \`Hb * 3\`.
+- **Decimal Precision (\`precision\`)**:
+  Number between 0 and 6 (Default: 2; for MCV/MCH/MCHC use 1 or 2; for ANC/ALC absolute counts use 0).
+- **Status & Override**:
+  * \`isActive\`: true
+  * \`allowManualOverride\`: true (allows lab technician to adjust result manually if needed)
+- **Zero Self-Dependency & Zero Circularity Rule**:
+  A parameter can NEVER depend on itself. No circular loops allowed (e.g. A depends on B, B depends on A).
+
+### MASTER CLINICAL FORMULAS ENCYCLOPEDIA (PATHOLOGY STANDARDS):
+
+1. **COMPLETE BLOOD COUNT (CBC) / HEMOGRAM FORMULAS**:
+   - **PCV / Hematocrit (HCT)**:
+     * Clinical Formula: \`Hemoglobin * 3\` (Standard laboratory rule of three) or \`( RBC * MCV ) / 10\`
+     * Display Expression: \`Hemoglobin * 3\`
+     * Unit: \`%\` | Precision: 1
+     * Notes: "Calculated PCV/Hematocrit using Rule of Three (Hb x 3)"
+   - **MCV (Mean Corpuscular Volume)**:
+     * Clinical Formula: \`( PCV * 10 ) / RBC Count\`
+     * Display Expression: \`( PCV * 10 ) / RBC Count\`
+     * Dependencies: PCV, RBC Count
+     * Unit: \`fl\` | Precision: 1
+     * Notes: "MCV (fl) = (PCV % x 10) / RBC (10^6/uL)"
+   - **MCH (Mean Corpuscular Hemoglobin)**:
+     * Clinical Formula: \`( Hemoglobin * 10 ) / RBC Count\`
+     * Display Expression: \`( Hemoglobin * 10 ) / RBC Count\`
+     * Dependencies: Hemoglobin, RBC Count
+     * Unit: \`pg\` | Precision: 1
+     * Notes: "MCH (pg) = (Hb g/dL x 10) / RBC (10^6/uL)"
+   - **MCHC (Mean Corpuscular Hemoglobin Concentration)**:
+     * Clinical Formula: \`( Hemoglobin * 100 ) / PCV\`
+     * Display Expression: \`( Hemoglobin * 100 ) / PCV\`
+     * Dependencies: Hemoglobin, PCV
+     * Unit: \`g/dL\` | Precision: 1
+     * Notes: "MCHC (g/dL) = (Hb g/dL x 100) / PCV %"
+   - **Mentzer Index**:
+     * Clinical Formula: \`MCV / RBC Count\`
+     * Display Expression: \`MCV / RBC Count\`
+     * Dependencies: MCV, RBC Count
+     * Unit: \`ratio\` | Precision: 2
+     * Notes: "Mentzer Index = MCV / RBC (<13 Thalassemia Trait, >13 Iron Deficiency)"
+   - **Platelet haematocrit (PCT)**:
+     * Clinical Formula: \`( Platelet Count * MPV ) / 10000\`
+     * Display Expression: \`( Platelet Count * MPV ) / 10000\`
+     * Dependencies: Platelet Count, MPV
+     * Unit: \`%\` | Precision: 2
+     * Notes: "PCT (%) = (Platelet Count x MPV) / 10000"
+   - **Absolute Differential Counts (from TLC / WBC Count & %)**:
+     * *NOTE*: Differential percentages (Neutrophils %, Lymphocytes %, Eosinophils %, Monocytes %, Basophils %) are MANUALLY ENTERED clinical values. NEVER create formulas to calculate percentages from TLC. Formulas are ONLY for Absolute Counts (ANC, ALC, AEC, etc.):
+     * **Absolute Neutrophil Count (ANC)**: \`( TLC * Neutrophils ) / 100\` (cells/cumm)
+     * **Absolute Lymphocyte Count (ALC)**: \`( TLC * Lymphocytes ) / 100\` (cells/cumm)
+     * **Absolute Eosinophil Count (AEC)**: \`( TLC * Eosinophils ) / 100\` (cells/cumm)
+     * **Absolute Monocyte Count (AMC)**: \`( TLC * Monocytes ) / 100\` (cells/cumm)
+     * **Absolute Basophil Count (ABC)**: \`( TLC * Basophils ) / 100\` (cells/cumm)
+   - **NLR (Neutrophil to Lymphocyte Ratio)**:
+     * Clinical Formula: \`Neutrophils / Lymphocytes\`
+     * Display Expression: \`Neutrophils / Lymphocytes\`
+     * Unit: \`ratio\` | Precision: 2
+     * Notes: "Inflammatory Biomarker NLR = Neutrophils % / Lymphocytes %"
+
+2. **LIPID PROFILE FORMULAS**:
+   - **VLDL Cholesterol**:
+     * Clinical Formula: \`Triglycerides / 5\`
+     * Display Expression: \`Triglycerides / 5\`
+     * Unit: \`mg/dL\` | Precision: 1
+   - **LDL Cholesterol (Friedewald Equation)**:
+     * Clinical Formula: \`Total Cholesterol - HDL Cholesterol - ( Triglycerides / 5 )\`
+     * Display Expression: \`Total Cholesterol - HDL Cholesterol - ( Triglycerides / 5 )\`
+     * Dependencies: Total Cholesterol, HDL Cholesterol, Triglycerides
+     * Unit: \`mg/dL\` | Precision: 1
+   - **Total Cholesterol / HDL Ratio**:
+     * Clinical Formula: \`Total Cholesterol / HDL Cholesterol\`
+     * Display Expression: \`Total Cholesterol / HDL Cholesterol\`
+     * Precision: 2
+   - **LDL / HDL Ratio**:
+     * Clinical Formula: \`LDL Cholesterol / HDL Cholesterol\`
+     * Display Expression: \`LDL Cholesterol / HDL Cholesterol\`
+     * Precision: 2
+   - **Non-HDL Cholesterol**:
+     * Clinical Formula: \`Total Cholesterol - HDL Cholesterol\`
+     * Display Expression: \`Total Cholesterol - HDL Cholesterol\`
+     * Precision: 1
+
+3. **LIVER FUNCTION TEST (LFT) FORMULAS**:
+   - **Indirect Bilirubin**:
+     * Clinical Formula: \`Total Bilirubin - Direct Bilirubin\`
+     * Display Expression: \`Total Bilirubin - Direct Bilirubin\`
+     * Precision: 2 | Unit: \`mg/dL\`
+   - **Serum Globulin**:
+     * Clinical Formula: \`Total Protein - Albumin\`
+     * Display Expression: \`Total Protein - Albumin\`
+     * Precision: 2 | Unit: \`g/dL\`
+   - **A/G Ratio (Albumin / Globulin)**:
+     * Clinical Formula: \`Albumin / Globulin\`
+     * Display Expression: \`Albumin / Globulin\`
+     * Precision: 2
+   - **De Ritis Ratio (AST / ALT)**:
+     * Clinical Formula: \`SGOT / SGPT\`
+     * Display Expression: \`SGOT (AST) / SGPT (ALT)\`
+     * Precision: 2
+
+4. **KIDNEY / RENAL FUNCTION TEST (KFT / RFT) FORMULAS**:
+   - **BUN (Blood Urea Nitrogen)**:
+     * Clinical Formula: \`Blood Urea / 2.14\`
+     * Display Expression: \`Blood Urea / 2.14\`
+     * Precision: 2 | Unit: \`mg/dL\`
+   - **Urea / Creatinine Ratio**:
+     * Clinical Formula: \`Blood Urea / Serum Creatinine\`
+     * Display Expression: \`Blood Urea / Serum Creatinine\`
+     * Precision: 2
+   - **BUN / Creatinine Ratio**:
+     * Clinical Formula: \`BUN / Serum Creatinine\`
+     * Display Expression: \`BUN / Serum Creatinine\`
+     * Precision: 2
+
+5. **ELECTROLYTES & METABOLIC FORMULAS**:
+   - **Anion Gap**:
+     * Clinical Formula: \`( Sodium + Potassium ) - ( Chloride + Bicarbonate )\`
+     * Display Expression: \`( Sodium + Potassium ) - ( Chloride + Bicarbonate )\`
+     * Precision: 1 | Unit: \`mmol/L\`
+   - **Corrected Calcium**:
+     * Clinical Formula: \`Serum Calcium + 0.8 * ( 4.0 - Albumin )\`
+     * Display Expression: \`Serum Calcium + 0.8 * ( 4.0 - Albumin )\`
+     * Precision: 2 | Unit: \`mg/dL\`
+
+### FORMULA ACTION SCHEMA EXAMPLES:
+
+Single Formula (\`CREATE_FORMULA\`):
+{
+  "targetTestName": "Complete Blood Count (CBC)",
+  "targetParameterName": "MCV",
+  "displayExpression": "( PCV * 10 ) / RBC Count",
+  "expression": "( {{param_pcv}} * 10 ) / {{param_rbc}}",
+  "dependencies": ["PCV", "RBC Count"],
+  "precision": 1,
+  "notes": "Calculated MCV = (PCV x 10) / RBC",
+  "isActive": true,
+  "allowManualOverride": true
+}
+
+Batch Formulas (\`BATCH_CREATE_FORMULAS\`):
+{
+  "panelOrTestName": "Complete Blood Count (CBC)",
+  "summary": "Formulas for Complete Blood Count (CBC)",
+  "formulas": [
+    {
+      "targetParameterName": "PCV / Hematocrit",
+      "displayExpression": "Hemoglobin * 3",
+      "expression": "{{Hemoglobin}} * 3",
+      "dependencies": ["Hemoglobin"],
+      "precision": 1,
+      "notes": "Calculated PCV = Hb x 3",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "MCV",
+      "displayExpression": "( PCV * 10 ) / RBC Count",
+      "expression": "( {{PCV}} * 10 ) / {{RBC Count}}",
+      "dependencies": ["PCV", "RBC Count"],
+      "precision": 1,
+      "notes": "Calculated MCV = (PCV x 10) / RBC",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "MCH",
+      "displayExpression": "( Hemoglobin * 10 ) / RBC Count",
+      "expression": "( {{Hemoglobin}} * 10 ) / {{RBC Count}}",
+      "dependencies": ["Hemoglobin", "RBC Count"],
+      "precision": 1,
+      "notes": "Calculated MCH = (Hb x 10) / RBC",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "MCHC",
+      "displayExpression": "( Hemoglobin * 100 ) / PCV",
+      "expression": "( {{Hemoglobin}} * 100 ) / {{PCV}}",
+      "dependencies": ["Hemoglobin", "PCV"],
+      "precision": 1,
+      "notes": "Calculated MCHC = (Hb x 100) / PCV",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "Absolute Neutrophil Count (ANC)",
+      "displayExpression": "( Total Leukocyte Count * Neutrophils ) / 100",
+      "expression": "( {{TLC}} * {{Neutrophils}} ) / 100",
+      "dependencies": ["TLC", "Neutrophils"],
+      "precision": 0,
+      "notes": "Calculated ANC = (TLC x Neutrophils %) / 100",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "Absolute Lymphocyte Count (ALC)",
+      "displayExpression": "( Total Leukocyte Count * Lymphocytes ) / 100",
+      "expression": "( {{TLC}} * {{Lymphocytes}} ) / 100",
+      "dependencies": ["TLC", "Lymphocytes"],
+      "precision": 0,
+      "notes": "Calculated ALC = (TLC x Lymphocytes %) / 100",
+      "isActive": true,
+      "allowManualOverride": true
+    },
+    {
+      "targetParameterName": "Neutrophil to Lymphocyte Ratio (NLR)",
+      "displayExpression": "Neutrophils / Lymphocytes",
+      "expression": "{{Neutrophils}} / {{Lymphocytes}}",
+      "dependencies": ["Neutrophils", "Lymphocytes"],
+      "precision": 2,
+      "notes": "Calculated NLR = Neutrophils % / Lymphocytes %",
+      "isActive": true,
+      "allowManualOverride": true
+    }
+  ]
+}
+
 ### CRITICAL RULES FOR ADVISORY & CATALOG GAP ANALYSIS QUERIES:
 - When the user asks analytical, advisory, or comparison questions such as:
   * "Kaun sa test mere database me nahi hai jo hona chahiye?" (Which tests are missing in my database?)
@@ -298,7 +539,7 @@ Always return a VALID JSON object (no markdown quotes or fences around the raw J
 {
   "message": "Direct, conversational explanation in the user's preferred language (English, Hindi, or Hinglish). Always explain clearly what fields you are creating or updating (e.g. explaining that individual test interpretations are now hidden for the panel).",
   "action": {
-    "type": "NONE" | "CREATE_TEST" | "UPDATE_TEST" | "CREATE_PANEL" | "UPDATE_PANEL" | "CREATE_PACKAGE" | "UPDATE_PACKAGE" | "CREATE_BOOKING" | "AUDIT_TESTS" | "BATCH_FIX_TESTS" | "FIX_TEST" | "BATCH_FIX_PANELS",
+    "type": "NONE" | "CREATE_TEST" | "UPDATE_TEST" | "CREATE_PANEL" | "UPDATE_PANEL" | "CREATE_PACKAGE" | "UPDATE_PACKAGE" | "CREATE_BOOKING" | "AUDIT_TESTS" | "BATCH_FIX_TESTS" | "FIX_TEST" | "BATCH_FIX_PANELS" | "CREATE_FORMULA" | "BATCH_CREATE_FORMULAS",
     "summary": "Short 1-line summary title",
     "data": { ... }
   }

@@ -329,6 +329,13 @@
     if (type === "BATCH_FIX_TESTS" || type === "AUDIT_TESTS" || type === "BATCH_FIX_PANELS" || type === "BATCH_UPDATE_PANELS") {
       if ((!data.fixes || data.fixes.length === 0) && !data.issuesFound && !data.totalAudited && !data.totalPanels) return false;
     }
+    if (type === "CREATE_FORMULA" || type === "SAVE_FORMULA") {
+      if (!data.expression && !data.displayExpression) return false;
+    }
+    if (type === "BATCH_CREATE_FORMULAS" || type === "SAVE_FORMULAS") {
+      const fList = Array.isArray(data.formulas) ? data.formulas : (Array.isArray(data) ? data : []);
+      if (fList.length === 0) return false;
+    }
     return true;
   }
 
@@ -782,6 +789,91 @@
       `;
     }
 
+    if (type === "CREATE_FORMULA" || type === "SAVE_FORMULA") {
+      const targetParam = data.targetParameterName || data.targetLabel || 'Target Parameter';
+      const targetTest = data.targetTestName || 'Test';
+      const displayFormula = data.displayExpression || data.expression || '';
+      return `
+        <div class="copilot-action-card" style="border-color: #0284c7;">
+          <div class="card-top-bar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="card-badge" style="background:#e0f2fe; color:#0369a1;"><i class="fa-solid fa-calculator"></i> FORMULA PREVIEW</span>
+              <h3 class="card-title">${escapeHtml(targetParam)}</h3>
+              <span style="font-size: 11px; background: #e2e8f0; color: #334155; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${escapeHtml(targetTest)}</span>
+            </div>
+          </div>
+          <div style="margin: 12px 0;">
+            <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 4px;">Calculation Formula:</div>
+            <div style="padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-family: monospace; font-size: 14px; color: #15803d; font-weight: 700;">
+              ${escapeHtml(displayFormula)}
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: #64748b;">
+              <span><strong>Decimal Precision:</strong> ${escapeHtml(String(data.precision ?? 2))}</span>
+              <span><strong>Status:</strong> Active</span>
+              <span><strong>Manual Override:</strong> Allowed</span>
+            </div>
+            ${data.notes ? `<div style="font-size: 12px; color: #64748b; margin-top: 6px;"><em>${escapeHtml(data.notes)}</em></div>` : ''}
+          </div>
+          <div class="card-footer">
+            <span class="footer-hint"><i class="fa-solid fa-circle-info text-blue-500"></i> Click confirm to save formula in database</span>
+            <button class="btn-copilot-save btn-copilot-confirm" data-action="CREATE_FORMULA" style="background: #0284c7;">
+              <i class="fa-solid fa-calculator"></i> Confirm & Save Formula
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (type === "BATCH_CREATE_FORMULAS" || type === "SAVE_FORMULAS") {
+      const formulas = Array.isArray(data.formulas) ? data.formulas : (Array.isArray(data) ? data : []);
+      const panelTitle = data.panelOrTestName || 'Clinical Panel';
+      const rows = formulas.map((f, i) => `
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="font-weight: 700; color: #0f172a; padding: 8px 6px; font-size: 13px;">${i + 1}. ${escapeHtml(f.targetParameterName || f.targetLabel || 'Parameter')}</td>
+          <td style="padding: 8px 6px;"><code style="background: #eef2ff; color: #3730a3; padding: 3px 8px; border-radius: 6px; font-weight: 600; font-family: monospace; font-size: 12px;">${escapeHtml(f.displayExpression || f.expression || '')}</code></td>
+          <td style="padding: 8px 6px; color: #64748b; font-size: 12px; text-align: center;">${escapeHtml(String(f.precision ?? 2))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <div class="copilot-action-card" style="border-color: #0284c7;">
+          <div class="card-top-bar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="card-badge" style="background:#e0f2fe; color:#0369a1;"><i class="fa-solid fa-calculator"></i> PANEL FORMULAS</span>
+              <h3 class="card-title">${escapeHtml(panelTitle)}</h3>
+            </div>
+            <div class="card-price-box">
+              <span class="card-price-label">Formulas</span>
+              <div class="card-price-value" style="color: #0284c7;">${formulas.length}</div>
+            </div>
+          </div>
+          <div style="margin: 10px 0;">
+            <p style="font-size: 12px; color: #475569; margin-bottom: 8px;">
+              Following <strong>${formulas.length} clinical formulas</strong> will be saved and auto-calculated during patient result entry:
+            </p>
+            <div class="copilot-table-wrap" style="max-height: 260px; overflow-y: auto;">
+              <table class="copilot-table">
+                <thead>
+                  <tr>
+                    <th>Target Parameter</th>
+                    <th>Clinical Formula</th>
+                    <th style="text-align: center;">Decimals</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-hint"><i class="fa-solid fa-shield-halved text-sky-500"></i> Formulas will auto-apply on Result Entry page</span>
+            <button class="btn-copilot-save btn-copilot-confirm" data-action="BATCH_CREATE_FORMULAS" style="background: #0284c7;">
+              <i class="fa-solid fa-calculator"></i> Confirm & Save ${formulas.length} Formulas to Database
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     return "";
   }
 
@@ -834,6 +926,8 @@
 
           if (action.type === "CREATE_BOOKING") {
             appendAssistantResponse(`✅ **Success:** ${respData.message}\n\n<button type="button" onclick="if(window.loadPage) window.loadPage('allcases')" style="display:inline-flex; align-items:center; gap:8px; margin-top:8px; padding:8px 16px; background:#2563eb; color:#ffffff; font-weight:600; font-size:13px; border:none; border-radius:6px; cursor:pointer; box-shadow: 0 2px 4px rgba(37,99,235,0.2);"><i class="fa-solid fa-folder-open"></i> Go to Cases Page (केस देखें)</button>`);
+          } else if (action.type === "CREATE_FORMULA" || action.type === "BATCH_CREATE_FORMULAS" || action.type === "SAVE_FORMULAS" || action.type === "SAVE_FORMULA") {
+            appendAssistantResponse(`✅ **Success:** ${respData.message}\n\n<button type="button" onclick="if(window.loadPage) window.loadPage('formulaBuilder')" style="display:inline-flex; align-items:center; gap:8px; margin-top:8px; padding:8px 16px; background:#0284c7; color:#ffffff; font-weight:600; font-size:13px; border:none; border-radius:6px; cursor:pointer; box-shadow: 0 2px 4px rgba(2,132,199,0.2);"><i class="fa-solid fa-square-root-variable"></i> Open Formula Builder Page (फ़ॉर्मूला बिल्डर देखें)</button>`);
           } else {
             appendAssistantResponse(`✅ **Success:** ${respData.message}`);
           }
@@ -950,7 +1044,14 @@
 
   function formatMarkdown(text) {
     if (!text) return "";
-    let formatted = escapeHtml(text);
+    // Preserve trusted action button HTML before escaping
+    const preservedButtons = [];
+    let processed = String(text).replace(/<button\b[^>]*>[\s\S]*?<\/button>/gi, (match) => {
+      preservedButtons.push(match);
+      return `___CO_ACTION_BTN_${preservedButtons.length - 1}___`;
+    });
+
+    let formatted = escapeHtml(processed);
     // Bold **text**
     formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<strong style='color:#0f172a;'>$1</strong>");
     // Italic *text*
@@ -959,6 +1060,12 @@
     formatted = formatted.replace(/`(.*?)`/g, "<code style='background: #e2e8f0; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px;'>$1</code>");
     // Newlines to <br>
     formatted = formatted.replace(/\n/g, "<br>");
+
+    // Restore preserved action buttons
+    preservedButtons.forEach((btn, index) => {
+      formatted = formatted.replace(`___CO_ACTION_BTN_${index}___`, btn);
+    });
+
     return formatted;
   }
 

@@ -38,6 +38,13 @@ async function allcases() {
     let intervalId;
     let filterDebounceTimer;
 
+    // Clean up any stale invoice modal on body from prior page view
+    const staleModal = document.querySelector("body > #invoiceCustomizerModal");
+    const containerModal = document.querySelector(".container-allcases #invoiceCustomizerModal");
+    if (staleModal && containerModal && staleModal !== containerModal) {
+        staleModal.remove();
+    }
+
     // Global variables for popup with null checks
     const popup = document.getElementById("messagePopup");
     const overlay = document.getElementById("popupOverlay");
@@ -418,7 +425,7 @@ async function allcases() {
             const createdBy = row.getAttribute("data-created-by") || booking?.createdBy;
 
             if (action === "generate-bill") {
-                await generateBillPDF(booking, item);
+                openInvoiceCustomizerModal(booking);
             } else if (action === "generate-trf") {
                 handleGenerateTRF(bookingId);
             } else if (action === "edit-booking") {
@@ -607,7 +614,7 @@ async function allcases() {
             }
             else if (target.classList.contains("generate-bill-btn")) {
                 const bookingToBill = booking || (row.getAttribute("data-booking") ? JSON.parse(row.getAttribute("data-booking")) : null);
-                await generateBillPDF(bookingToBill, target);
+                openInvoiceCustomizerModal(bookingToBill);
             }
             else if (target.classList.contains("generate-trf-btn")) {
                 handleGenerateTRF(bookingId);
@@ -677,6 +684,8 @@ async function allcases() {
             window.removeEventListener("resize", handleScrollOrResize);
             if (scrollRafId) cancelAnimationFrame(scrollRafId);
             closeDropdown();
+            const modalOnBody = document.querySelector("body > #invoiceCustomizerModal");
+            if (modalOnBody) modalOnBody.remove();
         };
     }
 
@@ -938,16 +947,28 @@ async function allcases() {
         sessionStorage.setItem("regId", JSON.stringify(regId));
     }
 
+    function escapeHtml(str) {
+        if (str == null) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     function getInvoiceCSS() {
         return `
         * {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-sizing: border-box;
         }
         .container-pdf {
             max-width: 800px;
             margin: 0 auto;
             border: 1px solid #ccc;
             padding: 20px;
+            background: #ffffff;
         }
         .header {
             position: relative;
@@ -980,6 +1001,7 @@ async function allcases() {
         .upper-header img {
             width: 250px;
             height: 125px;
+            object-fit: contain;
         }
         .patient-details {
             border-top: 1px solid #ccc;
@@ -1028,34 +1050,85 @@ async function allcases() {
         `;
     }
 
-    function generateInvoiceHTML(booking) {
-        // Get test names
-        const testNamesArray = [...new Set(
-            (booking.tableData || []).flatMap(obj => (obj.testName || "").split(",").map(name => name.trim()))
-        )];
+    function generateInvoiceHTML(data) {
+        const showAmounts = Boolean(data.showAmountCol);
+        const hasQty = (data.items || []).some(item => Number(item.qty || 1) > 1);
 
-        // Create test table rows
+        // Create test/item table rows
         let testTableRows = '';
-        testNamesArray.forEach((test, index) => {
-            testTableRows += `<tr><td>${index + 1}</td><td>${test}</td></tr>`;
+        (data.items || []).forEach((item, index) => {
+            const itemNum = index + 1;
+            const itemName = escapeHtml(item.name || `Item ${itemNum}`);
+            const itemQty = item.qty || 1;
+            const itemAmount = Number(item.amount || item.rate || 0).toFixed(2);
+
+            if (showAmounts) {
+                testTableRows += `
+                    <tr>
+                        <td style="width: 45px; text-align: center;">${itemNum}</td>
+                        <td style="text-align: left; padding-left: 14px;">${itemName}</td>
+                        ${hasQty ? `<td style="width: 60px; text-align: center;">${itemQty}</td>` : ''}
+                        <td style="width: 130px; text-align: right; padding-right: 14px; font-weight: 600;">₹ ${itemAmount}</td>
+                    </tr>
+                `;
+            } else {
+                testTableRows += `
+                    <tr>
+                        <td style="width: 50px; text-align: center;">${itemNum}</td>
+                        <td style="text-align: left; padding-left: 14px;">${itemName}</td>
+                    </tr>
+                `;
+            }
         });
 
-        // Format date and time
-        const bookingDate = new Date(booking.date).toLocaleDateString();
-        const bookingTime = new Date("1970-01-01T" + booking.time)
-            .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        // Table headers matching the chosen format
+        const tableHeaderHtml = showAmounts
+            ? `<tr>
+                <th style="width: 45px; text-align: center;">#</th>
+                <th style="text-align: left; padding-left: 14px;">Item / Test Description</th>
+                ${hasQty ? `<th style="width: 60px; text-align: center;">Qty</th>` : ''}
+                <th style="width: 130px; text-align: right; padding-right: 14px;">Amount</th>
+              </tr>`
+            : `<tr>
+                <th style="width: 50px; text-align: center;">#</th>
+                <th style="text-align: left; padding-left: 14px;">Test Name</th>
+              </tr>`;
 
-        // Get lab logo if available
-        const logoImg = user?.tenantId?.logo ? `<img id="bill-logo" src="${user.tenantId.logo}" style="width: 250px; height: 125px;">` : '';
+        // Logo
+        const logoImg = data.logoUrl
+            ? `<img id="bill-logo" src="${data.logoUrl}" style="width: 250px; height: 125px; object-fit: contain;">`
+            : '';
 
-        // Build HTML
+        // Doctor / Phone rows
+        const doctorHtml = data.doctorName ? `<p style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0;">Ref By: ${escapeHtml(data.doctorName)}</p>` : '';
+        const phoneHtml = data.patientPhone ? `<p style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0;">Contact: ${escapeHtml(data.patientPhone)}</p>` : '';
+
+        // Optional breakdown row if discount or tax was entered
+        const subtotal = Number(data.subtotal || data.grandTotal || 0);
+        const discount = Number(data.discount || 0);
+        const tax = Number(data.tax || 0);
+        const grandTotal = Number(data.grandTotal || 0);
+
+        let breakdownHtml = '';
+        if (discount > 0 || tax > 0) {
+            breakdownHtml = `
+                <div style="display: flex; justify-content: flex-end; padding: 12px 16px; font-size: 0.9rem; color: #475467; border: 1px solid #e5e7eb; border-bottom: none; border-radius: 8px 8px 0 0; background: #fafafa;">
+                    <div style="min-width: 220px; display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between;"><span>Subtotal:</span><span style="font-weight: 600;">₹ ${subtotal.toFixed(2)}</span></div>
+                        ${discount > 0 ? `<div style="display: flex; justify-content: space-between; color: #16a34a;"><span>Discount:</span><span>- ₹ ${discount.toFixed(2)}</span></div>` : ''}
+                        ${tax > 0 ? `<div style="display: flex; justify-content: space-between; color: #2563eb;"><span>Tax / GST:</span><span>+ ₹ ${tax.toFixed(2)}</span></div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
         const html = `
         <div class="container-pdf">
             <div class="header upper-header">
                 <div>
                     <h1>INVOICE</h1>
-                    <p>#Bill${booking._id}</p>
-                    <p>Invoice Date: ${new Date().toLocaleDateString()}</p>
+                    <p>${escapeHtml(data.billNumber || '')}</p>
+                    <p>Invoice Date: ${escapeHtml(data.invoiceDate || '')}</p>
                 </div>
                 <div class="image-div">
                     ${logoImg}
@@ -1065,22 +1138,21 @@ async function allcases() {
                 <div style="display: flex; justify-content: space-between;">
                     <div>
                         <p><strong>Patient Details :</strong></p>
-                        <p class="blue">${booking.patientName}</p>
-                        <p>${booking.year} | ${booking.gender}</p>
+                        <p class="blue">${escapeHtml(data.patientName || '')}</p>
+                        <p>${escapeHtml(data.year || '')} | ${escapeHtml(data.gender || '')}</p>
+                        ${doctorHtml}
                     </div>
                     <div style="text-align: right;">
-                        <p><strong>Booking Id : ${booking.bookingId}</strong></p>
-                        <p>Booking Time : ${bookingDate} ${bookingTime}</p>
+                        <p><strong>Booking Id : ${escapeHtml(data.bookingId || '')}</strong></p>
+                        <p>Booking Time : ${escapeHtml(data.bookingDateTime || '')}</p>
+                        ${phoneHtml}
                     </div>
                 </div>
             </div>
             <div class="table-container">
                 <table>
                     <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Test Name</th>
-                        </tr>
+                        ${tableHeaderHtml}
                     </thead>
                     <tbody>
                         ${testTableRows}
@@ -1088,13 +1160,14 @@ async function allcases() {
                 </table>
             </div>
             <div style="background-color: white; border-radius: 8px;">
-                <div class="header">
+                ${breakdownHtml}
+                <div class="header" style="${breakdownHtml ? 'border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0;' : ''}">
                     <h1>Grand Total</h1>
-                    <span>₹ ${booking.total ? booking.total.toFixed(2) : '0.00'}</span>
+                    <span>₹ ${grandTotal.toFixed(2)}</span>
                 </div>
-                <p class="note">** No refund is available after booking.</p>
+                <p class="note">${escapeHtml(data.note || '** No refund is available after booking.')}</p>
                 <div class="stamp">
-                    <span>This Bill is Generated by www.LabFlow</span>
+                    <span>${escapeHtml(data.stamp || 'This Bill is Generated by www.LabFlow')}</span>
                 </div>
             </div>
         </div>
@@ -1103,82 +1176,526 @@ async function allcases() {
         return html;
     }
 
-    async function generateBillPDF(booking, button) {
+    // ================= INVOICE CUSTOMIZER MODAL CONTROLLER =================
+    let currentCustomizerBooking = null;
+    let initialCustomizerState = null;
+    let customizerListenersBound = false;
+
+    function openInvoiceCustomizerModal(booking) {
+        if (!booking) {
+            alert("No booking details found to customize invoice.");
+            return;
+        }
+
+        currentCustomizerBooking = booking;
+
+        // Format dates and times
+        const bookingDate = new Date(booking.date);
+        const formattedBookingDate = !Number.isNaN(bookingDate.getTime())
+            ? bookingDate.toLocaleDateString("en-GB")
+            : (booking.date ? String(booking.date).split("T")[0] : "");
+
+        const formattedBookingTime = booking.time
+            ? new Date("1970-01-01T" + booking.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+            : "";
+
+        const bookingDateTimeStr = `${formattedBookingDate} ${formattedBookingTime}`.trim() || "--";
+
+        const todayFormatted = new Date().toLocaleDateString("en-GB");
+
+        // Parse items from selectedItems or tableData
+        let items = [];
+        if (Array.isArray(booking.selectedItems) && booking.selectedItems.length > 0) {
+            items = booking.selectedItems.map((si) => ({
+                name: si.itemName || "",
+                rate: Number(si.price || 0),
+                qty: 1
+            }));
+        } else if (Array.isArray(booking.tableData) && booking.tableData.length > 0) {
+            const rawNames = [...new Set(
+                booking.tableData.flatMap((obj) => String(obj.testName || "").split(",").map((n) => n.trim())).filter(Boolean)
+            )];
+
+            const totalAmount = Number(booking.total || 0);
+
+            if (rawNames.length === 1) {
+                items = [{ name: rawNames[0], rate: totalAmount, qty: 1 }];
+            } else if (rawNames.length > 1) {
+                items = rawNames.map((n, i) => ({
+                    name: n,
+                    rate: i === 0 ? totalAmount : 0,
+                    qty: 1
+                }));
+            }
+        }
+
+        if (items.length === 0) {
+            items = [{ name: "Medical Test / Service", rate: Number(booking.total || 0), qty: 1 }];
+        }
+
+        const state = {
+            billNumber: `#Bill${booking._id || booking.bookingId || ""}`,
+            invoiceDate: todayFormatted,
+            patientName: booking.patientName || "",
+            year: booking.year || "",
+            gender: booking.gender || "Male",
+            doctorName: booking.doctorName || booking.franchisee || "",
+            bookingId: booking.bookingId || "",
+            bookingDateTime: bookingDateTimeStr,
+            patientPhone: booking.patientPhone || "",
+            logoUrl: user?.tenantId?.logo || "",
+            labName: booking.labName || user?.tenantId?.name || "LabFlow",
+            items: items,
+            discount: 0,
+            taxPercent: 0,
+            grandTotal: Number(booking.total || 0),
+            note: "** No refund is available after booking.",
+            stamp: "This Bill is Generated by www.LabFlow",
+            showAmounts: true
+        };
+
+        initialCustomizerState = JSON.parse(JSON.stringify(state));
+        renderCustomizerModal(state);
+    }
+
+    function renderCustomizerModal(state) {
+        const modal = document.getElementById("invoiceCustomizerModal");
+        if (!modal) return;
+
+        // Move modal directly to document.body to break free from .content-box and #main-content stacking contexts
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+
+        // Set Header fields
+        const caseBadge = document.getElementById("inv-case-badge");
+        if (caseBadge) caseBadge.textContent = `#${state.bookingId || "Case"}`;
+
+        const billInput = document.getElementById("inv-bill-number");
+        if (billInput) billInput.value = state.billNumber || "";
+
+        const dateInput = document.getElementById("inv-invoice-date");
+        if (dateInput) dateInput.value = state.invoiceDate || "";
+
+        // Logo / Lab name
+        const logoImg = document.getElementById("inv-lab-logo");
+        const fallbackLab = document.getElementById("inv-lab-fallback-name");
+        if (logoImg && fallbackLab) {
+            if (state.logoUrl) {
+                logoImg.src = state.logoUrl;
+                logoImg.style.display = "block";
+                fallbackLab.style.display = "none";
+            } else {
+                logoImg.style.display = "none";
+                fallbackLab.textContent = state.labName || "LabFlow";
+                fallbackLab.style.display = "block";
+            }
+        }
+
+        // Patient Details
+        const patientNameInput = document.getElementById("inv-patient-name");
+        if (patientNameInput) patientNameInput.value = state.patientName || "";
+
+        const patientYearInput = document.getElementById("inv-patient-year");
+        if (patientYearInput) patientYearInput.value = state.year || "";
+
+        const patientGenderSelect = document.getElementById("inv-patient-gender");
+        if (patientGenderSelect) patientGenderSelect.value = state.gender || "Male";
+
+        const doctorNameInput = document.getElementById("inv-doctor-name");
+        if (doctorNameInput) doctorNameInput.value = state.doctorName || "";
+
+        // Booking Details
+        const bookingIdInput = document.getElementById("inv-booking-id");
+        if (bookingIdInput) bookingIdInput.value = state.bookingId || "";
+
+        const bookingDateTimeInput = document.getElementById("inv-booking-datetime");
+        if (bookingDateTimeInput) bookingDateTimeInput.value = state.bookingDateTime || "";
+
+        const patientPhoneInput = document.getElementById("inv-patient-phone");
+        if (patientPhoneInput) patientPhoneInput.value = state.patientPhone || "";
+
+        // Options & Summary
+        const showAmountsToggle = document.getElementById("inv-show-amounts-toggle");
+        if (showAmountsToggle) showAmountsToggle.checked = Boolean(state.showAmounts);
+
+        const discountInput = document.getElementById("inv-discount-amount");
+        if (discountInput) discountInput.value = Number(state.discount || 0).toFixed(2);
+
+        const taxInput = document.getElementById("inv-tax-percent");
+        if (taxInput) taxInput.value = Number(state.taxPercent || 0).toFixed(2);
+
+        const grandTotalInput = document.getElementById("inv-grand-total");
+        if (grandTotalInput) grandTotalInput.value = Number(state.grandTotal || 0).toFixed(2);
+
+        const noteInput = document.getElementById("inv-note-text");
+        if (noteInput) noteInput.value = state.note || "** No refund is available after booking.";
+
+        const stampInput = document.getElementById("inv-stamp-text");
+        if (stampInput) stampInput.value = state.stamp || "This Bill is Generated by www.LabFlow";
+
+        // Render Item rows
+        const tbody = document.getElementById("inv-items-tbody");
+        if (tbody) {
+            tbody.innerHTML = "";
+            (state.items || []).forEach((item) => {
+                addCustomizerItemRow(item.name, item.rate, item.qty);
+            });
+        }
+
+        // Recalculate totals
+        recalculateInvoiceTotals(true);
+
+        // Open modal
+        modal.classList.add("is-open");
+        document.body.style.overflow = "hidden";
+
+        // Bind customizer global listeners if not yet bound
+        if (!customizerListenersBound) {
+            bindCustomizerEvents();
+            customizerListenersBound = true;
+        }
+    }
+
+    function addCustomizerItemRow(name = "", rate = 0, qty = 1) {
+        const tbody = document.getElementById("inv-items-tbody");
+        if (!tbody) return;
+
+        const row = document.createElement("tr");
+        const safeRate = Math.max(0, Number(rate) || 0);
+        const safeQty = Math.max(1, Number(qty) || 1);
+        const rowAmount = safeRate * safeQty;
+
+        row.innerHTML = `
+            <td class="inv-item-row-num"></td>
+            <td style="text-align: left;">
+                <input type="text" class="inv-table-input item-name" placeholder="Enter test, package, or product name..." value="${escapeHtml(name)}">
+            </td>
+            <td>
+                <input type="number" class="inv-table-input num-input item-rate" min="0" step="any" placeholder="0.00" value="${safeRate}">
+            </td>
+            <td>
+                <input type="number" class="inv-table-input num-input item-qty" min="1" step="1" value="${safeQty}">
+            </td>
+            <td style="text-align: right; padding-right: 14px;">
+                <span class="item-amount" style="font-weight: 700; color: #15803d;">₹ ${rowAmount.toFixed(2)}</span>
+            </td>
+            <td>
+                <button type="button" class="inv-row-del-btn" title="Remove this item" aria-label="Remove item">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </td>
+        `;
+
+        // Row event listeners for auto-calculation
+        const rateInput = row.querySelector(".item-rate");
+        const qtyInput = row.querySelector(".item-qty");
+        const delBtn = row.querySelector(".inv-row-del-btn");
+
+        const handleRowChange = () => {
+            const currentRate = Math.max(0, parseFloat(rateInput.value) || 0);
+            const currentQty = Math.max(1, parseFloat(qtyInput.value) || 1);
+            const currentTotal = currentRate * currentQty;
+            const amountSpan = row.querySelector(".item-amount");
+            if (amountSpan) {
+                amountSpan.textContent = `₹ ${currentTotal.toFixed(2)}`;
+            }
+            recalculateInvoiceTotals(false);
+        };
+
+        if (rateInput) rateInput.addEventListener("input", handleRowChange);
+        if (qtyInput) qtyInput.addEventListener("input", handleRowChange);
+
+        if (delBtn) {
+            delBtn.addEventListener("click", () => {
+                row.remove();
+                renumberCustomizerRows();
+                recalculateInvoiceTotals(false);
+            });
+        }
+
+        tbody.appendChild(row);
+        renumberCustomizerRows();
+    }
+
+    function renumberCustomizerRows() {
+        const rows = document.querySelectorAll("#inv-items-tbody tr");
+        rows.forEach((row, index) => {
+            const numCell = row.querySelector(".inv-item-row-num");
+            if (numCell) {
+                numCell.textContent = String(index + 1);
+            }
+        });
+
+        const countEl = document.getElementById("inv-item-count");
+        if (countEl) {
+            countEl.textContent = `${rows.length} ${rows.length === 1 ? "item" : "items"}`;
+        }
+    }
+
+    function recalculateInvoiceTotals(preserveGrandTotal = false) {
+        const rows = document.querySelectorAll("#inv-items-tbody tr");
+        let subtotal = 0;
+
+        rows.forEach((row) => {
+            const rate = Math.max(0, parseFloat(row.querySelector(".item-rate")?.value) || 0);
+            const qty = Math.max(1, parseFloat(row.querySelector(".item-qty")?.value) || 1);
+            const rowTotal = rate * qty;
+            const amountSpan = row.querySelector(".item-amount");
+            if (amountSpan) {
+                amountSpan.textContent = `₹ ${rowTotal.toFixed(2)}`;
+            }
+            subtotal += rowTotal;
+        });
+
+        const subtotalEl = document.getElementById("inv-calc-subtotal");
+        if (subtotalEl) {
+            subtotalEl.textContent = subtotal.toFixed(2);
+        }
+
+        const discountInput = document.getElementById("inv-discount-amount");
+        const taxInput = document.getElementById("inv-tax-percent");
+        const grandTotalInput = document.getElementById("inv-grand-total");
+
+        const discount = Math.max(0, parseFloat(discountInput?.value) || 0);
+        const taxPercent = Math.max(0, parseFloat(taxInput?.value) || 0);
+
+        const taxable = Math.max(0, subtotal - discount);
+        const taxAmount = (taxable * taxPercent) / 100;
+        const computedGrandTotal = Math.max(0, taxable + taxAmount);
+
+        if (grandTotalInput && !preserveGrandTotal) {
+            grandTotalInput.value = computedGrandTotal.toFixed(2);
+        }
+    }
+
+    function closeInvoiceCustomizerModal() {
+        const modal = document.getElementById("invoiceCustomizerModal");
+        if (modal) {
+            modal.classList.remove("is-open");
+        }
+        document.body.style.overflow = "";
+    }
+
+    function resetCustomizerToDefault() {
+        if (!initialCustomizerState) return;
+        renderCustomizerModal(JSON.parse(JSON.stringify(initialCustomizerState)));
+    }
+
+    async function handleGenerateCustomizedInvoice() {
+        const generateBtn = document.getElementById("inv-btn-generate");
+        if (!generateBtn) return;
+
+        // Validation
+        const patientName = document.getElementById("inv-patient-name")?.value.trim();
+        const bookingId = document.getElementById("inv-booking-id")?.value.trim();
+
+        if (!patientName) {
+            alert("Patient Name is required to generate the invoice.");
+            document.getElementById("inv-patient-name")?.focus();
+            return;
+        }
+
+        if (!bookingId) {
+            alert("Booking ID is required.");
+            document.getElementById("inv-booking-id")?.focus();
+            return;
+        }
+
+        // Collect items
+        const itemRows = document.querySelectorAll("#inv-items-tbody tr");
+        const items = [];
+        itemRows.forEach((row) => {
+            const name = row.querySelector(".item-name")?.value.trim();
+            const rate = Math.max(0, parseFloat(row.querySelector(".item-rate")?.value) || 0);
+            const qty = Math.max(1, parseFloat(row.querySelector(".item-qty")?.value) || 1);
+            if (name) {
+                items.push({
+                    name,
+                    rate,
+                    qty,
+                    amount: rate * qty
+                });
+            }
+        });
+
+        if (items.length === 0) {
+            alert("Please add at least one item or test to generate the invoice.");
+            return;
+        }
+
+        const billNumber = document.getElementById("inv-bill-number")?.value.trim() || `#Bill${currentCustomizerBooking?._id || bookingId}`;
+        const invoiceDate = document.getElementById("inv-invoice-date")?.value.trim() || new Date().toLocaleDateString("en-GB");
+        const year = document.getElementById("inv-patient-year")?.value.trim() || "";
+        const gender = document.getElementById("inv-patient-gender")?.value || "Male";
+        const doctorName = document.getElementById("inv-doctor-name")?.value.trim() || "";
+        const bookingDateTime = document.getElementById("inv-booking-datetime")?.value.trim() || "";
+        const patientPhone = document.getElementById("inv-patient-phone")?.value.trim() || "";
+        const showAmountCol = document.getElementById("inv-show-amounts-toggle")?.checked ?? true;
+
+        const subtotal = Math.max(0, parseFloat(document.getElementById("inv-calc-subtotal")?.textContent) || 0);
+        const discount = Math.max(0, parseFloat(document.getElementById("inv-discount-amount")?.value) || 0);
+        const taxPercent = Math.max(0, parseFloat(document.getElementById("inv-tax-percent")?.value) || 0);
+        const tax = (Math.max(0, subtotal - discount) * taxPercent) / 100;
+        const grandTotal = Math.max(0, parseFloat(document.getElementById("inv-grand-total")?.value) || 0);
+
+        const note = document.getElementById("inv-note-text")?.value.trim() || "** No refund is available after booking.";
+        const stamp = document.getElementById("inv-stamp-text")?.value.trim() || "This Bill is Generated by www.LabFlow";
+        const logoUrl = user?.tenantId?.logo || "";
+
+        const originalBtnHtml = generateBtn.innerHTML;
+        generateBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF...';
+        generateBtn.disabled = true;
+
         try {
-            // Validate required fields
-            if (!booking || !booking.bookingId || !booking.total) {
-                alert('Missing booking information. Cannot generate bill.');
-                return;
-            }
+            // Generate customized invoice HTML & CSS
+            const invoiceHtml = generateInvoiceHTML({
+                billNumber,
+                invoiceDate,
+                patientName,
+                year,
+                gender,
+                doctorName,
+                bookingId,
+                bookingDateTime,
+                patientPhone,
+                items,
+                showAmountCol,
+                subtotal,
+                discount,
+                tax,
+                grandTotal,
+                note,
+                stamp,
+                logoUrl
+            });
 
-            // Show loading state
-            const originalText = button ? button.innerHTML : '';
-            if (button) {
-                button.innerHTML = '<i class="fa-solid fa-spinner"></i> Generating...';
-                button.disabled = true;
-            }
-
-            // Generate invoice HTML and CSS
-            const invoiceHtml = generateInvoiceHTML(booking);
             const invoicecss = getInvoiceCSS();
-            const billnumber = `#Bill${booking._id}`;
 
-            // Call API
+            // Send to server
             const response = await fetch(`${BASE_URL}/api/v1/user/invoicepdfgenerator`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     invoiceHtml,
-                    billnumber,
-                    bookingId: booking.bookingId,
+                    billnumber: billNumber,
+                    bookingId: bookingId,
                     invoicecss,
-                    billingPrice: Number(booking.total),
+                    billingPrice: Number(grandTotal),
                     generatedBy: userId
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || `HTTP error! status: ${response.status}`);
             }
 
-            // Get PDF as blob
             const pdfblob = await response.blob();
             if (pdfblob.size === 0) {
-                throw new Error('Empty PDF received');
+                throw new Error("Received empty PDF file from server.");
             }
 
-            // Create download URL and trigger download
+            // Download PDF
             const pdfUrl = URL.createObjectURL(pdfblob);
             const anchor = document.createElement("a");
             anchor.href = pdfUrl;
-            anchor.download = `${booking.patientName}-invoice.pdf`;
+            anchor.download = `${patientName.replace(/[^a-zA-Z0-9_-]/g, "_")}-invoice.pdf`;
             document.body.appendChild(anchor);
             anchor.click();
             document.body.removeChild(anchor);
+            URL.revokeObjectURL(pdfUrl);
 
-            // Optional: Update bill generated flag
+            // Optional: update bill generated flag
             try {
-                await fetch(`${BASE_URL}/api/v1/user/updategeneratedbillvariable/${booking.bookingId}`);
-            } catch (err) {
-                console.log('Could not update bill generated flag:', err);
+                await fetch(`${BASE_URL}/api/v1/user/updategeneratedbillvariable/${bookingId}`);
+            } catch (flagErr) {
+                console.log("Could not update bill generated variable:", flagErr);
             }
 
-            // Close dropdown
+            closeInvoiceCustomizerModal();
             closeDropdown();
-
-            // Show success message
-            showSuccessNotification('Bill generated successfully');
-
+            showSuccessNotification("Invoice PDF generated and downloaded successfully!");
         } catch (error) {
-            console.error('Error generating bill:', error);
-            alert(`Error generating bill: ${error.message}`);
+            console.error("Error generating customized invoice:", error);
+            alert(`Failed to generate invoice: ${error.message}`);
         } finally {
-            // Restore button state
-            if (button) {
-                button.innerHTML = originalText || '<i class="fa-solid fa-file-invoice"></i> Generate Bill';
-                button.disabled = false;
-            }
+            generateBtn.innerHTML = originalBtnHtml;
+            generateBtn.disabled = false;
         }
+    }
+
+    function bindCustomizerEvents() {
+        const modal = document.getElementById("invoiceCustomizerModal");
+        if (!modal) return;
+
+        // Close buttons
+        const closeTopBtn = document.getElementById("inv-btn-close-modal");
+        const cancelBtn = document.getElementById("inv-btn-cancel");
+        if (closeTopBtn) closeTopBtn.addEventListener("click", closeInvoiceCustomizerModal);
+        if (cancelBtn) cancelBtn.addEventListener("click", closeInvoiceCustomizerModal);
+
+        // Reset buttons
+        const resetTopBtn = document.getElementById("inv-btn-reset-top");
+        const resetBottomBtn = document.getElementById("inv-btn-reset-bottom");
+        if (resetTopBtn) resetTopBtn.addEventListener("click", resetCustomizerToDefault);
+        if (resetBottomBtn) resetBottomBtn.addEventListener("click", resetCustomizerToDefault);
+
+        // Add item buttons
+        const addTestBtn = document.getElementById("inv-add-test-btn");
+        if (addTestBtn) {
+            addTestBtn.addEventListener("click", () => {
+                addCustomizerItemRow("", 0, 1);
+                const lastRow = document.querySelector("#inv-items-tbody tr:last-child .item-name");
+                if (lastRow) lastRow.focus();
+            });
+        }
+
+        const addProductBtn = document.getElementById("inv-add-product-btn");
+        if (addProductBtn) {
+            addProductBtn.addEventListener("click", () => {
+                addCustomizerItemRow("Physical Product", 0, 1);
+                const lastRow = document.querySelector("#inv-items-tbody tr:last-child .item-name");
+                if (lastRow) {
+                    lastRow.focus();
+                    lastRow.select();
+                }
+            });
+        }
+
+        // Auto calc button
+        const autoCalcBtn = document.getElementById("inv-auto-calc-btn");
+        if (autoCalcBtn) {
+            autoCalcBtn.addEventListener("click", () => {
+                recalculateInvoiceTotals(false);
+            });
+        }
+
+        // Discount & Tax inputs
+        const discountInput = document.getElementById("inv-discount-amount");
+        const taxInput = document.getElementById("inv-tax-percent");
+        if (discountInput) discountInput.addEventListener("input", () => recalculateInvoiceTotals(false));
+        if (taxInput) taxInput.addEventListener("input", () => recalculateInvoiceTotals(false));
+
+        // Generate button
+        const generateBtn = document.getElementById("inv-btn-generate");
+        if (generateBtn) {
+            generateBtn.addEventListener("click", handleGenerateCustomizedInvoice);
+        }
+
+        // Close on clicking overlay outside card
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) {
+                closeInvoiceCustomizerModal();
+            }
+        });
+
+        // Close on Escape key
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.classList.contains("is-open")) {
+                closeInvoiceCustomizerModal();
+            }
+        });
     }
 
     function showSuccessNotification(message) {
@@ -1188,17 +1705,19 @@ async function allcases() {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: #28a745;
+            background: #15803d;
             color: white;
             padding: 12px 20px;
-            border-radius: 5px;
-            z-index: 9999;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 1000000;
             animation: slideIn 0.3s ease-in-out;
         `;
         document.body.appendChild(notification);
         setTimeout(() => {
             notification.remove();
-        }, 3000);
+        }, 3200);
     }
 
     function setupEventListeners() {
