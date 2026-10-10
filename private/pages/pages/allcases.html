@@ -1531,6 +1531,61 @@
                     </div>
                 </div>
 
+                <!-- Brand Header / Logo Customizer Strip -->
+                <div class="inv-brand-customizer-strip" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 13px; font-weight: 700; color: #334155;"><i class="fa-solid fa-palette" style="color: #0284c7;"></i> Brand Header:</span>
+                        <select id="inv-brand-mode-select" class="inv-field-input" style="width: 175px; font-size: 12px; padding: 5px 8px; border-radius: 6px;">
+                            <option value="auto">Auto (Profile Setup)</option>
+                            <option value="image">Image Logo</option>
+                            <option value="text">Custom Lab Text</option>
+                            <option value="none">Blank (None)</option>
+                        </select>
+                        <button type="button" id="inv-btn-toggle-brand-editor" class="inv-btn-secondary" style="font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;">
+                            <i class="fa-solid fa-sliders"></i> Customize Header
+                        </button>
+                    </div>
+                    <span style="font-size: 12px; color: #64748b; font-style: italic;">Instant live update on preview</span>
+                </div>
+
+                <!-- Expandable Brand Editor Accordion -->
+                <div id="inv-brand-editor-panel" style="display: none; background: #ffffff; border-bottom: 2px solid #e2e8f0; padding: 14px 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: flex-end;">
+                        <div>
+                            <label style="font-size: 12px; font-weight: 700; color: #475569; display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>Lab Name (Max 30)</span>
+                                <span id="inv-heading-char-badge" style="font-size: 10px; color: #64748b;">0/30</span>
+                            </label>
+                            <input type="text" id="inv-edit-lab-heading" class="inv-field-input" maxlength="30" placeholder="Lab Name..." style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; font-weight: 700; color: #475569; display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>Tagline / Slogan (Max 50)</span>
+                                <span id="inv-slogan-char-badge" style="font-size: 10px; color: #64748b;">0/50</span>
+                            </label>
+                            <input type="text" id="inv-edit-lab-slogan" class="inv-field-input" maxlength="50" placeholder="Optional Tagline..." style="width: 100%;">
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: flex-end;">
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">BG</label>
+                                <input type="color" id="inv-edit-bg-color" value="#ffffff" style="width: 36px; height: 32px; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; padding: 0;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Text</label>
+                                <input type="color" id="inv-edit-text-color" value="#0f172a" style="width: 36px; height: 32px; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; padding: 0;">
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Slogan</label>
+                                <input type="color" id="inv-edit-slogan-color" value="#64748b" style="width: 36px; height: 32px; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; padding: 0;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 4px;">Font Size</label>
+                                <input type="range" id="inv-edit-font-size" min="14" max="28" value="20" style="width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="inv-modal-body">
                     <div class="inv-paper-wrapper">
                         <!-- Upper Header -->
@@ -1546,9 +1601,10 @@
                                     <input type="text" id="inv-invoice-date" class="inv-header-input" style="width: 140px;" placeholder="DD/MM/YYYY">
                                 </div>
                             </div>
-                            <div class="inv-header-logo-container">
+                            <div class="inv-header-logo-container" id="inv-header-logo-container">
                                 <img id="inv-lab-logo" class="inv-paper-logo" src="" alt="Lab Logo" style="display:none;">
-                                <div id="inv-lab-fallback-name" style="color: whitesmoke; font-size: 16px; font-weight: 700;"></div>
+                                <div id="inv-lab-fallback-name" style="color: whitesmoke; font-size: 16px; font-weight: 700; display: none;"></div>
+                                <div id="inv-lab-text-brand-box" style="display: none;"></div>
                             </div>
                         </div>
 

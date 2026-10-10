@@ -29,13 +29,67 @@ document.getElementById("search-button").addEventListener('click', function(even
     searchbuttonfunction();
 });
 
-async function searchbuttonfunction() {
-    const billLogo = document.getElementById('bill-logo');
-    if (user.tenantId.logo) {
-        billLogo.src = user.tenantId.logo;
+function renderBillBrandHeader() {
+    const imageDiv = document.querySelector('.image-div');
+    if (!imageDiv) return;
+
+    const tenant = (typeof user !== 'undefined' && user?.tenantId) ? user.tenantId : {};
+    const branding = tenant.branding || {};
+    const brandType = branding.brandType || (tenant.logo ? "image" : (branding.labHeading ? "text" : "none"));
+
+    if (brandType === "image" && tenant.logo) {
+        imageDiv.innerHTML = `<img id="bill-logo" src="${tenant.logo}" style="max-width: 250px; max-height: 110px; object-fit: contain; display: block;">`;
+    } else if (brandType === "text" || (branding.labHeading && brandType !== "none")) {
+        const bg = branding.bgColor || "#ffffff";
+        const textColor = branding.textColor || "#0f172a";
+        const sloganColor = branding.sloganColor || "#64748b";
+        const fontSize = branding.fontSize || 20;
+        const sloganSize = branding.sloganSize || 12;
+        const fontFamily = branding.fontFamily || "Arial, sans-serif";
+        const textAlign = branding.textAlign || "center";
+        const borderWidth = branding.borderWidth !== undefined ? branding.borderWidth : 1;
+        const borderColor = branding.borderColor || "#e2e8f0";
+        const heading = branding.labHeading || tenant.name || "LabFlow";
+        const slogan = branding.labSlogan || "";
+
+        imageDiv.innerHTML = `
+        <div id="bill-brand-box" style="
+            width: 250px;
+            min-height: 85px;
+            padding: 10px 14px;
+            box-sizing: border-box;
+            background-color: ${bg};
+            border: ${borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none'};
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: ${textAlign === 'center' ? 'center' : (textAlign === 'right' ? 'flex-end' : 'flex-start')};
+            text-align: ${textAlign};
+            font-family: ${fontFamily};
+            word-break: break-word;
+            line-height: 1.25;
+        ">
+            <div style="font-size: ${fontSize}px; font-weight: 800; color: ${textColor}; letter-spacing: -0.3px;">
+                ${heading}
+            </div>
+            ${slogan ? `
+            <div style="font-size: ${sloganSize}px; font-weight: 500; color: ${sloganColor}; margin-top: 4px;">
+                ${slogan}
+            </div>` : ''}
+        </div>`;
+    } else if (tenant.logo && brandType !== "none") {
+        imageDiv.innerHTML = `<img id="bill-logo" src="${tenant.logo}" style="max-width: 250px; max-height: 110px; object-fit: contain; display: block;">`;
     } else {
-        billLogo.remove();
+        imageDiv.innerHTML = '';
     }
+}
+
+// Initial render
+renderBillBrandHeader();
+
+async function searchbuttonfunction() {
+    renderBillBrandHeader();
     const searchValue = document.getElementById('search-input').value.trim();
     const Array = [];
 

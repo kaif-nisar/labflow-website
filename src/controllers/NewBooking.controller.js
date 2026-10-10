@@ -465,9 +465,17 @@ const matchesBookingSampleType = (sampleTypeCandidates = [], targetSample = '', 
     );
 };
 
-const buildAcceptedBarcodeRowsForSync = async ({ tenantId, bookingId, tableData = [] }) => {
+const buildAcceptedBarcodeRowsForSync = async ({ tenantId, bookingId, originalBookingId, existingBookingId, tableData = [] }) => {
     const acceptedBarcodeRows = [];
     const isSingleSampleBooking = tableData.length <= 1;
+
+    const excludedBookingIds = [
+        ...new Set([
+            String(bookingId || '').trim(),
+            String(originalBookingId || '').trim(),
+            existingBookingId ? String(existingBookingId).trim() : null
+        ].filter(Boolean))
+    ];
 
     for (const element of tableData) {
         const ids = Array.isArray(element?.ids) ? element.ids : [];
@@ -581,16 +589,37 @@ const buildAcceptedBarcodeRowsForSync = async ({ tenantId, bookingId, tableData 
             }
         });
 
-        const normalizedBarcode = element.confirmBarcodeId || element.barcodeId;
+        const normalizedBarcode = String(element.confirmBarcodeId || element.barcodeId || '').trim();
+        if (!normalizedBarcode) continue;
 
-        const existingBarcode = await acceptedBarcode.findOne({
+        const candidateBarcodeDocs = await acceptedBarcode.find({
             tenantId,
-            bookingId: { $ne: bookingId },
+            bookingId: { $nin: excludedBookingIds },
             "barcodes.barcode": normalizedBarcode,
         });
 
-        if (existingBarcode) {
-            throw new ApiError(400, `Barcode ${normalizedBarcode} is already accepted in another booking`);
+        for (const existingDoc of candidateBarcodeDocs) {
+            // Verify if existingDoc belongs to a valid, active, non-cancelled booking in newBooking
+            const bookingDoc = await newBooking.findOne({
+                tenantId,
+                $or: [
+                    { bookingId: existingDoc.bookingId },
+                    ...(mongoose.Types.ObjectId.isValid(existingDoc.bookingId) ? [{ _id: existingDoc.bookingId }] : [])
+                ]
+            });
+
+            const isCurrentBooking = bookingDoc && existingBookingId && String(bookingDoc._id) === String(existingBookingId);
+            const isCancelled = bookingDoc && (bookingDoc.status === "cancelled" || bookingDoc.status === "canceled");
+            const isOrphaned = !bookingDoc;
+
+            if (isOrphaned || isCancelled || isCurrentBooking) {
+                // Stale, cancelled, or self-reference record in acceptedBarcode -> clean it up
+                await acceptedBarcode.deleteOne({ _id: existingDoc._id }).catch(() => {});
+                continue;
+            }
+
+            // Truly another active booking!
+            throw new ApiError(400, `Barcode ${normalizedBarcode} is already accepted in another booking (${existingDoc.bookingId})`);
         }
 
         acceptedBarcodeRows.push({
@@ -1625,27 +1654,21 @@ const editbookingbookedtests = async (req, res) => {
         }
 
 
-        // Validate barcodes uniqueness (excluding current booking)
-        for (const element of tableData2) {
-            const isBarcodeIdPresent = await newBooking.findOne({
-                tenantId: tenantId._id,
-                bookingId: { $ne: barcodeId },
-                'tableData.barcodeId': element.confirmBarcodeId
-            });
-
-            if (isBarcodeIdPresent) {
-                return res.status(400).json({ message: `${element.confirmBarcodeId} barcode already present` });
-            }
-        }
-
         if (!patientName) {
             return res.status(400).json({ message: "Patient Name is required" });
         }
 
         // Get existing booking
-        const existingBooking = await newBooking.findOne(
-            buildBookingAccessQuery(req, barcodeId)
-        );
+        const lookupBookingId = barcodeId || req.body.originalBookingId || req.body.bookingId;
+        let existingBooking = null;
+        if (lookupBookingId) {
+            existingBooking = await newBooking.findOne(
+                buildBookingAccessQuery(req, lookupBookingId)
+            );
+        }
+        if (!existingBooking && req.body.id) {
+            existingBooking = await newBooking.findById(req.body.id);
+        }
 
         if (!existingBooking) {
             return res.status(404).json({ message: 'Booking not found' });
@@ -1653,6 +1676,31 @@ const editbookingbookedtests = async (req, res) => {
 
         if (existingBooking.status === "cancelled") {
             return res.status(404).json({ message: 'Booking has been Cancelled' });
+        }
+
+        // Validate barcodes uniqueness (excluding current booking)
+        const excludedBookingIdsForValidation = [
+            ...new Set([
+                existingBooking.bookingId,
+                req.body.newBookingId,
+                req.body.bookingId
+            ].map(id => String(id || '').trim()).filter(Boolean))
+        ];
+
+        for (const element of tableData2) {
+            const barcodeVal = element.confirmBarcodeId || element.barcodeId;
+            if (!barcodeVal) continue;
+
+            const isBarcodeIdPresent = await newBooking.findOne({
+                tenantId: tenantId._id,
+                _id: { $ne: existingBooking._id },
+                bookingId: { $nin: excludedBookingIdsForValidation },
+                'tableData.barcodeId': barcodeVal
+            });
+
+            if (isBarcodeIdPresent) {
+                return res.status(400).json({ message: `${barcodeVal} barcode already present` });
+            }
         }
 
         const effectiveSubFranchiseeId = parsedSubFranchiseeId ?? existingBooking.subFranchiseeId ?? null;
@@ -1768,7 +1816,8 @@ const editbookingbookedtests = async (req, res) => {
             for (const newEntry of parsedTableData) {
                 const barcodeInOtherBooking = await newBooking.findOne({
                     tenantId: tenantId._id,
-                    bookingId: { $ne: barcodeId },
+                    _id: { $ne: existingBooking._id },
+                    bookingId: { $ne: existingBooking.bookingId },
                     'tableData.barcodeId': newEntry.confirmBarcodeId || newEntry.barcodeId
                 });
 
@@ -2026,8 +2075,6 @@ const editbookingbookedtests = async (req, res) => {
 
         // === Update Booking Document ===
         const updateObject = {
-            date,
-            time,
             courierName,
             courierId,
             patientName,
@@ -2057,26 +2104,76 @@ const editbookingbookedtests = async (req, res) => {
             isreportready: false,
         };
 
+        if (date) {
+            const parsedDate = new Date(date);
+            if (!Number.isNaN(parsedDate.getTime())) {
+                updateObject.date = parsedDate;
+            }
+        }
+
+        if (time !== undefined && time !== null && String(time).trim()) {
+            updateObject.time = String(time).trim();
+        }
+
+        const requestedBookingId = String(
+            req.body.newBookingId || req.body.bookingId || ""
+        ).trim();
+
+        if (requestedBookingId && requestedBookingId !== existingBooking.bookingId) {
+            const duplicateBooking = await newBooking.findOne({
+                tenantId: tenantId._id,
+                _id: { $ne: existingBooking._id },
+                bookingId: requestedBookingId
+            });
+            if (duplicateBooking) {
+                return res.status(400).json({ message: `Booking ID "${requestedBookingId}" already exists.` });
+            }
+            updateObject.bookingId = requestedBookingId;
+        }
+
         const updatedDoc = await newBooking.findOneAndUpdate(
-            buildBookingAccessQuery(req, barcodeId),
+            { _id: existingBooking._id },
             { $set: updateObject },
-            { returnDocument: "after" }
+            { new: true, returnDocument: "after" }
         );
 
         if (!updatedDoc) {
             throw new ApiError(404, "Failed to update booking");
         }
 
+        const finalBookingId = updateObject.bookingId || existingBooking.bookingId;
+
+        if (updateObject.bookingId && updateObject.bookingId !== existingBooking.bookingId) {
+            const { samples } = await import("../models/samples.model.js");
+            const { reportData } = await import("../models/reportData.model.js");
+            const { offlineReport } = await import("../models/offlineReport.model.js");
+            const { qrReportLink } = await import("../models/qrReportLink.model.js");
+            const { invoicepdf } = await import("../models/invoicepdf.model.js");
+            const { printsetting } = await import("../models/printsetting.model.js").catch(() => ({}));
+
+            await Promise.allSettled([
+                samples?.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                acceptedBarcode.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                reportData?.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                offlineReport?.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                qrReportLink?.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                invoicepdf?.updateMany({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+                printsetting?.updateMany?.({ tenantId: tenantId._id, bookingId: existingBooking.bookingId }, { $set: { bookingId: updateObject.bookingId } }),
+            ]);
+        }
+
         // Keep accepted barcode data in sync for all booking edits
         const acceptedBarcodeRows = await buildAcceptedBarcodeRowsForSync({
             tenantId: tenantId._id,
-            bookingId: barcodeId,
+            bookingId: finalBookingId,
+            originalBookingId: existingBooking.bookingId,
+            existingBookingId: existingBooking._id,
             tableData: shouldReplaceSelection ? nextTableData : parsedTableData
         });
 
         await syncAcceptedBarcodesForBooking({
             tenantId: tenantId._id,
-            bookingId: barcodeId,
+            bookingId: finalBookingId,
             tableData: acceptedBarcodeRows,
             mode: acceptedBarcodeSyncMode
         });
@@ -3557,6 +3654,7 @@ const getTestNameController = async (req, res) => {
                 const healedRows = await buildAcceptedBarcodeRowsForSync({
                     tenantId: tid,
                     bookingId: bookingId,
+                    existingBookingId: bookingDoc._id,
                     tableData: bookingDoc.tableData
                 });
 
@@ -3984,16 +4082,41 @@ const loadAllBooking = asyncHandler(async (req, res) => {
 
 const getBookingcontroller = async (req, res) => {
     try {
-        const { value1 } = req.body;
+        const { value1, id, bookingId } = req.body;
+        const requestedIdentifier = String(value1 || bookingId || id || "").trim();
 
-        if (!value1) {
+        if (!requestedIdentifier) {
             return res.status(400).json({ message: "Booking ID is required" });
         }
 
-        const booking = await newBooking.findOne({
-            ...buildBookingAccessQuery(req, value1),
+        // 1. Try finding by bookingId using tenant access query
+        let booking = await newBooking.findOne({
+            ...buildBookingAccessQuery(req, requestedIdentifier),
             status: { $ne: "cancelled" }
         });
+
+        // 2. If not found, and id was passed or requestedIdentifier is a valid ObjectId, search by _id
+        const docId = id || (mongoose.Types.ObjectId.isValid(requestedIdentifier) ? requestedIdentifier : null);
+        if (!booking && docId && mongoose.Types.ObjectId.isValid(docId)) {
+            booking = await newBooking.findOne({
+                ...buildBookingAccessQuery(req, docId, { useDocumentId: true }),
+                status: { $ne: "cancelled" }
+            });
+        }
+
+        // 3. If still not found, try case-insensitive bookingId match within tenant
+        if (!booking) {
+            const tenantId = req.user.tenantId?._id || req.user.tenantId;
+            const fallbackQuery = {
+                tenantId,
+                bookingId: { $regex: new RegExp(`^${requestedIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                status: { $ne: "cancelled" }
+            };
+            if (!canManageBookingsAcrossTenant(req)) {
+                fallbackQuery.createdBy = getEffectiveBookingUserId(req);
+            }
+            booking = await newBooking.findOne(fallbackQuery);
+        }
 
         if (!booking) {
             return res.status(404).json({ message: "Booking not found or cancelled" });
@@ -4004,7 +4127,7 @@ const getBookingcontroller = async (req, res) => {
         console.error("Error fetching booking:", error);
         return res.status(500).json({ message: "Something went wrong while fetching booking" });
     }
-}
+};
 
 const editBookingController = async (req, res) => {
     try {

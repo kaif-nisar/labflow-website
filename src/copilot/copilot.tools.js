@@ -3598,39 +3598,59 @@ export const CLINICAL_PANEL_FORMULAS = [
   }
 ];
 
-const CLINICAL_DEP_ALIASES = {
-  "PCV": ["pcv", "hematocrit", "hct", "packed cell volume", "hematocrit (hct)"],
-  "Hematocrit": ["hematocrit", "pcv", "hct", "packed cell volume", "hematocrit (hct)"],
-  "Hemoglobin": ["hemoglobin", "haemoglobin", "hb"],
+export const CLINICAL_DEP_ALIASES = {
+  "PCV": ["pcv", "hematocrit", "hct", "packed cell volume", "hematocrit (hct)", "pcv / hematocrit", "pcv/hematocrit"],
+  "Hematocrit": ["hematocrit", "pcv", "hct", "packed cell volume", "hematocrit (hct)", "pcv / hematocrit", "pcv/hematocrit"],
+  "Hemoglobin": ["hemoglobin", "haemoglobin", "hb", "hbg"],
   "RBC Count": ["total red blood cell count", "rbc count", "rbc", "red blood cells", "red blood cell count"],
-  "TLC": ["total leucocytes count", "total leukocyte count", "tlc", "wbc", "total count (wbc)", "total count wbc", "total wbc"],
-  "Neutrophils": ["neutrophils percentage", "neutrophils (%)", "neutrophils", "neutrophil percentage", "neutrophil", "polymorphs"],
-  "Lymphocytes": ["lymphocyte percentage", "lymphocytes percentage", "lymphocytes (%)", "lymphocyte", "lymphocytes"],
-  "Monocytes": ["monocytes percentage", "monocyte percentage", "monocytes (%)", "monocyte", "monocytes"],
-  "Eosinophils": ["eosinophils percentage", "eosinophil percentage", "eosinophils (%)", "eosinophil", "eosinophils"],
-  "Basophils": ["basophils percentage", "basophil percentage", "basophils (%)", "basophil", "basophils"],
-  "Platelet Count": ["platelet count", "total platelet count", "platelets", "plt", "platelet"],
+  "TLC": ["total leucocytes count", "total leukocyte count", "tlc", "wbc", "total count (wbc)", "total count wbc", "total wbc", "leucocytes count", "leukocyte count"],
+  "Neutrophils": ["neutrophils percentage", "neutrophils (%)", "neutrophils", "neutrophil percentage", "neutrophil", "polymorphs", "gran"],
+  "Lymphocytes": ["lymphocyte percentage", "lymphocytes percentage", "lymphocytes (%)", "lymphocyte", "lymphocytes", "lymp"],
+  "Monocytes": ["monocytes percentage", "monocyte percentage", "monocytes (%)", "monocyte", "monocytes", "mono"],
+  "Eosinophils": ["eosinophils percentage", "eosinophil percentage", "eosinophils (%)", "eosinophil", "eosinophils", "eos"],
+  "Basophils": ["basophils percentage", "basophil percentage", "basophils (%)", "basophil", "basophils", "baso"],
+  "Platelet Count": ["platelet count", "total platelet count", "platelets", "plt", "platelet", "pc", "platelet count"],
   "MPV": ["mean platelet volume", "mpv", "mean platelet volume (mpv)"],
-  "Total Cholesterol": ["total cholesterol", "serum cholesterol"],
-  "HDL Cholesterol": ["hdl cholesterol", "hdl-cholesterol", "hdl"],
-  "Triglycerides": ["triglycerides", "triglyceride", "tg"],
-  "VLDL Cholesterol": ["vldl cholesterol", "vldl"],
-  "LDL Cholesterol": ["ldl cholesterol", "ldl"],
-  "Bilirubin (Total)": ["serum bilirubin (total)", "bilirubin (total)", "bilirubin total", "total bilirubin"],
-  "Bilirubin (Direct)": ["serum bilirubin (direct)", "bilirubin (direct)", "bilirubin direct", "direct bilirubin"],
-  "Protein (Total)": ["serum protein", "total protein", "protein (total)", "protein total"],
+  "PCT": ["platelet haematocrit (pct)", "platelet haematocrit", "platelet hematocrit", "plateletcrit", "pct"],
+  "MCV": ["mean corpuscular volume (mcv)", "mean corpuscular volume", "mcv"],
+  "MCH": ["mean corpuscular hemoglobin (mch)", "mean corpuscular hemoglobin", "mch"],
+  "MCHC": ["mean corpuscular hemoglobin concentration (mchc)", "mean corpuscular hemoglobin concentration", "mchc"],
+  "ANC": ["absolute neutrophil count", "absolute neutrophil count (anc)", "neutrophils (abs)", "anc", "neutrophils absolute", "absolute neutrophils"],
+  "ALC": ["lymphocytes-absolute count", "absolute lymphocyte count", "absolute lymphocyte count (alc)", "lymphocytes (abs)", "alc", "lymphocytes absolute", "absolute lymphocytes"],
+  "AEC": ["absolute eosinophil count (aec)", "absolute eosinophil count", "eosinophils (abs)", "aec", "eosinophils absolute", "absolute eosinophils"],
+  "AMC": ["monocyte- absolute count", "absolute monocyte count", "absolute monocyte count (amc)", "monocytes (abs)", "amc", "monocytes absolute", "absolute monocytes"],
+  "ABC": ["basophils-absolute count", "absolute basophil count", "absolute basophil count (abc)", "basophils (abs)", "abc", "basophils absolute", "absolute basophils"],
+  "NLR": ["neutrophil to lymphocyte ratio", "neutrophil to lymphocyte ratio (nlr)", "neutrophil-lymphocyte ratio", "neutrophil/lymphocyte ratio", "nlr"],
+  "Total Cholesterol": ["total cholesterol", "serum cholesterol", "lipid profile direct serum cholesterol total", "cholesterol", "tc"],
+  "HDL Cholesterol": ["hdl cholesterol", "hdl-cholesterol", "hdl", "serum hdl"],
+  "Triglycerides": ["triglycerides", "triglyceride", "tg", "serum triglycerides"],
+  "VLDL Cholesterol": ["vldl cholesterol, calculated", "vldl cholesterol", "vldl-cholesterol", "vldl", "vldl-c", "very low density lipoprotein"],
+  "LDL Cholesterol": ["ldl cholesterol", "ldl-cholesterol", "ldl", "ldl-c", "low density lipoprotein"],
+  "Non-HDL Cholesterol": ["non-hdl cholesterol", "non hdl cholesterol", "non-hdl", "non hdl"],
+  "Total Cholesterol / HDL Ratio": ["total cholesterol / hdl ratio", "total cholesterol / hdl", "total cholesterol to hdl ratio", "chol / hdl ratio", "chol/hdl ratio", "chol/hdl", "tc / hdl", "tc/hdl"],
+  "LDL / HDL Ratio": ["ldl / hdl ratio", "ldl / hdl", "ldl/hdl ratio", "ldl to hdl ratio", "ldl/hdl"],
+  "TG / HDL": ["tg / hdl", "tg/hdl", "triglycerides / hdl ratio", "tg / hdl ratio"],
+  "Total Bilirubin": ["serum bilirubin (total)", "bilirubin (total)", "bilirubin total", "total bilirubin", "t bil", "t bill"],
+  "Direct Bilirubin": ["serum bilirubin (direct)", "bilirubin (direct)", "bilirubin direct", "direct bilirubin", "d bil", "d bill"],
+  "Indirect Bilirubin": ["serum bilirubin (indirect)", "bilirubin (indirect)", "bilirubin indirect", "indirect bilirubin", "sb (indirect)", "ibil"],
+  "Total Protein": ["serum protein", "total protein", "protein (total)", "protein total"],
   "Albumin": ["serum albumin", "albumin", "albumin (serum)"],
   "Globulin": ["serum globulin", "globulin", "globulin (serum)"],
-  "SGOT": ["sgot (ast)", "sgot", "ast", "serum glutamic oxaloacetic transaminase"],
-  "SGPT": ["sgpt (alt)", "sgpt", "alt", "serum glutamic pyruvic transaminase"],
-  "Urea": ["serum urea", "urea", "blood urea"],
-  "Creatinine": ["serum creatinine", "creatinine"],
+  "A/G Ratio": ["a/g ratio", "ag ratio", "a:g ratio", "albumin globulin ratio", "albumin/globulin ratio"],
+  "SGOT": ["sgot (ast)", "sgot", "ast", "aspartate aminotransferase", "serum glutamic oxaloacetic transaminase"],
+  "SGPT": ["sgpt (alt)", "sgpt", "alt", "alanine aminotransferase", "serum glutamic pyruvic transaminase"],
+  "De Ritis Ratio": ["sgot/sgpt ratio", "ast/alt ratio", "de ritis ratio", "ast:alt ratio", "sgot / sgpt ratio"],
+  "Blood Urea": ["serum urea", "urea", "blood urea"],
+  "Serum Creatinine": ["serum creatinine", "creatinine"],
   "BUN": ["bun", "blood urea nitrogen"],
-  "HbA1c": ["glycated haemoglobin(hba1c)", "hba1c", "glycated hemoglobin", "hba1c (glycated haemoglobin)"],
-  "Sodium": ["sodium", "serum sodium", "na"],
-  "Potassium": ["potassium", "serum potassium", "k"],
-  "Chloride": ["chloride", "serum chloride", "cl"],
-  "Bicarbonate": ["bicarbonate", "serum bicarbonate", "hco3"],
+  "Urea / Creatinine Ratio": ["urea / creatinine ratio", "urea/creatinine ratio", "urea to creatinine ratio"],
+  "BUN / Creatinine Ratio": ["bun / creatinine ratio", "bun/creatinine ratio", "bun to creatinine ratio"],
+  "HbA1c": ["glycated haemoglobin(hba1c)", "glycated haemoglobin", "glycated hemoglobin", "hba1c", "hba1c (glycated haemoglobin)"],
+  "Sodium": ["sodium", "serum sodium", "na", "na+"],
+  "Potassium": ["potassium", "serum potassium", "k", "k+"],
+  "Chloride": ["chloride", "serum chloride", "cl", "cl-"],
+  "Bicarbonate": ["bicarbonate", "serum bicarbonate", "hco3", "hco3-"],
+  "Serum Calcium": ["serum calcium", "calcium", "ca", "ca++"],
 };
 
 /**
@@ -3666,6 +3686,192 @@ function findMatchingParameterInTest(test, nameOrAliases) {
   }
 
   return null;
+}
+
+/**
+ * Build flat, indexed catalog entries for high-precision parameter resolution
+ */
+export function buildEnhancedCatalogEntries(tests) {
+  const entries = [];
+  const byMasterKey = new Map();
+  const byParamId = new Map();
+
+  for (const test of tests) {
+    const tName = String(test.Name || "Test").trim();
+    const sName = String(test.Short_name || "").trim();
+
+    for (const p of Array.isArray(test.parameters) ? test.parameters : []) {
+      const pName = String(p.Para_name || tName || "Parameter").trim();
+      const label = (tName.toLowerCase() === pName.toLowerCase() || !tName)
+        ? pName
+        : `${pName} (${tName})`;
+
+      const entry = {
+        testId: String(test._id),
+        testName: tName,
+        shortName: sName,
+        parameterId: String(p._id),
+        masterParameterKey: p.masterParameterKey,
+        parameterName: pName,
+        label
+      };
+      entries.push(entry);
+      byMasterKey.set(p.masterParameterKey, entry);
+      byParamId.set(String(p._id), entry);
+    }
+  }
+
+  return { entries, byMasterKey, byParamId };
+}
+
+/**
+ * Robust parameter resolver that finds a parameter in tests by key, ID, name, or clinical aliases
+ */
+export function resolveCatalogParameter({
+  entries = [],
+  byMasterKey = new Map(),
+  byParamId = new Map(),
+  query = "",
+  preferredTestName = null,
+  preferredTestId = null
+}) {
+  if (!query) return null;
+  const raw = String(query).trim();
+  if (!raw) return null;
+
+  // Direct master key match
+  if (byMasterKey.has(raw)) return byMasterKey.get(raw);
+  // Direct parameter ID match
+  if (byParamId.has(raw)) return byParamId.get(raw);
+
+  const clean = raw.replace(/^\{\{|\}\}$/g, "").trim();
+  if (byMasterKey.has(clean)) return byMasterKey.get(clean);
+  if (byParamId.has(clean)) return byParamId.get(clean);
+
+  const qLower = clean.toLowerCase();
+  const normalize = (s) => String(s || "").toLowerCase().replace(/[\(\)\[\]\/_\-\:\s]/g, "");
+  const qNorm = normalize(clean);
+  const qWithoutParen = clean.replace(/\(.*?\)/g, "").trim().toLowerCase();
+  const qWithoutParenNorm = normalize(qWithoutParen);
+
+  const isPreferred = (entry) => {
+    if (preferredTestId && String(entry.testId) === String(preferredTestId)) return true;
+    if (preferredTestName && entry.testName.toLowerCase() === String(preferredTestName).toLowerCase().trim()) return true;
+    return false;
+  };
+
+  // 1. Exact parameterName match (prioritize preferred test)
+  let preferredMatch = entries.find(e => isPreferred(e) && e.parameterName.toLowerCase() === qLower);
+  if (preferredMatch) return preferredMatch;
+  let exactMatch = entries.find(e => e.parameterName.toLowerCase() === qLower);
+  if (exactMatch) return exactMatch;
+
+  // 2. Exact label match (e.g. "Hematocrit (HCT) (Hematocrit (HCT))" or "MCV (COMPLETE BLOOD COUNT (CBC))")
+  preferredMatch = entries.find(e => isPreferred(e) && e.label.toLowerCase() === qLower);
+  if (preferredMatch) return preferredMatch;
+  exactMatch = entries.find(e => e.label.toLowerCase() === qLower);
+  if (exactMatch) return exactMatch;
+
+  // 3. Clinical Aliases lookup
+  let aliasList = [];
+  for (const [key, aliases] of Object.entries(CLINICAL_DEP_ALIASES)) {
+    const all = [key.toLowerCase(), ...aliases.map(a => a.toLowerCase())];
+    if (all.some(a => a === qLower || normalize(a) === qNorm || (qWithoutParenNorm && normalize(a) === qWithoutParenNorm))) {
+      aliasList = [...new Set([...aliasList, ...all])];
+      break;
+    }
+  }
+  for (const f of CLINICAL_PANEL_FORMULAS) {
+    const all = [f.targetParameter.toLowerCase(), ...f.aliases.map(a => a.toLowerCase())];
+    if (all.some(a => a === qLower || normalize(a) === qNorm || (qWithoutParenNorm && normalize(a) === qWithoutParenNorm))) {
+      aliasList = [...new Set([...aliasList, ...all])];
+      break;
+    }
+  }
+
+  if (aliasList.length > 0) {
+    preferredMatch = entries.find(e => isPreferred(e) && aliasList.some(a => e.parameterName.toLowerCase() === a || normalize(e.parameterName) === normalize(a)));
+    if (preferredMatch) return preferredMatch;
+    const aliasMatch = entries.find(e => aliasList.some(a => e.parameterName.toLowerCase() === a || normalize(e.parameterName) === normalize(a)));
+    if (aliasMatch) return aliasMatch;
+  }
+
+  // 4. Normalized match (stripping punctuation and spaces)
+  if (qNorm) {
+    preferredMatch = entries.find(e => isPreferred(e) && (normalize(e.parameterName) === qNorm || normalize(e.testName) === qNorm));
+    if (preferredMatch) return preferredMatch;
+    const normMatch = entries.find(e => normalize(e.parameterName) === qNorm || normalize(e.testName) === qNorm);
+    if (normMatch) return normMatch;
+  }
+
+  // 5. Without parentheses match
+  if (qWithoutParenNorm && qWithoutParenNorm.length > 2) {
+    preferredMatch = entries.find(e => isPreferred(e) && normalize(e.parameterName.replace(/\(.*?\)/g, "").trim()) === qWithoutParenNorm);
+    if (preferredMatch) return preferredMatch;
+    const noParenMatch = entries.find(e => normalize(e.parameterName.replace(/\(.*?\)/g, "").trim()) === qWithoutParenNorm);
+    if (noParenMatch) return noParenMatch;
+  }
+
+  // 6. Substring match
+  if (qNorm && qNorm.length > 3) {
+    preferredMatch = entries.find(e => isPreferred(e) && (normalize(e.parameterName).includes(qNorm) || qNorm.includes(normalize(e.parameterName))));
+    if (preferredMatch) return preferredMatch;
+    const subMatch = entries.find(e => normalize(e.parameterName).includes(qNorm) || qNorm.includes(normalize(e.parameterName)));
+    if (subMatch) return subMatch;
+  }
+
+  return null;
+}
+
+/**
+ * Transforms raw expression into machine-executable {{masterParameterKey}} tokens
+ */
+export function transformFormulaExpression(expression, catalog, preferredTestName = null) {
+  let result = String(expression || "").trim();
+  const { entries, byMasterKey, byParamId } = catalog;
+
+  // 1. Replace existing {{...}} placeholders
+  result = result.replace(/\{\{([^{}]+)\}\}/g, (match, rawKey) => {
+    const trimmed = rawKey.trim();
+    if (byMasterKey.has(trimmed)) return `{{${trimmed}}}`;
+    const found = resolveCatalogParameter({
+      entries,
+      byMasterKey,
+      byParamId,
+      query: trimmed,
+      preferredTestName
+    });
+    if (found) return `{{${found.masterParameterKey}}}`;
+    return match;
+  });
+
+  // 2. Extract potential parameter phrases outside {{...}}
+  // Split by mathematical operators and parentheses: +, -, *, /, (, ), comma
+  const rawTokens = result
+    .split(/[\+\/\*\(\),-]+/)
+    .map(t => t.trim())
+    .filter(t => t && !/^\d+(\.\d+)?$/.test(t) && !t.startsWith("{{") && !t.endsWith("}}"));
+
+  const sortedTokens = [...new Set(rawTokens)]
+    .filter(t => !["round", "min", "max", "abs", "ceil", "floor", "pow"].includes(t.toLowerCase()))
+    .sort((a, b) => b.length - a.length);
+
+  for (const phrase of sortedTokens) {
+    const found = resolveCatalogParameter({
+      entries,
+      byMasterKey,
+      byParamId,
+      query: phrase,
+      preferredTestName
+    });
+    if (found) {
+      const escaped = phrase.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+      const regex = new RegExp(`(?<!\\{\\{)\\b${escaped}\\b(?!\\}\\})`, "gi");
+      result = result.replace(regex, `{{${found.masterParameterKey}}}`);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -3727,53 +3933,53 @@ export async function prepareFormulaContextForCopilot({ message, tenantId, userI
     }))
   }));
 
+  const catalog = buildEnhancedCatalogEntries(allTests);
+
   // Match standard clinical formulas that can be applied to these tests
   const applicableFormulas = [];
   const rawTestsInScope = matchedTests.length > 0 ? matchedTests : allTests;
 
-  // CRITICAL: Prioritize tests that belong directly to the matched panel over non-panel or multi-parameter composite tests
+  // Prioritize composite tests (tests with many parameters like comprehensive CBC) and tests inside panels
   const testsInScope = [...rawTestsInScope].sort((a, b) => {
-    const aInPanel = panelTestIds.has(String(a._id));
-    const bInPanel = panelTestIds.has(String(b._id));
-    if (aInPanel && !bInPanel) return -1;
-    if (!aInPanel && bInPanel) return 1;
-    return (a.parameters?.length || 0) - (b.parameters?.length || 0);
+    const aParams = (a.parameters || []).length;
+    const bParams = (b.parameters || []).length;
+    // Prefer tests with multiple parameters (composite tests) or tests in panels
+    return bParams - aParams;
   });
 
   for (const test of testsInScope) {
     for (const stdFormula of CLINICAL_PANEL_FORMULAS) {
-      const targetParam = findMatchingParameterInTest(test, [stdFormula.targetParameter, ...stdFormula.aliases]);
-      if (targetParam) {
-        // Find dependencies in the same test or across matched tests in scope
+      const targetParam = resolveCatalogParameter({
+        entries: catalog.entries,
+        byMasterKey: catalog.byMasterKey,
+        byParamId: catalog.byParamId,
+        query: stdFormula.targetParameter,
+        preferredTestId: String(test._id),
+        preferredTestName: test.Name
+      });
+
+      if (targetParam && String(targetParam.testId) === String(test._id)) {
         const resolvedDeps = [];
         let allDepsFound = true;
         let machineExpr = stdFormula.formulaTemplate;
 
         for (const depName of stdFormula.dependencies) {
-          const depAliases = CLINICAL_DEP_ALIASES[depName] ||
-            CLINICAL_PANEL_FORMULAS.find(f => f.targetParameter === depName)?.aliases ||
-            [depName];
-
-          let depParam = findMatchingParameterInTest(test, [depName, ...depAliases]);
-          let depTest = test;
-
-          if (!depParam) {
-            for (const otherTest of testsInScope) {
-              const candidateParam = findMatchingParameterInTest(otherTest, [depName, ...depAliases]);
-              if (candidateParam) {
-                depParam = candidateParam;
-                depTest = otherTest;
-                break;
-              }
-            }
-          }
+          const depParam = resolveCatalogParameter({
+            entries: catalog.entries,
+            byMasterKey: catalog.byMasterKey,
+            byParamId: catalog.byParamId,
+            query: depName,
+            preferredTestId: String(test._id),
+            preferredTestName: test.Name
+          });
 
           if (depParam) {
             resolvedDeps.push({
               name: depName,
-              parameterId: String(depParam._id),
+              parameterId: depParam.parameterId,
               masterParameterKey: depParam.masterParameterKey,
-              testId: String(depTest._id)
+              testId: depParam.testId,
+              label: depParam.label
             });
             machineExpr = machineExpr.replaceAll(`{{${depName}}}`, `{{${depParam.masterParameterKey}}}`);
           } else {
@@ -3784,29 +3990,17 @@ export async function prepareFormulaContextForCopilot({ message, tenantId, userI
         // Validate dependencies: no self-dependency and all dependencies found
         const hasSelfDependency = resolvedDeps.some(d => d.masterParameterKey === targetParam.masterParameterKey);
 
-        const normTarget = String(targetParam.Para_name || "").toLowerCase().replace(/[^a-z]/g, "");
+        const normTarget = String(targetParam.parameterName || "").toLowerCase().replace(/[^a-z]/g, "");
         const isDiffParam = ["neutrophilspercentage", "lymphocytepercentage", "monocytespercentage", "eosinophilspercentage", "basophilspercentage"].some(p => normTarget.includes(p)) ||
           /^(neutrophil|lymphocyte|eosinophil|monocyte|basophil)s?percentage$/.test(normTarget);
 
         if (allDepsFound && !hasSelfDependency && !isDiffParam && !applicableFormulas.some(f => f.targetMasterKey === targetParam.masterParameterKey)) {
-          // Avoid duplicate formulas for the exact same clinical calculation: prefer tests that belong directly to the panel
-          const existingIdx = applicableFormulas.findIndex(f => f.clinicalTarget === stdFormula.targetParameter);
-          if (existingIdx !== -1) {
-            const newIsInPanel = panelTestIds.has(String(test._id));
-            const oldIsInPanel = panelTestIds.has(String(applicableFormulas[existingIdx].targetTestId));
-            if (newIsInPanel && !oldIsInPanel) {
-              applicableFormulas.splice(existingIdx, 1);
-            } else {
-              continue;
-            }
-          }
-
           applicableFormulas.push({
             clinicalTarget: stdFormula.targetParameter,
             targetTestId: String(test._id),
             targetTestName: test.Name,
-            targetParameterId: String(targetParam._id),
-            targetParameterName: targetParam.Para_name,
+            targetParameterId: targetParam.parameterId,
+            targetParameterName: targetParam.parameterName,
             targetMasterKey: targetParam.masterParameterKey,
             displayExpression: stdFormula.displayExpression,
             expression: machineExpr,
@@ -3839,43 +4033,30 @@ export async function executeCreateFormula({ formulaData, tenantId, userId, role
   const targetTenantId = tenantId ? new mongoose.Types.ObjectId(tenantId) : null;
   const targetUserId = userId ? new mongoose.Types.ObjectId(userId) : null;
 
-  // Build catalog maps
-  const paramByMasterKey = new Map();
-  const paramByName = new Map();
+  // Build enhanced catalog entries
+  const catalog = buildEnhancedCatalogEntries(tests);
 
-  for (const test of tests) {
-    for (const p of Array.isArray(test.parameters) ? test.parameters : []) {
-      const pName = String(p.Para_name || test.Name || "Parameter").trim();
-      const tName = String(test.Name || "Test").trim();
-      const label = (tName.toLowerCase() === pName.toLowerCase() || !tName)
-        ? pName
-        : `${pName} (${tName})`;
-
-      const entry = {
-        testId: String(test._id),
-        testName: test.Name,
-        parameterId: String(p._id),
-        masterParameterKey: p.masterParameterKey,
-        parameterName: p.Para_name,
-        label
-      };
-      paramByMasterKey.set(p.masterParameterKey, entry);
-      paramByName.set(String(p.Para_name).toLowerCase().trim(), entry);
-    }
-  }
+  const preferredTestName = formulaData.targetTestName || formulaData.panelOrTestName || formulaData.testName || null;
+  const preferredTestId = formulaData.targetTestId ? String(formulaData.targetTestId) : null;
 
   // Resolve target parameter
-  let targetEntry = null;
-  if (formulaData.targetMasterKey && paramByMasterKey.has(formulaData.targetMasterKey)) {
-    targetEntry = paramByMasterKey.get(formulaData.targetMasterKey);
-  } else if (formulaData.targetParameterId) {
-    targetEntry = Array.from(paramByMasterKey.values()).find(e => e.parameterId === String(formulaData.targetParameterId));
-  } else if (formulaData.targetParameterName) {
-    targetEntry = paramByName.get(String(formulaData.targetParameterName).toLowerCase().trim());
-  }
+  const targetQuery = formulaData.targetMasterKey ||
+    formulaData.targetParameterId ||
+    formulaData.targetParameterName ||
+    formulaData.targetLabel ||
+    formulaData.parameterName;
+
+  const targetEntry = resolveCatalogParameter({
+    entries: catalog.entries,
+    byMasterKey: catalog.byMasterKey,
+    byParamId: catalog.byParamId,
+    query: targetQuery,
+    preferredTestName,
+    preferredTestId
+  });
 
   if (!targetEntry) {
-    throw new Error(`Target parameter "${formulaData.targetParameterName || formulaData.targetMasterKey}" could not be found in laboratory catalog.`);
+    throw new Error(`Target parameter "${targetQuery}" could not be found in laboratory catalog.`);
   }
 
   const normTarget = String(targetEntry.parameterName || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -3885,17 +4066,11 @@ export async function executeCreateFormula({ formulaData, tenantId, userId, role
     throw new Error(`Differential leukocyte percentages (like "${targetEntry.parameterName}") are manual microscopic/analyzer measurements and cannot be calculated via formula.`);
   }
 
-  // Normalize expression: if placeholders contain parameter names instead of master keys, replace them
-  let rawExpression = String(formulaData.expression || formulaData.displayExpression || "").trim();
-  rawExpression = rawExpression.replace(/\{\{([^{}]+)\}\}/g, (match, rawKey) => {
-    const trimmed = rawKey.trim();
-    if (paramByMasterKey.has(trimmed)) return `{{${trimmed}}}`;
-    const byName = paramByName.get(trimmed.toLowerCase());
-    if (byName) return `{{${byName.masterParameterKey}}}`;
-    return match;
-  });
+  // Transform and normalize expression: replace placeholders or bare analyte names with {{masterParameterKey}}
+  let rawExpression = formulaData.expression || formulaData.displayExpression || "";
+  const transformedExpression = transformFormulaExpression(rawExpression, catalog, preferredTestName || targetEntry.testName);
 
-  const validation = validateFormulaExpression(rawExpression);
+  const validation = validateFormulaExpression(transformedExpression);
   const usedMasterKeys = validation.usedIds;
 
   if (usedMasterKeys.includes(targetEntry.masterParameterKey)) {
@@ -3903,7 +4078,7 @@ export async function executeCreateFormula({ formulaData, tenantId, userId, role
   }
 
   const dependencies = usedMasterKeys.map(k => {
-    const entry = paramByMasterKey.get(k);
+    const entry = catalog.byMasterKey.get(k);
     if (!entry) throw new Error(`Formula dependency "${k}" not found in tenant tests.`);
     return {
       testId: new mongoose.Types.ObjectId(entry.testId),
@@ -3913,14 +4088,23 @@ export async function executeCreateFormula({ formulaData, tenantId, userId, role
     };
   });
 
+  // Build clean displayExpression
+  let displayExpression = formulaData.displayExpression;
+  if (!displayExpression || displayExpression.includes("param_")) {
+    displayExpression = transformedExpression.replace(/\{\{([^{}]+)\}\}/g, (m, k) => {
+      const e = catalog.byMasterKey.get(k);
+      return e ? e.parameterName : k;
+    });
+  }
+
   const payload = {
     tenantId: targetTenantId || targetUserId,
     targetTestId: new mongoose.Types.ObjectId(targetEntry.testId),
     targetParameterId: new mongoose.Types.ObjectId(targetEntry.parameterId),
     targetMasterKey: targetEntry.masterParameterKey,
     targetLabel: targetEntry.label,
-    expression: rawExpression,
-    displayExpression: formulaData.displayExpression || rawExpression,
+    expression: transformedExpression,
+    displayExpression,
     dependencies,
     precision: Number.isFinite(Number(formulaData.precision)) ? Number(formulaData.precision) : 2,
     notes: String(formulaData.notes || "").trim(),
@@ -3964,10 +4148,15 @@ export async function executeBatchCreateFormulas({ formulasData = {}, tenantId, 
 
   const savedResults = [];
   const errors = [];
+  const panelOrTestName = formulasData.panelOrTestName || null;
 
   for (const f of formulasList) {
     try {
-      const res = await executeCreateFormula({ formulaData: f, tenantId, userId, role });
+      const fData = {
+        ...f,
+        panelOrTestName: f.panelOrTestName || panelOrTestName
+      };
+      const res = await executeCreateFormula({ formulaData: fData, tenantId, userId, role });
       if (res.success) savedResults.push(res.formula);
     } catch (err) {
       console.warn("Failed to create individual formula in batch:", f?.targetParameterName, err.message);

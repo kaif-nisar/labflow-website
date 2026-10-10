@@ -564,26 +564,46 @@ async function verifyAccessToken() {
     renderSubscriptionBanner(data?.user?.tenantId?.subscriptionPlan);
 
     return true;
-    // Show subscription expired modal and block UI
+    // Show subscription expired modal and allow dismissal / logout
     function showSubscriptionModal() {
       const modal = document.getElementById('subscriptionModal');
       if (modal) {
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
         document.body.style.overflow = 'hidden'; // Prevent scrolling
       }
-      // Block all keyboard and mouse events except inside modal
-      document.addEventListener('keydown', blockEvent, true);
-      document.addEventListener('click', blockEvent, true);
+
+      document.getElementById('closeSubscriptionModal')?.addEventListener('click', hideSubscriptionModal);
+      document.getElementById('modalCloseBtn')?.addEventListener('click', hideSubscriptionModal);
+      document.getElementById('modalLogoutBtn')?.addEventListener('click', logout);
+
+      window.addEventListener('keydown', onModalKeyDown, true);
+      modal?.addEventListener('click', onModalBackdropClick, true);
     }
 
-    function blockEvent(e) {
-      const modal = document.getElementById('subscriptionModal');
-      if (modal && modal.style.display === 'block') {
-        if (!modal.contains(e.target)) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
+    function onModalKeyDown(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault();
+        hideSubscriptionModal();
       }
+    }
+
+    function onModalBackdropClick(e) {
+      const modal = document.getElementById('subscriptionModal');
+      if (e.target === modal) {
+        e.stopPropagation();
+        e.preventDefault();
+        hideSubscriptionModal();
+      }
+    }
+
+    function hideSubscriptionModal() {
+      const modal = document.getElementById('subscriptionModal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+      window.removeEventListener('keydown', onModalKeyDown, true);
+      modal?.removeEventListener('click', onModalBackdropClick, true);
     }
 
     // // UPI screenshot upload logic
@@ -953,29 +973,31 @@ function debugAdminLayer() {
 }
 
 
-function logout() {
-  fetch(`${BASE_URL}/api/v1/user/logout`, {
-    method: 'POST',
-    credentials: 'include' // Include cookies for session management
-  })
-    .then(response => {
-      if (response.ok) {
-        // Successfully logged out
-        console.log('Logout successful');
-        portalGuard.clearStoredSession();
-        // Redirect to the login page
-        window.location.href = `${BASE_URL}/franchiseelogin.html`;
-      } else {
-        throw new Error('Logout failed');
-      }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      portalGuard.handleSessionFailure({
-        loginPath: "/franchiseelogin.html",
-        message: "Your session could not be closed cleanly. Please login again.",
-      });
+async function logout() {
+  const modalLogoutBtn = document.getElementById('modalLogoutBtn');
+  if (modalLogoutBtn) {
+    modalLogoutBtn.disabled = true;
+    modalLogoutBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging out...';
+  }
+  try {
+    await fetch(`${BASE_URL}/api/v1/user/logout`, {
+      method: 'POST',
+      credentials: 'include'
     });
+    console.log('Logout successful');
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    try { portalGuard.clearStoredSession(); } catch(e) {}
+    try { localStorage.clear(); } catch(e) {}
+    try { sessionStorage.clear(); } catch(e) {}
+    try {
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+    } catch(e) {}
+    window.location.href = `${BASE_URL}/franchiseelogin.html`;
+  }
 }
 
 // Add event listener to the logout button

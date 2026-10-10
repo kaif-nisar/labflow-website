@@ -475,14 +475,8 @@
         function showMessage(message, type = 'error') {
             if (!refs.feedback) return;
 
-            if (isEditMode) {
-                refs.feedback.className = `notification ${type === 'success' ? 'success' : 'error'} active`;
-                refs.feedback.innerHTML = `<strong>${escapeHtml(type === 'success' ? 'Success' : 'Error')}</strong><p>${escapeHtml(message || '')}</p>`;
-                return;
-            }
-
             refs.feedback.textContent = message || '';
-            refs.feedback.classList.remove('booking-message--success', 'booking-message--error');
+            refs.feedback.classList.remove('booking-message--success', 'booking-message--error', 'notification', 'success', 'error', 'active');
             refs.feedback.classList.add(type === 'success' ? 'booking-message--success' : 'booking-message--error');
             refs.feedback.style.display = message ? 'block' : 'none';
         }
@@ -493,12 +487,7 @@
             refs.feedback.textContent = '';
             refs.feedback.innerHTML = '';
             refs.feedback.className = '';
-
-            if (isEditMode) {
-                refs.feedback.className = 'notification';
-            } else {
-                refs.feedback.style.display = 'none';
-            }
+            refs.feedback.style.display = 'none';
         }
 
         function setLoading(isLoading) {
@@ -1768,25 +1757,35 @@
         }
 
         function getFormCommonFields() {
+            const rawBookingId = (document.getElementById('random-id') || refs.bookingId)?.value?.trim() || '';
+            const resolvedBookingId = isEditMode
+                ? (state.booking?.bookingId || (new URLSearchParams(window.location.search).get('Name')) || (new URLSearchParams(window.location.search).get('id')) || rawBookingId)
+                : rawBookingId;
+            const rawBookingDate = (document.getElementById('booking-date') || refs.bookingDate)?.value || '';
+            const rawBookingTime = (document.getElementById('booking-time') || refs.bookingTime)?.value || '';
+
             return {
-                barcodeId: refs.bookingId?.value || '',
-                date: refs.bookingDate?.value || '',
-                time: refs.bookingTime?.value || '',
+                barcodeId: resolvedBookingId,
+                originalBookingId: state.booking?.bookingId || resolvedBookingId,
+                newBookingId: rawBookingId || resolvedBookingId,
+                bookingId: rawBookingId || resolvedBookingId,
+                date: rawBookingDate,
+                time: rawBookingTime,
                 createdbyuser: resolveGlobalUsername(),
-                courierName: refs.courierName?.value || '',
-                courierId: refs.courierId?.value || '',
-                patientName: refs.patientName?.value.trim() || '',
+                courierName: (document.getElementById('courier-name') || refs.courierName)?.value || '',
+                courierId: (document.getElementById('courier-id') || refs.courierId)?.value || '',
+                patientName: (document.getElementById('patient-name') || refs.patientName)?.value?.trim() || '',
                 year: buildPatientAgeText(),
-                gender: refs.patientGender?.value || '',
-                patientPhone: refs.patientPhone?.value || '',
-                doctorName: refs.doctorName?.value || '',
-                labName: refs.labName?.value || '',
-                franchisee: refs.franchiseeSelect?.value || '',
-                clinicalHistory: refs.clinicalHistory?.value || '',
-                total: refs.total?.textContent || '0',
+                gender: (document.getElementById('patient-gender') || refs.patientGender)?.value || '',
+                patientPhone: (document.getElementById('patient-phone') || refs.patientPhone)?.value || '',
+                doctorName: (document.getElementById('doctor-name') || refs.doctorName)?.value || '',
+                labName: (document.getElementById('lab-name') || refs.labName)?.value || '',
+                franchisee: (document.getElementById('franchisee-select') || refs.franchiseeSelect)?.value || '',
+                clinicalHistory: (document.getElementById('clinical-history') || refs.clinicalHistory)?.value || '',
+                total: (document.getElementById('total') || refs.total)?.textContent || '0',
                 userId: state.bookingUserId || state.rootUserId || '',
-                discountamount: refs.discountAmount?.value || '',
-                discountunit: String(refs.discountPercentage?.value || '').replace('%', ''),
+                discountamount: (document.getElementById('discount-amount') || refs.discountAmount)?.value || '',
+                discountunit: String((document.getElementById('discount-percentage') || refs.discountPercentage)?.value || '').replace('%', ''),
             };
         }
 
@@ -1794,6 +1793,10 @@
             const fields = getFormCommonFields();
             const currentSelectedItems = getCurrentSelectedItems();
             Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+
+            if (isEditMode && state.booking?._id) {
+                formData.append('id', String(state.booking._id));
+            }
 
             formData.append('subFranchisee', refs.franchiseeSelect?.value || '');
             formData.append('subFranchiseeId', getSelectedFranchiseeId() || '');
@@ -1901,6 +1904,24 @@
 
                 if (!response.ok) {
                     throw new Error(getResponseMessage(data, 'Booking update nahi ho saki'));
+                }
+
+                const finalBookingId = data?.data?.bookingId || data?.bookingId;
+                if (finalBookingId) {
+                    if (state.booking) state.booking.bookingId = finalBookingId;
+                    try {
+                        localStorage.setItem('regId', JSON.stringify(finalBookingId));
+                        sessionStorage.setItem('regId', JSON.stringify(finalBookingId));
+                        if (state.booking) {
+                            localStorage.setItem('booking', JSON.stringify(state.booking));
+                            sessionStorage.setItem('booking', JSON.stringify(state.booking));
+                        }
+                        const currentParams = new URLSearchParams(window.location.search);
+                        if (currentParams.get('Name')) {
+                            currentParams.set('Name', finalBookingId);
+                            window.history.replaceState({ page: 'editbooking' }, '', `?${currentParams.toString()}`);
+                        }
+                    } catch (e) {}
                 }
 
                 showMessage(data.message || 'Booking successfully update ho gayi.', 'success');
@@ -2030,7 +2051,12 @@
                 || sessionBooking?.bookingId
                 || storedBooking?.bookingId;
 
-            if (!bookingId) {
+            const fallbackDocId = urlParams.get('_id')
+                || (urlParams.get('id') && urlParams.get('id').length === 24 ? urlParams.get('id') : null)
+                || storedBooking?._id
+                || sessionBooking?._id;
+
+            if (!bookingId && !fallbackDocId) {
                 throw new Error('Booking ID nahi mila');
             }
 
@@ -2040,7 +2066,10 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ value1: bookingId }),
+                body: JSON.stringify({
+                    value1: bookingId || fallbackDocId,
+                    id: fallbackDocId || ''
+                }),
             });
 
             const payload = await getResponseJson(response);
@@ -2051,6 +2080,17 @@
             const booking = payload.data || payload;
             state.booking = booking;
             state.bookingUserId = toId(booking.createdBy) || state.bookingUserId;
+
+            if (booking.bookingId) {
+                try {
+                    localStorage.setItem('regId', JSON.stringify(booking.bookingId));
+                    sessionStorage.setItem('regId', JSON.stringify(booking.bookingId));
+                    if (urlParams.get('Name') && urlParams.get('Name') !== booking.bookingId) {
+                        urlParams.set('Name', booking.bookingId);
+                        window.history.replaceState({ page: 'editbooking' }, '', `?${urlParams.toString()}`);
+                    }
+                } catch (e) {}
+            }
 
             if (refs.bookingId) refs.bookingId.value = booking.bookingId || '';
             if (refs.bookingDate) refs.bookingDate.value = formatDateForInput(booking.date);

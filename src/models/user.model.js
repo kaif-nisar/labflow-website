@@ -74,6 +74,59 @@ const userSchema = new Schema(
       type: String,
       default: ""
     },
+    branding: {
+      brandType: {
+        type: String,
+        enum: ["image", "text", "both", "none"],
+        default: "image",
+      },
+      labHeading: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      labSlogan: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      bgColor: {
+        type: String,
+        default: "#ffffff",
+      },
+      textColor: {
+        type: String,
+        default: "#0f172a",
+      },
+      sloganColor: {
+        type: String,
+        default: "#475569",
+      },
+      fontSize: {
+        type: Number,
+        default: 20,
+      },
+      sloganSize: {
+        type: Number,
+        default: 12,
+      },
+      fontFamily: {
+        type: String,
+        default: "Arial, sans-serif",
+      },
+      textAlign: {
+        type: String,
+        default: "center",
+      },
+      borderWidth: {
+        type: Number,
+        default: 1,
+      },
+      borderColor: {
+        type: String,
+        default: "#e2e8f0",
+      },
+    },
     resetPasswordToken: {
       type: String,
     },

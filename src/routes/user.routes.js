@@ -419,9 +419,19 @@ router.route("/logout").post(verifyJWT, logOutUser);
 
 // //superFranchisee fetch and update
 router.route("/superFranchisee-fetch").get(verifyJWT,authorizeRoles(["admin", "franchisee","superFranchisee","subFranchisee","staff"]),checkStaffPermission("canManageUsers"), superFranchiseeUpdate);
+router.route("/superfranchisee-fetch").get(verifyJWT,authorizeRoles(["admin", "franchisee","superFranchisee","subFranchisee","staff"]),checkStaffPermission("canManageUsers"), superFranchiseeUpdate);
 
 // // superFranchisee update
 router.route("/superFranchisee-update").post(
+  verifyJWT,authorizeRoles(["admin", "franchisee","superFranchisee","subFranchisee","staff"]),checkStaffPermission("canManageUsers"),
+  upload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "profileImage", maxCount: 1 },
+    { name: "nablLogo", maxCount: 1 }
+  ]),
+  sfUpdate
+);
+router.route("/superfranchisee-update").post(
   verifyJWT,authorizeRoles(["admin", "franchisee","superFranchisee","subFranchisee","staff"]),checkStaffPermission("canManageUsers"),
   upload.fields([
     { name: "logo", maxCount: 1 },

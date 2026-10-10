@@ -1370,24 +1370,35 @@ function toggleSubItems(id) {
 }
 
 // Logout functionality
-function logout() {
-  fetch(`${BASE_URL}/api/v1/user/logout`, {
-    method: "POST",
-    credentials: "include",
-  })
-    .then((response) => {
-      if (response.ok) {
-        localStorage.clear();
-        sessionStorage.clear();
-        console.log("Logout successful");
-        window.location.href = `${BASE_URL}/franchiseelogin.html`;
-      } else {
-        throw new Error("Logout failed");
-      }
-    })
-    .catch((error) => {
-      console.error("Error:", error);
+async function logout() {
+  const modalLogoutBtn = document.getElementById("modalLogoutBtn");
+  if (modalLogoutBtn) {
+    modalLogoutBtn.disabled = true;
+    modalLogoutBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging out...';
+  }
+  const regularLogoutBtn = document.getElementById("logoutButton");
+  if (regularLogoutBtn) {
+    regularLogoutBtn.style.pointerEvents = "none";
+  }
+
+  try {
+    await fetch(`${BASE_URL}/api/v1/user/logout`, {
+      method: "POST",
+      credentials: "include",
     });
+    console.log("Logout successful");
+  } catch (error) {
+    console.warn("Logout request failed, proceeding with client-side cleanup:", error);
+  } finally {
+    try { localStorage.clear(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    try {
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+    } catch (e) {}
+    window.location.href = `${BASE_URL}/franchiseelogin.html`;
+  }
 }
 
 // Menu configuration based on user roles and tenant layers
@@ -1942,6 +1953,7 @@ function showSubscriptionModal() {
   }
   if (__subscriptionHandlers.click) {
     window.removeEventListener('click', __subscriptionHandlers.click, true);
+    modal.removeEventListener('click', __subscriptionHandlers.click, true);
     __subscriptionHandlers.click = null;
   }
 
@@ -1950,31 +1962,57 @@ function showSubscriptionModal() {
   document.body.style.overflow = 'hidden';
   hideSubscriptionBanner();
 
-  // Prevent closing via outside click or ESC
+  // Allow closing via ESC
   __subscriptionHandlers.keydown = function (e) {
     if (modal.style.display !== 'flex' && modal.style.display !== 'block') {
       return;
     }
     if (e.key === 'Escape' || e.key === 'Esc') {
       e.preventDefault();
-      e.stopPropagation();
+      hideSubscriptionModal();
     }
   };
 
-  // Block clicks that are outside modal-content
+  // Close on backdrop click (outside modal content)
   __subscriptionHandlers.click = function (e) {
     if (modal.style.display !== 'flex' && modal.style.display !== 'block') {
       return;
     }
-    const content = modal.querySelector('.modal-content');
-    if (content && !content.contains(e.target)) {
+    if (e.target === modal) {
       e.stopPropagation();
       e.preventDefault();
+      hideSubscriptionModal();
     }
   };
 
   window.addEventListener('keydown', __subscriptionHandlers.keydown, true);
-  window.addEventListener('click', __subscriptionHandlers.click, true);
+  modal.addEventListener('click', __subscriptionHandlers.click, true);
+
+  // Bind close buttons
+  const closeBtn = document.getElementById('closeSubscriptionModal');
+  if (closeBtn) {
+    closeBtn.onclick = (e) => {
+      e.preventDefault();
+      hideSubscriptionModal();
+    };
+  }
+
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+  if (modalCloseBtn) {
+    modalCloseBtn.onclick = (e) => {
+      e.preventDefault();
+      hideSubscriptionModal();
+    };
+  }
+
+  // Bind logout button
+  const modalLogoutBtn = document.getElementById('modalLogoutBtn');
+  if (modalLogoutBtn) {
+    modalLogoutBtn.onclick = (e) => {
+      e.preventDefault();
+      logout();
+    };
+  }
 
   // Start polling subscription status every 10 seconds
   if (window._subscriptionPollInterval) clearInterval(window._subscriptionPollInterval);
@@ -1987,7 +2025,8 @@ function showSubscriptionModal() {
         hideSubscriptionModal();
         // update local user object and UI
         user = data.user;
-        document.getElementById('logo').src = user?.tenantId?.logo || '/images/logoLabFlow.svg';
+        const logoEl = document.getElementById('logo');
+        if (logoEl) logoEl.src = user?.tenantId?.logo || '/images/logoLabFlow.svg';
         syncAdminGlobals();
         clearInterval(window._subscriptionPollInterval);
         window._subscriptionPollInterval = null;
@@ -2009,6 +2048,7 @@ function hideSubscriptionModal() {
   }
   if (__subscriptionHandlers.click) {
     window.removeEventListener('click', __subscriptionHandlers.click, true);
+    modal.removeEventListener('click', __subscriptionHandlers.click, true);
     __subscriptionHandlers.click = null;
   }
   if (window._subscriptionPollInterval) {

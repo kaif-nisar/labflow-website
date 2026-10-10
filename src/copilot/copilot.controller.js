@@ -19,7 +19,11 @@ import {
   searchLabCatalog,
   prepareFormulaContextForCopilot,
   executeCreateFormula,
-  executeBatchCreateFormulas
+  executeBatchCreateFormulas,
+  buildEnhancedCatalogEntries,
+  resolveCatalogParameter,
+  transformFormulaExpression,
+  getTenantTestsForFormulas
 } from "./copilot.tools.js";
 import { categorydb } from "../models/category.model.js";
 import { testSchema } from "../models/newTest.model.js";
@@ -208,18 +212,82 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
     }
   }
 
-  // Formula Batch Creation Guarantee:
-  // If user asked to create/build formulas (e.g. for CBC) and we have recommended formulas for the catalog
+  // Formula Batch Creation & Normalization Guarantee:
   const isBuildFormulaRequest = /(banao|create|build|set karo|add karo|calculate karo|लगाओ|बनाओ|बना दो|बनाएं|formula build|formula lagao)/i.test(message || "");
-  if (
+  if (response.action && (response.action.type === "BATCH_CREATE_FORMULAS" || response.action.type === "SAVE_FORMULAS")) {
+    const rawList = Array.isArray(response.action.data?.formulas)
+      ? response.action.data.formulas
+      : (Array.isArray(response.action.data) ? response.action.data : []);
+
+    const allTests = await getTenantTestsForFormulas(tenantId, userId);
+    const catalog = buildEnhancedCatalogEntries(allTests);
+    const normalized = [];
+
+    for (const f of rawList) {
+      const target = resolveCatalogParameter({
+        entries: catalog.entries,
+        byMasterKey: catalog.byMasterKey,
+        byParamId: catalog.byParamId,
+        query: f.targetParameterName || f.targetMasterKey || f.targetLabel,
+        preferredTestName: response.action.data?.panelOrTestName || f.targetTestName
+      });
+      if (target) {
+        const transformedExpr = transformFormulaExpression(f.expression || f.displayExpression, catalog, target.testName);
+        normalized.push({
+          ...f,
+          targetTestId: target.testId,
+          targetTestName: target.testName,
+          targetParameterId: target.parameterId,
+          targetParameterName: target.parameterName,
+          targetMasterKey: target.masterParameterKey,
+          targetLabel: target.label,
+          expression: transformedExpr,
+          displayExpression: f.displayExpression || transformedExpr
+        });
+      }
+    }
+
+    if (normalized.length > 0) {
+      response.action.data.formulas = normalized;
+    } else if (formulaContext && formulaContext.recommendedFormulas?.length > 0) {
+      response.action.data.formulas = formulaContext.recommendedFormulas;
+    }
+  } else if (response.action && (response.action.type === "CREATE_FORMULA" || response.action.type === "SAVE_FORMULA")) {
+    const f = response.action.data;
+    if (f) {
+      const allTests = await getTenantTestsForFormulas(tenantId, userId);
+      const catalog = buildEnhancedCatalogEntries(allTests);
+      const target = resolveCatalogParameter({
+        entries: catalog.entries,
+        byMasterKey: catalog.byMasterKey,
+        byParamId: catalog.byParamId,
+        query: f.targetParameterName || f.targetMasterKey || f.targetLabel,
+        preferredTestName: f.targetTestName || f.panelOrTestName
+      });
+      if (target) {
+        const transformedExpr = transformFormulaExpression(f.expression || f.displayExpression, catalog, target.testName);
+        response.action.data = {
+          ...f,
+          targetTestId: target.testId,
+          targetTestName: target.testName,
+          targetParameterId: target.parameterId,
+          targetParameterName: target.parameterName,
+          targetMasterKey: target.masterParameterKey,
+          targetLabel: target.label,
+          expression: transformedExpr,
+          displayExpression: f.displayExpression || transformedExpr
+        };
+      }
+    }
+  } else if (
     formulaContext &&
     formulaContext.recommendedFormulas &&
     formulaContext.recommendedFormulas.length > 0 &&
     isFormulaIntent &&
     isBuildFormulaRequest &&
-    (!response.action || response.action.type === "NONE" || (response.action.type !== "BATCH_CREATE_FORMULAS" && response.action.type !== "CREATE_FORMULA"))
+    (!response.action || response.action.type === "NONE")
   ) {
-    const targetName = formulaContext.matchedTests[0]?.testName || "Complete Blood Count (CBC)";
+    const targetName = formulaContext.matchedTests[0]?.testName || "Clinical Panel";
     response.action = {
       type: "BATCH_CREATE_FORMULAS",
       summary: `${targetName} Formulas (${formulaContext.recommendedFormulas.length} Clinical Formulas Ready)`,
@@ -229,7 +297,7 @@ export const chatWithCopilot = asyncHandler(async (req, res) => {
       }
     };
     if (!response.message || response.message.length < 30) {
-      response.message = `Mainne aapke **${targetName}** ke sabhi standard clinical formulas formulate kar diye hain (jaise PCV/Hematocrit, MCV, MCH, MCHC, Absolute Counts, NLR aadi).\n\nNeeche diye gaye **"Confirm & Save Formulas to Database"** button par click karke aap inhein ek sath database me save kar sakte hain, jisse ye Result Entry page par apne-aap calculate hone lagenge!`;
+      response.message = `Mainne aapke **${targetName}** ke sabhi standard clinical formulas formulate kar diye hain (jaise PCV/Hematocrit, MCV, MCH, MCHC, Absolute Counts, NLR aadi).\n\nNeeche दिए गए **"Confirm & Save Formulas to Database"** button par click karke aap inhein ek sath database me save kar sakte hain, jisse ye Result Entry page par apne-aap calculate hone lagenge!`;
     }
   }
 

@@ -1370,7 +1370,7 @@ async function loadfunction() {
                 dependencies: adaptedDependencies,
                 precision: Number.isFinite(Number(formula.precision)) ? Number(formula.precision) : 2,
                 isActive: true,
-                allowManualOverride: Boolean(formula.allowManualOverride),
+                allowManualOverride: true,
             });
         });
 
@@ -1438,7 +1438,7 @@ async function loadfunction() {
                 dependencies,
                 precision: 2,
                 isActive: true,
-                allowManualOverride: false,
+                allowManualOverride: true,
             });
         });
 
@@ -1533,7 +1533,8 @@ async function loadfunction() {
 
         input.dataset.formulaField = "true";
         input.dataset.formulaTargetId = String(formula._id || "");
-        input.readOnly = !formula.allowManualOverride;
+        input.readOnly = false;
+        input.removeAttribute("readonly");
         input.classList.toggle("formula-value-input", true);
     }
 
@@ -1645,12 +1646,16 @@ async function loadfunction() {
 
         const precision = Number.isFinite(Number(formula.precision)) ? Number(formula.precision) : 2;
         input.value = Number(value).toFixed(precision);
+        input.dataset.formulaAutoCalculated = "true";
+        input.dataset.formulaManual = "false";
         processInput(input);
     }
 
     function clearComputedFormulaValue(input) {
         if (!input) return;
         input.value = "";
+        delete input.dataset.formulaAutoCalculated;
+        input.dataset.formulaManual = "false";
         processInput(input);
     }
 
@@ -1694,6 +1699,10 @@ async function loadfunction() {
         const prevVal = String(targetInput.value || "").trim();
 
         if (!hasAnyDependencyValue || hasMissingDependency) {
+            // Never clear user-entered or manually modified values when dependencies are missing
+            if (targetInput.dataset.formulaManual === "true" || targetInput.dataset.formulaAutoCalculated !== "true") {
+                return false;
+            }
             if (prevVal !== "") {
                 clearComputedFormulaValue(targetInput);
                 return true;
@@ -1717,6 +1726,9 @@ async function loadfunction() {
             return prevVal !== newVal;
         } catch (error) {
             console.error(`Error evaluating formula for ${formula.targetLabel}:`, error);
+            if (targetInput.dataset.formulaManual === "true" || targetInput.dataset.formulaAutoCalculated !== "true") {
+                return false;
+            }
             if (prevVal !== "") {
                 clearComputedFormulaValue(targetInput);
                 return true;
@@ -1816,7 +1828,7 @@ async function loadfunction() {
     }
 
     function isManualNavigationField(element) {
-        return isKeyboardNavigationField(element) && element.dataset.formulaField !== "true";
+        return isKeyboardNavigationField(element);
     }
 
     function focusFieldWithCenteredScroll(field) {
@@ -3602,6 +3614,10 @@ async function loadfunction() {
         document.addEventListener("input", (event) => {
             const input = event.target.closest(".value-input");
             if (!input) return;
+            if (input.dataset.formulaField === "true") {
+                input.dataset.formulaManual = "true";
+                delete input.dataset.formulaAutoCalculated;
+            }
             if (isTextReferenceInput(input) && event.isTrusted) {
                 input.dataset.isAbnormal = "false";
             }
@@ -3612,6 +3628,10 @@ async function loadfunction() {
         document.addEventListener("change", (event) => {
             const input = event.target.closest(".value-input");
             if (!input) return;
+            if (input.dataset.formulaField === "true") {
+                input.dataset.formulaManual = "true";
+                delete input.dataset.formulaAutoCalculated;
+            }
             processInput(input);
             handleInputChange(input);
         });
@@ -4011,6 +4031,9 @@ async function loadfunction() {
 
                     if (matchingData) {
                         input.value = matchingData.currentvalue;
+                        if (input.dataset.formulaField === "true" && String(matchingData.currentvalue ?? "").trim() !== "") {
+                            input.dataset.formulaManual = "true";
+                        }
                         // Restore abnormal flag for text references
                         if (matchingData.hasOwnProperty("isAbnormal")) {
                             input.dataset.isAbnormal = matchingData.isAbnormal ? "true" : "false";
@@ -4131,6 +4154,9 @@ async function loadfunction() {
                             // Find matching entry
                             if (element.lisData.hasOwnProperty(shortName)) {
                                 input.value = element.lisData[shortName];
+                                if (input.dataset.formulaField === "true") {
+                                    input.dataset.formulaManual = "true";
+                                }
                                 processInput(input);
                                 handleInputChange(input);
                             }

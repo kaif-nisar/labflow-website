@@ -68,7 +68,7 @@ async function allcases() {
 
     function openEditBookingPage(booking, row) {
         saveBookingToLocalStorage(booking, row);
-        loadPage('editbooking', booking.bookingId);
+        loadPage('editbooking', booking.bookingId, booking._id);
     }
 
     function getFilterElements() {
@@ -1094,10 +1094,55 @@ async function allcases() {
                 <th style="text-align: left; padding-left: 14px;">Test Name</th>
               </tr>`;
 
-        // Logo
-        const logoImg = data.logoUrl
-            ? `<img id="bill-logo" src="${data.logoUrl}" style="width: 250px; height: 125px; object-fit: contain;">`
-            : '';
+        // Logo / Brand Header
+        const branding = data.branding || {};
+        const brandType = data.brandType || branding.brandType || (data.logoUrl ? "image" : (branding.labHeading ? "text" : "none"));
+        let logoHtml = '';
+
+        if (brandType === "image" && data.logoUrl) {
+            logoHtml = `<img id="bill-logo" src="${data.logoUrl}" style="max-width: 250px; max-height: 120px; object-fit: contain; display: block;">`;
+        } else if (brandType === "text" || (branding.labHeading && brandType !== "none")) {
+            const bg = branding.bgColor || "#ffffff";
+            const textColor = branding.textColor || "#0f172a";
+            const sloganColor = branding.sloganColor || "#64748b";
+            const fontSize = branding.fontSize || 20;
+            const sloganSize = branding.sloganSize || 12;
+            const heading = branding.labHeading || data.labName || "LabFlow";
+            const slogan = branding.labSlogan || "";
+            const borderWidth = branding.borderWidth !== undefined ? branding.borderWidth : 1;
+            const borderColor = branding.borderColor || "#e2e8f0";
+
+            logoHtml = `
+            <div id="bill-brand-box" style="
+                width: 250px;
+                min-height: 90px;
+                padding: 10px 14px;
+                box-sizing: border-box;
+                background-color: ${bg};
+                border: ${borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none'};
+                border-radius: 8px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+                font-family: Arial, sans-serif;
+                word-break: break-word;
+                line-height: 1.25;
+            ">
+                <div style="font-size: ${fontSize}px; font-weight: 800; color: ${textColor}; letter-spacing: -0.3px;">
+                    ${escapeHtml(heading)}
+                </div>
+                ${slogan ? `
+                <div style="font-size: ${sloganSize}px; font-weight: 500; color: ${sloganColor}; margin-top: 4px;">
+                    ${escapeHtml(slogan)}
+                </div>` : ''}
+            </div>`;
+        } else if (data.logoUrl && brandType !== "none") {
+            logoHtml = `<img id="bill-logo" src="${data.logoUrl}" style="max-width: 250px; max-height: 120px; object-fit: contain; display: block;">`;
+        } else if (data.labName && brandType !== "none") {
+            logoHtml = `<div style="font-size: 20px; font-weight: 800; color: whitesmoke;">${escapeHtml(data.labName)}</div>`;
+        }
 
         // Doctor / Phone rows
         const doctorHtml = data.doctorName ? `<p style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0;">Ref By: ${escapeHtml(data.doctorName)}</p>` : '';
@@ -1131,7 +1176,7 @@ async function allcases() {
                     <p>Invoice Date: ${escapeHtml(data.invoiceDate || '')}</p>
                 </div>
                 <div class="image-div">
-                    ${logoImg}
+                    ${logoHtml}
                 </div>
             </div>
             <div class="patient-details">
@@ -1245,6 +1290,8 @@ async function allcases() {
             patientPhone: booking.patientPhone || "",
             logoUrl: user?.tenantId?.logo || "",
             labName: booking.labName || user?.tenantId?.name || "LabFlow",
+            branding: JSON.parse(JSON.stringify(user?.tenantId?.branding || user?.branding || {})),
+            brandType: user?.tenantId?.branding?.brandType || (user?.tenantId?.logo ? "image" : (user?.tenantId?.branding?.labHeading ? "text" : "none")),
             items: items,
             discount: 0,
             taxPercent: 0,
@@ -1277,20 +1324,127 @@ async function allcases() {
         const dateInput = document.getElementById("inv-invoice-date");
         if (dateInput) dateInput.value = state.invoiceDate || "";
 
-        // Logo / Lab name
+        // Brand & Logo Header Customizer Controls
+        const modeSelect = document.getElementById("inv-brand-mode-select");
+        const toggleEditorBtn = document.getElementById("inv-btn-toggle-brand-editor");
+        const editorPanel = document.getElementById("inv-brand-editor-panel");
+        const editHeading = document.getElementById("inv-edit-lab-heading");
+        const editSlogan = document.getElementById("inv-edit-lab-slogan");
+        const headingBadge = document.getElementById("inv-heading-char-badge");
+        const sloganBadge = document.getElementById("inv-slogan-char-badge");
+        const editBg = document.getElementById("inv-edit-bg-color");
+        const editText = document.getElementById("inv-edit-text-color");
+        const editSloganCol = document.getElementById("inv-edit-slogan-color");
+        const editSize = document.getElementById("inv-edit-font-size");
+
         const logoImg = document.getElementById("inv-lab-logo");
         const fallbackLab = document.getElementById("inv-lab-fallback-name");
-        if (logoImg && fallbackLab) {
-            if (state.logoUrl) {
-                logoImg.src = state.logoUrl;
-                logoImg.style.display = "block";
-                fallbackLab.style.display = "none";
+        const textBrandBox = document.getElementById("inv-lab-text-brand-box");
+
+        // Init branding state
+        state.branding = state.branding || {};
+        if (!state.brandType) {
+            state.brandType = state.branding.brandType || (state.logoUrl ? "image" : (state.branding.labHeading ? "text" : "none"));
+        }
+
+        if (modeSelect) modeSelect.value = state.brandType || "auto";
+        if (editHeading) editHeading.value = state.branding.labHeading || state.labName || "LabFlow";
+        if (editSlogan) editSlogan.value = state.branding.labSlogan || "";
+        if (editBg) editBg.value = state.branding.bgColor || "#ffffff";
+        if (editText) editText.value = state.branding.textColor || "#0f172a";
+        if (editSloganCol) editSloganCol.value = state.branding.sloganColor || "#64748b";
+        if (editSize) editSize.value = state.branding.fontSize || 20;
+
+        function updateBrandHeaderDisplay() {
+            const currentMode = modeSelect ? modeSelect.value : (state.brandType || "auto");
+            const headingVal = editHeading ? editHeading.value.trim() : (state.branding.labHeading || state.labName || "LabFlow");
+            const sloganVal = editSlogan ? editSlogan.value.trim() : (state.branding.labSlogan || "");
+            const bgVal = editBg ? editBg.value : (state.branding.bgColor || "#ffffff");
+            const textVal = editText ? editText.value : (state.branding.textColor || "#0f172a");
+            const sloganColVal = editSloganCol ? editSloganCol.value : (state.branding.sloganColor || "#64748b");
+            const sizeVal = editSize ? parseInt(editSize.value) : (state.branding.fontSize || 20);
+
+            if (headingBadge) headingBadge.textContent = `${headingVal.length}/30`;
+            if (sloganBadge) sloganBadge.textContent = `${sloganVal.length}/50`;
+
+            // Sync with state
+            state.brandType = currentMode;
+            state.branding = {
+                ...state.branding,
+                brandType: currentMode,
+                labHeading: headingVal,
+                labSlogan: sloganVal,
+                bgColor: bgVal,
+                textColor: textVal,
+                sloganColor: sloganColVal,
+                fontSize: sizeVal
+            };
+
+            const effectiveType = currentMode === "auto"
+                ? (state.logoUrl ? "image" : (headingVal ? "text" : "none"))
+                : currentMode;
+
+            if (effectiveType === "image" && state.logoUrl) {
+                if (logoImg) {
+                    logoImg.src = state.logoUrl;
+                    logoImg.style.display = "block";
+                }
+                if (fallbackLab) fallbackLab.style.display = "none";
+                if (textBrandBox) textBrandBox.style.display = "none";
+            } else if (effectiveType === "text" || (headingVal && effectiveType !== "none")) {
+                if (logoImg) logoImg.style.display = "none";
+                if (fallbackLab) fallbackLab.style.display = "none";
+                if (textBrandBox) {
+                    textBrandBox.style.display = "flex";
+                    textBrandBox.style.flexDirection = "column";
+                    textBrandBox.style.justifyContent = "center";
+                    textBrandBox.style.alignItems = "center";
+                    textBrandBox.style.textAlign = "center";
+                    textBrandBox.style.backgroundColor = bgVal;
+                    textBrandBox.style.border = "1px solid #cbd5e1";
+                    textBrandBox.style.borderRadius = "6px";
+                    textBrandBox.style.padding = "8px 12px";
+                    textBrandBox.style.minWidth = "220px";
+                    textBrandBox.style.maxWidth = "250px";
+                    textBrandBox.style.minHeight = "70px";
+                    textBrandBox.style.boxSizing = "border-box";
+                    textBrandBox.style.wordBreak = "break-word";
+                    textBrandBox.innerHTML = `
+                        <div style="font-size: ${sizeVal}px; font-weight: 800; color: ${textVal}; line-height: 1.2;">
+                            ${escapeHtml(headingVal || state.labName || "LabFlow")}
+                        </div>
+                        ${sloganVal ? `<div style="font-size: 11px; font-weight: 500; color: ${sloganColVal}; margin-top: 3px;">${escapeHtml(sloganVal)}</div>` : ''}
+                    `;
+                }
+            } else if (effectiveType === "none") {
+                if (logoImg) logoImg.style.display = "none";
+                if (fallbackLab) fallbackLab.style.display = "none";
+                if (textBrandBox) textBrandBox.style.display = "none";
             } else {
-                logoImg.style.display = "none";
-                fallbackLab.textContent = state.labName || "LabFlow";
-                fallbackLab.style.display = "block";
+                if (logoImg) logoImg.style.display = "none";
+                if (textBrandBox) textBrandBox.style.display = "none";
+                if (fallbackLab) {
+                    fallbackLab.textContent = state.labName || "LabFlow";
+                    fallbackLab.style.display = "block";
+                }
             }
         }
+
+        if (toggleEditorBtn && editorPanel) {
+            toggleEditorBtn.onclick = () => {
+                editorPanel.style.display = editorPanel.style.display === "none" ? "block" : "none";
+            };
+        }
+
+        if (modeSelect) modeSelect.onchange = updateBrandHeaderDisplay;
+        if (editHeading) editHeading.oninput = updateBrandHeaderDisplay;
+        if (editSlogan) editSlogan.oninput = updateBrandHeaderDisplay;
+        if (editBg) editBg.oninput = updateBrandHeaderDisplay;
+        if (editText) editText.oninput = updateBrandHeaderDisplay;
+        if (editSloganCol) editSloganCol.oninput = updateBrandHeaderDisplay;
+        if (editSize) editSize.oninput = updateBrandHeaderDisplay;
+
+        updateBrandHeaderDisplay();
 
         // Patient Details
         const patientNameInput = document.getElementById("inv-patient-name");
@@ -1543,6 +1697,25 @@ async function allcases() {
         const stamp = document.getElementById("inv-stamp-text")?.value.trim() || "This Bill is Generated by www.LabFlow";
         const logoUrl = user?.tenantId?.logo || "";
 
+        // Brand settings from modal state or inputs
+        const currentBrandMode = document.getElementById("inv-brand-mode-select")?.value || "auto";
+        const currentLabHeading = document.getElementById("inv-edit-lab-heading")?.value.trim() || "";
+        const currentLabSlogan = document.getElementById("inv-edit-lab-slogan")?.value.trim() || "";
+        const currentBgColor = document.getElementById("inv-edit-bg-color")?.value || "#ffffff";
+        const currentTextColor = document.getElementById("inv-edit-text-color")?.value || "#0f172a";
+        const currentSloganColor = document.getElementById("inv-edit-slogan-color")?.value || "#64748b";
+        const currentFontSize = parseInt(document.getElementById("inv-edit-font-size")?.value) || 20;
+
+        const branding = {
+            brandType: currentBrandMode,
+            labHeading: currentLabHeading,
+            labSlogan: currentLabSlogan,
+            bgColor: currentBgColor,
+            textColor: currentTextColor,
+            sloganColor: currentSloganColor,
+            fontSize: currentFontSize
+        };
+
         const originalBtnHtml = generateBtn.innerHTML;
         generateBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF...';
         generateBtn.disabled = true;
@@ -1567,7 +1740,9 @@ async function allcases() {
                 grandTotal,
                 note,
                 stamp,
-                logoUrl
+                logoUrl,
+                branding,
+                brandType: currentBrandMode
             });
 
             const invoicecss = getInvoiceCSS();

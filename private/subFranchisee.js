@@ -451,26 +451,42 @@ async function verifyAccessToken() {
 function showSubscriptionModal() {
     const modal = document.getElementById('subscriptionModal');
     if (modal) {
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
-    document.addEventListener('keydown', blockEvent, true);
-    document.addEventListener('click', blockEvent, true);
 
-    CleanupManager.add(() => {
-        document.removeEventListener('keydown', blockEvent, true);
-        document.removeEventListener('click', blockEvent, true);
-    });
+    document.getElementById('closeSubscriptionModal')?.addEventListener('click', hideSubscriptionModal);
+    document.getElementById('modalCloseBtn')?.addEventListener('click', hideSubscriptionModal);
+    document.getElementById('modalLogoutBtn')?.addEventListener('click', logout);
+
+    window.addEventListener('keydown', onModalKeyDown, true);
+    modal?.addEventListener('click', onModalBackdropClick, true);
 }
 
-function blockEvent(e) {
-    const modal = document.getElementById('subscriptionModal');
-    if (modal && modal.style.display === 'block') {
-        if (!modal.contains(e.target)) {
-            e.stopPropagation();
-            e.preventDefault();
-        }
+function onModalKeyDown(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault();
+        hideSubscriptionModal();
     }
+}
+
+function onModalBackdropClick(e) {
+    const modal = document.getElementById('subscriptionModal');
+    if (e.target === modal) {
+        e.stopPropagation();
+        e.preventDefault();
+        hideSubscriptionModal();
+    }
+}
+
+function hideSubscriptionModal() {
+    const modal = document.getElementById('subscriptionModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+    window.removeEventListener('keydown', onModalKeyDown, true);
+    modal?.removeEventListener('click', onModalBackdropClick, true);
 }
 
 // Fetch assigned tests
@@ -797,27 +813,32 @@ async function fetchWalletAmount() {
 }
 
 // Logout function
-function logout() {
-    fetch(`${BASE_URL}/api/v1/user/logout`, {
-        method: 'POST',
-        credentials: 'include'
-    })
-        .then(response => {
-            if (response.ok) {
-                CleanupManager.executeAll();
-                portalGuard.clearStoredSession();
-                window.location.href = `${BASE_URL}/franchiseelogin.html`;
-            } else {
-                throw new Error('Logout failed');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            portalGuard.handleSessionFailure({
-                loginPath: "/franchiseelogin.html",
-                message: "Your session could not be closed cleanly. Please login again.",
-            });
+async function logout() {
+    const modalLogoutBtn = document.getElementById('modalLogoutBtn');
+    if (modalLogoutBtn) {
+        modalLogoutBtn.disabled = true;
+        modalLogoutBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging out...';
+    }
+    try {
+        await fetch(`${BASE_URL}/api/v1/user/logout`, {
+            method: 'POST',
+            credentials: 'include'
         });
+        console.log('Logout successful');
+    } catch (error) {
+        console.error('Error:', error);
+    } finally {
+        try { CleanupManager.executeAll(); } catch(e) {}
+        try { portalGuard.clearStoredSession(); } catch(e) {}
+        try { localStorage.clear(); } catch(e) {}
+        try { sessionStorage.clear(); } catch(e) {}
+        try {
+            document.cookie.split(";").forEach((c) => {
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+            });
+        } catch(e) {}
+        window.location.href = `${BASE_URL}/franchiseelogin.html`;
+    }
 }
 
 // User modal handler

@@ -1,215 +1,1448 @@
-<html>
-
-</html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Update Profile</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile & Lab Branding Settings</title>
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <style>
-        .container {
-            width: 80%;
-            margin: 20px auto;
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        :root {
+            --primary: #0284c7;
+            --primary-hover: #0369a1;
+            --primary-light: #e0f2fe;
+            --secondary: #64748b;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --border-color: #e2e8f0;
+            --bg-card: #ffffff;
+            --bg-page: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
         }
 
-        .header {
-            background-color: #e0f7fa;
-            padding: 10px 20px;
-            border-radius: 8px 8px 0 0;
+        * {
+            box-sizing: border-box;
         }
 
-        .header h1 {
+        body {
+            background-color: var(--bg-page);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-main);
             margin: 0;
+            padding: 0;
+        }
+
+        .profile-container {
+            max-width: 1100px;
+            margin: 24px auto;
+            padding: 0 20px 60px 20px;
+        }
+
+        /* Header & Breadcrumb */
+        .profile-page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .header-title-group h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-title-group h1 i {
+            color: var(--primary);
             font-size: 24px;
         }
 
-        .breadcrumb {
-            margin: 10px 0;
-            font-size: 14px;
-            color: #666;
+        .profile-breadcrumb {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
         }
 
-        .breadcrumb a {
-            color: #666;
+        .profile-breadcrumb a {
+            color: var(--text-muted);
             text-decoration: none;
         }
 
-        .breadcrumb a:hover {
-            text-decoration: underline;
+        .profile-breadcrumb a:hover {
+            color: var(--primary);
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        /* Card Layout */
+        .profile-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.2s ease;
         }
 
-        .form-group label {
+        .profile-card:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-header-custom {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: #fafbfc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .card-header-custom h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header-custom h2 i {
+            color: var(--primary);
+            font-size: 17px;
+        }
+
+        .card-badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: var(--primary-light);
+            color: var(--primary-hover);
+        }
+
+        .card-body-custom {
+            padding: 24px;
+        }
+
+        /* Tabs for Branding Selection */
+        .brand-mode-tabs {
+            display: flex;
+            gap: 8px;
+            background: #f1f5f9;
+            padding: 6px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .brand-tab-btn {
+            flex: 1;
+            min-width: 140px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .brand-tab-btn.active {
+            background: #ffffff;
+            color: var(--primary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        }
+
+        .brand-tab-pane {
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .brand-tab-pane.active {
             display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
         }
 
-        .form-group input[type="text"],
-        .form-group input[type="email"] {
-            width: calc(100% - 40px);
-            padding: 10px;
-            margin-left: 40px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .form-group i {
-            position: absolute;
-            margin-left: 10px;
-            margin-top: 12px;
-            color: #666;
+        /* Image Logo Upload Box */
+        .logo-upload-section {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            align-items: center;
         }
 
-        .form-group .required {
-            color: red;
+        @media (max-width: 768px) {
+            .logo-upload-section {
+                grid-template-columns: 1fr;
+            }
         }
 
-        .form-group .optional {
-            color: #666;
+        .logo-preview-box {
+            width: 260px;
+            height: 120px;
+            border: 2px dashed #cbd5e1;
+            border-radius: var(--radius-md);
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
 
-        .form-group .input-icon {
+        .logo-preview-box img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .logo-empty-placeholder {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+        .logo-empty-placeholder i {
+            font-size: 32px;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .upload-actions-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .file-input-wrapper {
             position: relative;
         }
 
-        .form-group .input-icon input {
-            padding-left: 30px;
+        .file-input-wrapper input[type="file"] {
+            display: none;
         }
 
-        .form-group .input-icon i {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-        }
-
-        .form-group .half-width {
-            width: 48%;
-            display: inline-block;
-        }
-
-        .form-group .half-width:first-child {
-            margin-right: 4%;
-        }
-
-        .btn-update {
-            background-color: #f44336;
-            color: #fff;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .btn-update i {
-            margin-right: 5px;
-        }
-
-        .form-group .input-icon input[type="file"] {
-            padding: 6px 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            width: calc(100% - 40px);
-            margin-left: 40px;
+        .btn-choose-file {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 18px;
+            background: #f1f5f9;
+            color: #334155;
             font-size: 14px;
+            font-weight: 600;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
             cursor: pointer;
+            transition: all 0.2s ease;
         }
 
-        .form-group .input-icon i {
-            color: #666;
+        .btn-choose-file:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        /* Custom Text Header Layout */
+        .brand-text-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 30px;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 900px) {
+            .brand-text-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .char-counter-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            color: #475569;
+            float: right;
+        }
+
+        .char-counter-badge.limit-reached {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .input-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .controls-subgrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .controls-subgrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .color-picker-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-picker-control input[type="color"] {
+            -webkit-appearance: none;
+            border: 1px solid var(--border-color);
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            cursor: pointer;
+            padding: 0;
+            background: transparent;
+        }
+
+        .color-picker-control input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .color-picker-control input[type="color"]::-webkit-color-swatch {
+            border-radius: 6px;
+            border: none;
+        }
+
+        .color-hex-text {
+            width: 100px;
+            padding: 8px 10px;
+            font-size: 13px;
+            font-family: monospace;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        /* Preset Color Palette */
+        .color-presets-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .preset-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 1px solid rgba(0,0,0,0.15);
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .preset-dot:hover {
+            transform: scale(1.15);
+        }
+
+        .range-slider-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .range-slider-group input[type="range"] {
+            flex: 1;
+        }
+
+        .range-val-badge {
+            font-size: 12px;
+            font-weight: 700;
+            min-width: 44px;
+            padding: 3px 6px;
+            text-align: center;
+            background: #f1f5f9;
+            border-radius: 6px;
+            color: #334155;
+        }
+
+        /* Live Invoice Preview Box */
+        .live-preview-container {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .preview-title-bar {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .preview-title-bar span {
+            font-size: 13px;
+            font-weight: 700;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .preview-badge-mock {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1e40af;
+            font-weight: 600;
+        }
+
+        /* Standard Invoice Rectangular Box */
+        .invoice-brand-box {
+            width: 260px;
+            min-height: 110px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: all 0.2s ease;
+            position: relative;
+            word-break: break-word;
+            margin: 10px 0;
+        }
+
+        .invoice-brand-box .brand-heading-text {
+            font-weight: 800;
+            line-height: 1.25;
+            letter-spacing: -0.3px;
+        }
+
+        .invoice-brand-box .brand-slogan-text {
+            font-weight: 500;
+            line-height: 1.3;
+            margin-top: 5px;
+        }
+
+        .preview-helper-note {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 14px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* Two Columns for Assets */
+        .assets-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .assets-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .asset-box {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: #fafbfc;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .avatar-circle-wrapper {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 3px solid #ffffff;
+            box-shadow: var(--shadow-sm);
+            background: #e2e8f0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .avatar-circle-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .nabl-rect-wrapper {
+            width: 110px;
+            height: 80px;
+            border-radius: 8px;
+            border: 2px dashed #cbd5e1;
+            background: #ffffff;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .nabl-rect-wrapper img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .asset-details {
+            flex: 1;
+        }
+
+        .asset-details h4 {
+            margin: 0 0 4px 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .asset-details p {
+            margin: 0 0 12px 0;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .asset-btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Form Inputs */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px 24px;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-group-custom {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group-custom.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-group-custom label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .form-group-custom .required-mark {
+            color: var(--danger);
+            margin-left: 2px;
+        }
+
+        .form-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-input-wrapper i {
+            position: absolute;
+            left: 14px;
+            color: #94a3b8;
+            font-size: 15px;
+            pointer-events: none;
+        }
+
+        .form-control-custom {
+            width: 100%;
+            padding: 10px 14px 10px 42px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-main);
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+
+        .form-control-custom:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+        }
+
+        .form-control-custom[readonly] {
+            background: #f1f5f9;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        /* Action Buttons */
+        .btn-custom {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary-custom {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary-custom:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger-custom {
+            background: #fee2e2;
+            color: var(--danger);
+            border: 1px solid #fecaca;
+        }
+
+        .btn-danger-custom:hover {
+            background: #fecaca;
+            color: #b91c1c;
+        }
+
+        .btn-sm-custom {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* In-Place Professional Buffer / Loader */
+        .component-buffer-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(2px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            border-radius: inherit;
+            animation: fadeIn 0.15s ease;
+        }
+
+        .buffer-spinner-svg {
+            width: 38px;
+            height: 38px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .buffer-text {
+            margin-top: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            letter-spacing: -0.2px;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modern Floating Toast Shelf (High Visibility & Maximum z-index) */
+        .toast-shelf {
+            position: fixed !important;
+            top: 24px !important;
+            right: 24px !important;
+            z-index: 2147483647 !important; /* Highest possible z-index so it never hides behind navbars or modals */
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+            pointer-events: none !important;
+            max-width: 440px !important;
+            width: auto !important;
+        }
+
+        .toast-bubble {
+            pointer-events: auto !important;
+            min-width: 300px;
+            max-width: 440px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.22), 0 4px 12px -2px rgba(15, 23, 42, 0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-left: 5px solid var(--primary);
+            animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.25s ease;
+            position: relative;
+        }
+
+        .toast-bubble.toast-success {
+            border-left-color: #10b981;
+            background: #ffffff;
+        }
+
+        .toast-bubble.toast-success .toast-icon-wrap {
+            color: #10b981;
+            background: #ecfdf5;
+        }
+
+        .toast-bubble.toast-error {
+            border-left-color: #ef4444;
+            background: #ffffff;
+        }
+
+        .toast-bubble.toast-error .toast-icon-wrap {
+            color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .toast-bubble.toast-info {
+            border-left-color: #0284c7;
+            background: #ffffff;
+        }
+
+        .toast-bubble.toast-info .toast-icon-wrap {
+            color: #0284c7;
+            background: #f0f9ff;
+        }
+
+        .toast-icon-wrap {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 15px;
+        }
+
+        .toast-body-wrap {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast-title-text {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 2px;
+            letter-spacing: -0.2px;
+        }
+
+        .toast-msg-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .toast-close-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            border-radius: 4px;
+            transition: color 0.15s ease;
+        }
+
+        .toast-close-btn:hover {
+            color: #0f172a;
+        }
+
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-16px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Comprehensive Industry-Level Mobile Responsiveness */
+        @media (max-width: 768px) {
+            .toast-shelf {
+                top: 14px !important;
+                left: 50% !important;
+                right: auto !important;
+                transform: translateX(-50%) !important;
+                width: calc(100vw - 28px) !important;
+                max-width: 420px !important;
+                align-items: center !important;
+            }
+
+            .toast-bubble {
+                min-width: 0 !important;
+                width: 100% !important;
+                padding: 12px 14px !important;
+            }
+
+            .profile-container {
+                padding: 0 8px 30px 8px !important;
+                margin: 8px auto !important;
+            }
+
+            .header-title-group h1 {
+                font-size: 20px !important;
+            }
+
+            .profile-page-header {
+                margin-bottom: 14px !important;
+            }
+
+            .profile-card {
+                margin-bottom: 16px !important;
+                border-radius: 10px !important;
+            }
+
+            .card-header-custom {
+                padding: 12px 14px !important;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 8px !important;
+            }
+
+            .card-header-custom h2 {
+                font-size: 16px !important;
+            }
+
+            .card-body-custom {
+                padding: 14px !important;
+            }
+
+            .brand-mode-tabs {
+                flex-direction: column !important;
+                gap: 6px !important;
+                padding: 4px !important;
+            }
+
+            .brand-tab-btn {
+                min-width: auto !important;
+                width: 100% !important;
+                justify-content: flex-start !important;
+                padding: 9px 12px !important;
+                font-size: 13px !important;
+            }
+
+            .logo-upload-section {
+                grid-template-columns: 1fr !important;
+                gap: 16px !important;
+            }
+
+            .logo-preview-box {
+                width: 100% !important;
+                max-width: 260px !important;
+                margin: 0 auto !important;
+            }
+
+            .upload-actions-panel {
+                width: 100% !important;
+            }
+
+            .upload-actions-panel div[style*="display: flex"] {
+                flex-direction: column !important;
+                width: 100% !important;
+                gap: 8px !important;
+            }
+
+            .upload-actions-panel .btn-choose-file,
+            .upload-actions-panel .btn-custom {
+                width: 100% !important;
+                justify-content: center !important;
+            }
+
+            .brand-text-grid {
+                grid-template-columns: 1fr !important;
+                gap: 20px !important;
+            }
+
+            .controls-subgrid {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+
+            .live-preview-container {
+                position: static !important;
+                margin-top: 14px !important;
+                padding: 14px !important;
+                width: 100% !important;
+            }
+
+            .invoice-brand-box {
+                width: 100% !important;
+                max-width: 260px !important;
+            }
+
+            .assets-grid {
+                grid-template-columns: 1fr !important;
+                gap: 16px !important;
+            }
+
+            .asset-box {
+                flex-direction: column !important;
+                text-align: center !important;
+                align-items: center !important;
+                padding: 16px !important;
+                gap: 12px !important;
+            }
+
+            .asset-details {
+                width: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+            }
+
+            .asset-btn-group {
+                justify-content: center !important;
+                width: 100% !important;
+                gap: 8px !important;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr !important;
+                gap: 14px !important;
+            }
+
+            .form-control-custom {
+                font-size: 15px !important;
+                padding: 10px 12px 10px 38px !important;
+            }
+
+            .form-input-wrapper i {
+                left: 12px !important;
+            }
+
+            #updateButton {
+                width: 100% !important;
+                justify-content: center !important;
+                padding: 12px 16px !important;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Update Profile</h1>
-        </div>
-        <div class="breadcrumb">
-            <a href="#"><i class="fas fa-home"></i> Dashboard</a> &gt; Update Profile
-        </div>
-        <h2>Update Profile</h2>
-        <div class="form-group">
-            <label>Current User</label>
-            <input type="text" id="currentUser" readonly>
-        </div>
-        <div class="form-group">
-            <label>Enter Valid Lab/Clinic Name <span class="required">**</span> <span class="optional">to be added in
-                    Certificate</span></label>
-            <div class="input-icon">
-                <i class="fas fa-clinic-medical"></i>
-                <input type="text" id="clinicName">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Enter Valid Address <span class="required">**</span> <span class="optional">to be added in
-                    Certificate</span></label>
-            <div class="input-icon">
-                <i class="fas fa-map-marker-alt"></i>
-                <input type="text" id="address">
-            </div>
-        </div>
-        <div class="form-group">
-            <div class="half-width">
-                <label>Firstname</label>
-                <div class="input-icon">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="firstName">
+    <!-- Toast Notification Container -->
+    <div class="toast-shelf" id="toastShelf"></div>
+
+    <div class="profile-container">
+        <!-- Header -->
+        <div class="profile-page-header">
+            <div class="header-title-group">
+                <h1><i class="fas fa-sliders-h"></i> Profile & Lab Branding</h1>
+                <div class="profile-breadcrumb">
+                    <a href="#"><i class="fas fa-home"></i> Dashboard</a> &gt; Update Profile & Invoice Branding
                 </div>
-            </div>
-            <div class="half-width">
-                <label>Lastname</label>
-                <div class="input-icon">
-                    <i class="fas fa-lock"></i>
-                    <input type="text" id="lastName">
-                </div>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Phone (Optional)</label>
-            <div class="input-icon">
-                <i class="fas fa-phone"></i>
-                <input type="text" id="phoneNo">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Email (Optional)</label>
-            <div class="input-icon">
-                <i class="fas fa-envelope"></i>
-                <input type="email" id="email">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Upload Logo <span class="optional">(PNG, JPG)</span></label>
-            <div class="input-icon">
-                <i class="fas fa-image"></i>
-                <input type="file" id="weblogo" accept="image/*">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Upload Profile Image <span class="optional">(PNG, JPG)</span></label>
-            <div class="input-icon">
-                <i class="fas fa-user-circle"></i>
-                <input type="file" id="profileImage" accept="image/*">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Upload NABL Logo <span class="optional">(PNG, JPG)</span></label>
-            <div class="input-icon">
-                <i class="fas fa-certificate"></i>
-                <input type="file" id="nablLogo" accept="image/*">
             </div>
         </div>
 
-        <button class="btn-update" id="updateButton"><i class="fas fa-save"></i> Update</button>
+        <!-- CARD 1: LAB BRANDING & INVOICE HEADER (LOGO OR CUSTOM TEXT) -->
+        <div class="profile-card" id="card-branding">
+            <div class="card-header-custom">
+                <h2><i class="fas fa-paint-brush"></i> Lab Branding & Invoice Header</h2>
+                <span class="card-badge"><i class="fas fa-file-invoice"></i> Live on Bills & Reports</span>
+            </div>
+
+            <!-- In-place buffer overlay -->
+            <div class="component-buffer-overlay" id="branding-buffer">
+                <svg class="buffer-spinner-svg" viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#e2e8f0" stroke-width="5"></circle>
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#0284c7" stroke-width="5" stroke-dasharray="80" stroke-dashoffset="60" stroke-linecap="round"></circle>
+                </svg>
+                <span class="buffer-text" id="branding-buffer-text">Saving branding preferences...</span>
+            </div>
+
+            <div class="card-body-custom">
+                <!-- Branding Mode Selector Tabs -->
+                <div class="brand-mode-tabs" role="tablist">
+                    <button type="button" class="brand-tab-btn active" id="tab-btn-image" onclick="switchBrandTab('image')">
+                        <i class="fas fa-image"></i> 1. Image Logo
+                    </button>
+                    <button type="button" class="brand-tab-btn" id="tab-btn-text" onclick="switchBrandTab('text')">
+                        <i class="fas fa-font"></i> 2. Custom Lab Name (Text Box)
+                    </button>
+                    <button type="button" class="brand-tab-btn" id="tab-btn-blank" onclick="switchBrandTab('blank')">
+                        <i class="fas fa-ban"></i> 3. No Logo (Blank)
+                    </button>
+                </div>
+
+                <!-- TAB 1: IMAGE LOGO UPLOAD -->
+                <div class="brand-tab-pane active" id="pane-image">
+                    <div class="logo-upload-section">
+                        <div class="logo-preview-box" id="logo-preview-container">
+                            <img id="weblogo-img-preview" src="" alt="Lab Logo" style="display: none;">
+                            <div class="logo-empty-placeholder" id="logo-empty-ph">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <span>No logo uploaded yet</span>
+                            </div>
+                        </div>
+
+                        <div class="upload-actions-panel">
+                            <div>
+                                <h4 style="margin: 0 0 6px 0; font-size: 15px; font-weight: 700;">Upload Lab Logo</h4>
+                                <span class="input-hint" style="margin-bottom: 8px;">
+                                    Recommended format: PNG (transparent background) or JPG. Ideal dimension: 250×110px.
+                                </span>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <label class="btn-choose-file">
+                                    <i class="fas fa-folder-open"></i> Browse Logo File
+                                    <input type="file" id="weblogo" accept="image/png, image/jpeg, image/webp, image/svg+xml">
+                                </label>
+                                <button type="button" class="btn-custom btn-primary-custom" id="btn-save-logo">
+                                    <i class="fas fa-upload"></i> Upload & Apply
+                                </button>
+                                <button type="button" class="btn-custom btn-danger-custom" id="btn-remove-logo" style="display: none;">
+                                    <i class="fas fa-trash-alt"></i> Remove
+                                </button>
+                            </div>
+                            <span id="logo-filename-label" style="font-size: 12px; color: #64748b; font-weight: 500;"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: CUSTOM LAB NAME / SLOGAN TEXT REPLACEMENT (RECTANGLE BOX) -->
+                <div class="brand-tab-pane" id="pane-text">
+                    <div class="brand-text-grid">
+                        <!-- Left: Inputs & Color Pickers -->
+                        <div>
+                            <!-- Lab Heading Input -->
+                            <div class="form-group-custom" style="margin-bottom: 16px;">
+                                <label for="brand-lab-heading">
+                                    <span>Main Lab / Diagnostic Center Name <span class="required-mark">*</span></span>
+                                    <span class="char-counter-badge" id="heading-char-counter">0 / 30 letters</span>
+                                </label>
+                                <input type="text" id="brand-lab-heading" class="form-control-custom" style="padding-left: 14px;" maxlength="30" placeholder="e.g. Apex Diagnostics Lab">
+                                <span class="input-hint">
+                                    <i class="fas fa-info-circle"></i> Max 30 characters so the text fits comfortably inside the rectangular bill header without awkward wrapping.
+                                </span>
+                            </div>
+
+                            <!-- Optional Slogan Input -->
+                            <div class="form-group-custom" style="margin-bottom: 16px;">
+                                <label for="brand-lab-slogan">
+                                    <span>Tagline / Slogan (Optional)</span>
+                                    <span class="char-counter-badge" id="slogan-char-counter">0 / 50 letters</span>
+                                </label>
+                                <input type="text" id="brand-lab-slogan" class="form-control-custom" style="padding-left: 14px;" maxlength="50" placeholder="e.g. Precision Diagnostics & Pathology Care">
+                                <span class="input-hint">
+                                    <i class="fas fa-info-circle"></i> Max 50 characters. Appears gracefully below your lab title.
+                                </span>
+                            </div>
+
+                            <!-- Styling Controls Subgrid -->
+                            <div class="controls-subgrid">
+                                <!-- Background Color -->
+                                <div class="form-group-custom">
+                                    <label>Background Color</label>
+                                    <div class="color-picker-control">
+                                        <input type="color" id="brand-bg-color" value="#ffffff">
+                                        <input type="text" id="brand-bg-color-hex" class="color-hex-text" value="#ffffff">
+                                    </div>
+                                    <div class="color-presets-row">
+                                        <span class="preset-dot" style="background: #ffffff;" title="White" onclick="applyPresetBg('#ffffff')"></span>
+                                        <span class="preset-dot" style="background: #f8fafc;" title="Soft White" onclick="applyPresetBg('#f8fafc')"></span>
+                                        <span class="preset-dot" style="background: #0f172a;" title="Dark Navy" onclick="applyPresetBg('#0f172a')"></span>
+                                        <span class="preset-dot" style="background: #0284c7;" title="Medical Blue" onclick="applyPresetBg('#0284c7')"></span>
+                                        <span class="preset-dot" style="background: #0f766e;" title="Teal" onclick="applyPresetBg('#0f766e')"></span>
+                                        <span class="preset-dot" style="background: #fef3c7;" title="Warm Cream" onclick="applyPresetBg('#fef3c7')"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Text Color -->
+                                <div class="form-group-custom">
+                                    <label>Lab Name Color</label>
+                                    <div class="color-picker-control">
+                                        <input type="color" id="brand-text-color" value="#0f172a">
+                                        <input type="text" id="brand-text-color-hex" class="color-hex-text" value="#0f172a">
+                                    </div>
+                                </div>
+
+                                <!-- Slogan Color -->
+                                <div class="form-group-custom">
+                                    <label>Slogan Text Color</label>
+                                    <div class="color-picker-control">
+                                        <input type="color" id="brand-slogan-color" value="#64748b">
+                                        <input type="text" id="brand-slogan-color-hex" class="color-hex-text" value="#64748b">
+                                    </div>
+                                </div>
+
+                                <!-- Font Family -->
+                                <div class="form-group-custom">
+                                    <label>Font Style</label>
+                                    <select id="brand-font-family" class="form-control-custom" style="padding-left: 14px;">
+                                        <option value="Arial, sans-serif">Modern Clean (Arial / Sans)</option>
+                                        <option value="'Segoe UI', Tahoma, sans-serif">Professional UI (Segoe UI)</option>
+                                        <option value="Georgia, serif">Classic Formal (Georgia Serif)</option>
+                                        <option value="'Trebuchet MS', sans-serif">Bold Contemporary (Trebuchet)</option>
+                                        <option value="'Courier New', monospace">Technical (Monospace)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Heading Font Size -->
+                                <div class="form-group-custom">
+                                    <label>Lab Name Size</label>
+                                    <div class="range-slider-group">
+                                        <input type="range" id="brand-font-size" min="14" max="28" value="20">
+                                        <span class="range-val-badge" id="brand-font-size-val">20px</span>
+                                    </div>
+                                </div>
+
+                                <!-- Slogan Font Size -->
+                                <div class="form-group-custom">
+                                    <label>Slogan Size</label>
+                                    <div class="range-slider-group">
+                                        <input type="range" id="brand-slogan-size" min="10" max="16" value="12">
+                                        <span class="range-val-badge" id="brand-slogan-size-val">12px</span>
+                                    </div>
+                                </div>
+
+                                <!-- Text Alignment -->
+                                <div class="form-group-custom">
+                                    <label>Text Alignment</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button type="button" class="btn-choose-file btn-sm-custom" id="btn-align-left" onclick="setTextAlign('left')">
+                                            <i class="fas fa-align-left"></i> Left
+                                        </button>
+                                        <button type="button" class="btn-choose-file btn-sm-custom active" id="btn-align-center" onclick="setTextAlign('center')" style="background: #e2e8f0; font-weight: bold;">
+                                            <i class="fas fa-align-center"></i> Center
+                                        </button>
+                                        <button type="button" class="btn-choose-file btn-sm-custom" id="btn-align-right" onclick="setTextAlign('right')">
+                                            <i class="fas fa-align-right"></i> Right
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Border Outline -->
+                                <div class="form-group-custom">
+                                    <label>Box Border Outline</label>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <select id="brand-border-width" class="form-control-custom" style="padding-left: 14px; width: 130px;">
+                                            <option value="0">No Border</option>
+                                            <option value="1" selected>1px Subtle</option>
+                                            <option value="2">2px Crisp</option>
+                                        </select>
+                                        <input type="color" id="brand-border-color" value="#e2e8f0" title="Border Color">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 24px;">
+                                <button type="button" class="btn-custom btn-primary-custom" id="btn-save-text-brand">
+                                    <i class="fas fa-check-circle"></i> Save Text Branding
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Right: Live Interactive Invoice Preview Box -->
+                        <div class="live-preview-container">
+                            <div class="preview-title-bar">
+                                <span><i class="fas fa-eye"></i> Live Invoice Box</span>
+                                <span class="preview-badge-mock">Header Proportion</span>
+                            </div>
+
+                            <!-- Styled Invoice Brand Header Box -->
+                            <div class="invoice-brand-box" id="brand-live-box">
+                                <div class="brand-heading-text" id="live-preview-heading">Your Lab Name</div>
+                                <div class="brand-slogan-text" id="live-preview-slogan">Your Lab Tagline / Slogan</div>
+                            </div>
+
+                            <p class="preview-helper-note">
+                                <i class="fas fa-magic"></i> This exact rectangular block will automatically be embedded on all your generated invoices, bills, and test reports.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: BLANK MODE -->
+                <div class="brand-tab-pane" id="pane-blank">
+                    <div style="padding: 20px; background: #f8fafc; border-radius: var(--radius-md); text-align: center;">
+                        <i class="fas fa-ban" style="font-size: 36px; color: #94a3b8; margin-bottom: 12px; display: block;"></i>
+                        <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700;">No Custom Logo or Text</h4>
+                        <p style="margin: 0 auto 16px auto; max-width: 480px; font-size: 13px; color: var(--text-muted);">
+                            If you do not wish to display any logo or custom text banner on your invoices, you can leave it blank. Invoices will show the plain lab name text.
+                        </p>
+                        <button type="button" class="btn-custom btn-danger-custom" id="btn-apply-blank">
+                            <i class="fas fa-eraser"></i> Clear Both Logo and Text Branding
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 2: PROFILE PICTURE & NABL LOGO ASSETS -->
+        <div class="profile-card" id="card-assets">
+            <div class="card-header-custom">
+                <h2><i class="fas fa-user-circle"></i> User Avatar & Certification Stamp</h2>
+                <span class="card-badge">Individual Fast Upload</span>
+            </div>
+
+            <!-- In-place buffer overlay -->
+            <div class="component-buffer-overlay" id="assets-buffer">
+                <svg class="buffer-spinner-svg" viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#e2e8f0" stroke-width="5"></circle>
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#0284c7" stroke-width="5" stroke-dasharray="80" stroke-dashoffset="60" stroke-linecap="round"></circle>
+                </svg>
+                <span class="buffer-text" id="assets-buffer-text">Uploading asset...</span>
+            </div>
+
+            <div class="card-body-custom">
+                <div class="assets-grid">
+                    <!-- Profile Picture Box -->
+                    <div class="asset-box">
+                        <div class="avatar-circle-wrapper" id="profile-avatar-container">
+                            <img id="profileImage-preview" src="/images/avatar-default.png" alt="Profile" onerror="this.src='https://ui-avatars.com/api/?name=User&background=0284c7&color=fff'">
+                        </div>
+                        <div class="asset-details">
+                            <h4>Profile Avatar</h4>
+                            <p>PNG or JPG. Shown in your admin top navigation and staff account.</p>
+                            <div class="asset-btn-group">
+                                <label class="btn-choose-file btn-sm-custom">
+                                    <i class="fas fa-camera"></i> Change
+                                    <input type="file" id="profileImage" accept="image/*">
+                                </label>
+                                <button type="button" class="btn-custom btn-primary-custom btn-sm-custom" id="btn-save-profile">
+                                    <i class="fas fa-upload"></i> Upload
+                                </button>
+                                <button type="button" class="btn-custom btn-danger-custom btn-sm-custom" id="btn-remove-profile" style="display: none;">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <span id="profile-filename-label" style="font-size: 11px; color: #64748b;"></span>
+                        </div>
+                    </div>
+
+                    <!-- NABL Logo / Certification Stamp Box -->
+                    <div class="asset-box">
+                        <div class="nabl-rect-wrapper" id="nabl-logo-container">
+                            <img id="nablLogo-preview" src="" alt="NABL Logo" style="display: none;">
+                            <div id="nabl-empty-ph" style="color: #94a3b8; font-size: 11px; text-align: center;">
+                                <i class="fas fa-certificate" style="font-size: 22px; display: block; margin-bottom: 2px;"></i>
+                                No NABL
+                            </div>
+                        </div>
+                        <div class="asset-details">
+                            <h4>NABL / Quality Stamp</h4>
+                            <p>Certification stamp to display on accredited medical test reports.</p>
+                            <div class="asset-btn-group">
+                                <label class="btn-choose-file btn-sm-custom">
+                                    <i class="fas fa-stamp"></i> Select
+                                    <input type="file" id="nablLogo" accept="image/*">
+                                </label>
+                                <button type="button" class="btn-custom btn-primary-custom btn-sm-custom" id="btn-save-nabl">
+                                    <i class="fas fa-upload"></i> Upload
+                                </button>
+                                <button type="button" class="btn-custom btn-danger-custom btn-sm-custom" id="btn-remove-nabl" style="display: none;">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <span id="nabl-filename-label" style="font-size: 11px; color: #64748b;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 3: CLINIC & PROFILE DETAILS -->
+        <div class="profile-card" id="card-details">
+            <div class="card-header-custom">
+                <h2><i class="fas fa-id-card"></i> Personal & Clinic Details</h2>
+                <span class="card-badge">Profile Information</span>
+            </div>
+
+            <!-- In-place buffer overlay -->
+            <div class="component-buffer-overlay" id="details-buffer">
+                <svg class="buffer-spinner-svg" viewBox="0 0 50 50">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#e2e8f0" stroke-width="5"></circle>
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="#0284c7" stroke-width="5" stroke-dasharray="80" stroke-dashoffset="60" stroke-linecap="round"></circle>
+                </svg>
+                <span class="buffer-text">Saving profile details...</span>
+            </div>
+
+            <div class="card-body-custom">
+                <form id="profileForm" onsubmit="event.preventDefault();">
+                    <div class="form-grid">
+                        <!-- Current User (Read Only) -->
+                        <div class="form-group-custom full-width">
+                            <label for="currentUser">Active Account Username / Role</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-user-shield"></i>
+                                <input type="text" id="currentUser" class="form-control-custom" readonly>
+                            </div>
+                        </div>
+
+                        <!-- Lab / Clinic Name -->
+                        <div class="form-group-custom full-width">
+                            <label for="clinicName">Registered Lab / Clinic Name <span class="required-mark">*</span></label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-clinic-medical"></i>
+                                <input type="text" id="clinicName" class="form-control-custom" placeholder="e.g. City Life Diagnostic Center">
+                            </div>
+                        </div>
+
+                        <!-- First Name -->
+                        <div class="form-group-custom">
+                            <label for="firstName">First Name <span class="required-mark">*</span></label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-user"></i>
+                                <input type="text" id="firstName" class="form-control-custom" placeholder="First Name">
+                            </div>
+                        </div>
+
+                        <!-- Last Name -->
+                        <div class="form-group-custom">
+                            <label for="lastName">Last Name</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-user"></i>
+                                <input type="text" id="lastName" class="form-control-custom" placeholder="Last Name">
+                            </div>
+                        </div>
+
+                        <!-- Phone Number -->
+                        <div class="form-group-custom">
+                            <label for="phoneNo">Phone Number <span class="required-mark">*</span></label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-phone-alt"></i>
+                                <input type="text" id="phoneNo" class="form-control-custom" placeholder="10-digit mobile number">
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="form-group-custom">
+                            <label for="email">Email Address <span class="required-mark">*</span></label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-envelope"></i>
+                                <input type="email" id="email" class="form-control-custom" placeholder="name@example.com">
+                            </div>
+                        </div>
+
+                        <!-- Full Address -->
+                        <div class="form-group-custom full-width">
+                            <label for="address">Full Clinic / Lab Address</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <input type="text" id="address" class="form-control-custom" placeholder="Street, Building, Landmark">
+                            </div>
+                        </div>
+
+                        <!-- City -->
+                        <div class="form-group-custom">
+                            <label for="city">City</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-city"></i>
+                                <input type="text" id="city" class="form-control-custom" placeholder="City">
+                            </div>
+                        </div>
+
+                        <!-- State -->
+                        <div class="form-group-custom">
+                            <label for="state">State</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-map"></i>
+                                <input type="text" id="state" class="form-control-custom" placeholder="State">
+                            </div>
+                        </div>
+
+                        <!-- Pin Code -->
+                        <div class="form-group-custom">
+                            <label for="pinCode">Pin Code</label>
+                            <div class="form-input-wrapper">
+                                <i class="fas fa-mail-bulk"></i>
+                                <input type="text" id="pinCode" class="form-control-custom" placeholder="6-digit pin code">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 28px; display: flex; align-items: center; justify-content: flex-end; gap: 12px;">
+                        <button type="button" class="btn-custom btn-primary-custom" id="updateButton" style="padding: 12px 28px; font-size: 15px;">
+                            <i class="fas fa-save"></i> Save Profile Details
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
-
 </html>
