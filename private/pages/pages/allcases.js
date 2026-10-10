@@ -66,6 +66,614 @@ async function allcases() {
         }
     }
 
+    // ============================================================
+    // REPORT DOWNLOAD & MERGE FUNCTIONALITY
+    // ============================================================
+    const DOWNLOAD_ELIGIBLE_STATUSES = ['completed', 'partially completed', 'partial completed', 'partial', 'partially ready'];
+    const LETTERHEAD_STORAGE_KEY = 'allReportsLetterheadPreference';
+    let isBulkDownloading = false;
+    let cancelBulkDownload = false;
+
+    function showAppToast(message, type = "success") {
+        const existing = document.querySelectorAll(".app-toast");
+        existing.forEach(t => t.remove());
+        const toast = document.createElement("div");
+        toast.className = `app-toast ${type}`;
+        const icon = type === "error" ? "fa-circle-exclamation" : (type === "info" ? "fa-circle-info" : "fa-circle-check");
+        toast.innerHTML = `<i class="fas ${icon}" style="margin-right: 8px;"></i><span>${escapeHtml(message)}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+            toast.style.opacity = "0";
+            toast.style.transform = "translateY(-10px)";
+            setTimeout(() => toast.remove(), 350);
+        }, 3600);
+    }
+
+    // Premium Industry-Level Report Download Buffer
+    const ReportDownloadBuffer = {
+        overlay: null,
+        titleEl: null,
+        metaEl: null,
+        bookingTag: null,
+        bookingIdEl: null,
+        patientTag: null,
+        patientNameEl: null,
+        statusTextEl: null,
+        barEl: null,
+        countTextEl: null,
+        percentTextEl: null,
+        cancelBtn: null,
+        cancelHandler: null,
+        autoHideTimeout: null,
+
+        init() {
+            this.overlay = document.getElementById("reportDownloadOverlay");
+            if (!this.overlay) return;
+            this.titleEl = document.getElementById("reportBufferTitle");
+            this.metaEl = document.getElementById("reportBufferMeta");
+            this.bookingTag = document.getElementById("reportBufferBookingTag");
+            this.bookingIdEl = document.getElementById("reportBufferBookingId");
+            this.patientTag = document.getElementById("reportBufferPatientTag");
+            this.patientNameEl = document.getElementById("reportBufferPatientName");
+            this.statusTextEl = document.getElementById("reportBufferStatusText");
+            this.barEl = document.getElementById("reportBufferBar");
+            this.countTextEl = document.getElementById("reportBufferCountText");
+            this.percentTextEl = document.getElementById("reportBufferPercentText");
+            this.cancelBtn = document.getElementById("reportBufferCancelBtn");
+
+            if (this.cancelBtn) {
+                this.cancelBtn.onclick = (e) => {
+                    e.preventDefault();
+                    if (typeof this.cancelHandler === 'function') {
+                        this.cancelHandler();
+                    }
+                };
+            }
+        },
+
+        show({ title = 'Generating Clinical Report', bookingId = '', patientName = '', status = 'Fetching patient diagnostics...', percent = null, total = null, current = null, canCancel = false, onCancel = null } = {}) {
+            if (this.autoHideTimeout) {
+                clearTimeout(this.autoHideTimeout);
+                this.autoHideTimeout = null;
+            }
+            if (!this.overlay) this.init();
+            if (!this.overlay) return;
+
+            this.cancelHandler = onCancel;
+            if (this.titleEl) this.titleEl.textContent = title;
+
+            let hasMeta = false;
+            if (this.bookingTag && this.bookingIdEl) {
+                if (bookingId) {
+                    this.bookingIdEl.textContent = bookingId;
+                    this.bookingTag.style.display = "inline-flex";
+                    hasMeta = true;
+                } else {
+                    this.bookingTag.style.display = "none";
+                }
+            }
+            if (this.patientTag && this.patientNameEl) {
+                if (patientName) {
+                    this.patientNameEl.textContent = patientName;
+                    this.patientTag.style.display = "inline-flex";
+                    hasMeta = true;
+                } else {
+                    this.patientTag.style.display = "none";
+                }
+            }
+            if (this.metaEl) this.metaEl.style.display = hasMeta ? "inline-flex" : "none";
+
+            this.update({ status, percent, total, current });
+
+            if (this.cancelBtn) {
+                this.cancelBtn.style.display = canCancel ? "inline-flex" : "none";
+                this.cancelBtn.innerHTML = '<i class="fas fa-circle-stop"></i> Cancel Download';
+                this.cancelBtn.disabled = false;
+            }
+
+            this.overlay.style.display = "flex";
+            void this.overlay.offsetWidth;
+            this.overlay.classList.add("is-visible");
+        },
+
+        update({ title, bookingId, patientName, status, percent = null, total = null, current = null } = {}) {
+            if (!this.overlay) return;
+            if (title && this.titleEl) this.titleEl.textContent = title;
+            if (bookingId && this.bookingIdEl) this.bookingIdEl.textContent = bookingId;
+            if (patientName && this.patientNameEl) this.patientNameEl.textContent = patientName;
+            if (status && this.statusTextEl) this.statusTextEl.textContent = status;
+
+            if (this.barEl) {
+                if (typeof percent === 'number' && !isNaN(percent)) {
+                    this.barEl.classList.remove('indeterminate');
+                    this.barEl.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+                    if (this.percentTextEl) this.percentTextEl.textContent = `${Math.round(percent)}%`;
+                } else {
+                    this.barEl.classList.add('indeterminate');
+                    this.barEl.style.width = '45%';
+                    if (this.percentTextEl) this.percentTextEl.textContent = '';
+                }
+            }
+
+            if (this.countTextEl) {
+                if (typeof current === 'number' && typeof total === 'number' && total > 0) {
+                    this.countTextEl.textContent = `Processing ${current} of ${total}...`;
+                } else {
+                    this.countTextEl.textContent = 'Please wait...';
+                }
+            }
+        },
+
+        hide(delay = 300) {
+            if (!this.overlay) return;
+            if (this.autoHideTimeout) clearTimeout(this.autoHideTimeout);
+            this.autoHideTimeout = setTimeout(() => {
+                if (this.overlay) {
+                    this.overlay.classList.remove("is-visible");
+                    setTimeout(() => {
+                        if (this.overlay && !this.overlay.classList.contains("is-visible")) {
+                            this.overlay.style.display = "none";
+                        }
+                    }, 260);
+                }
+            }, delay);
+        }
+    };
+
+    function isDownloadEligible(status) {
+        const s = String(status || '').trim().toLowerCase();
+        return DOWNLOAD_ELIGIBLE_STATUSES.includes(s);
+    }
+
+    function getLetterheadPreference() {
+        try {
+            const saved = localStorage.getItem(LETTERHEAD_STORAGE_KEY);
+            if (saved === 'with' || saved === 'without') return saved;
+        } catch (e) { }
+        return 'without';
+    }
+
+    function setLetterheadPreference(value) {
+        const safeValue = value === 'with' ? 'with' : 'without';
+        try {
+            localStorage.setItem(LETTERHEAD_STORAGE_KEY, safeValue);
+        } catch (e) { }
+        syncLetterheadUI(safeValue);
+    }
+
+    function syncLetterheadUI(value) {
+        const seg = document.getElementById('allcases-letterhead-seg');
+        if (!seg) return;
+        seg.querySelectorAll('.seg-option').forEach(btn => {
+            const active = btn.getAttribute('data-value') === value;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    }
+
+    function getReportFilename(patientName, bookingId) {
+        let cleanName = String(patientName || '')
+            .normalize('NFKC')
+            .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/[. ]+$/g, '');
+
+        if (!cleanName || cleanName === '-' || cleanName.toUpperCase() === 'N/A' || cleanName.toUpperCase() === 'UNDEFINED') {
+            cleanName = bookingId ? `Report_${bookingId}` : 'Report';
+        }
+        return `${cleanName}.pdf`;
+    }
+
+    async function fetchReportData(value1) {
+        try {
+            const response = await fetch(`${BASE_URL}/api/v1/user/ReportData`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ value1 })
+            });
+            if (!response.ok) throw new Error('Failed to fetch report data');
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching report:', error);
+            return null;
+        }
+    }
+
+    async function autogeneratingpdf({ value1 = '', startDate = '', patientname, bookingId = '', skipLoader = true } = {}) {
+        try {
+            if (!skipLoader) showLoader();
+
+            const response = await fetch(`${BASE_URL}/api/v1/user/get-pdf`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    value1,
+                    checkBox: startDate === 'with' ? false : true,
+                    bookingId,
+                    auditAction: 'DOWNLOAD'
+                })
+            });
+
+            if (!response.ok) throw new Error('PDF generation failed');
+
+            const pdfBlob = await response.blob();
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+
+            const link = document.createElement('a');
+            link.href = pdfUrl;
+            link.download = getReportFilename(patientname, bookingId);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(pdfUrl), 500);
+
+            try {
+                if (bookingId && window.ReportPrintAudit && typeof window.ReportPrintAudit.updateBadges === 'function') {
+                    window.ReportPrintAudit.updateBadges(bookingId, { isPrinted: true });
+                }
+            } catch (e) { /* ignore */ }
+
+            return true;
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            return false;
+        } finally {
+            if (!skipLoader) hideLoader();
+        }
+    }
+
+    // Single report download triggered by clicking Booking ID badge
+    async function downloadSingleReport(badgeElement) {
+        if (!badgeElement || badgeElement.classList.contains('is-loading')) return;
+
+        const row = badgeElement.closest('tr');
+        const bookingId = badgeElement.getAttribute('data-booking-id') || (row ? row.getAttribute('data-booking-id') : '') || badgeElement.textContent.trim();
+        const rowStatus = badgeElement.getAttribute('data-status') || (row ? row.getAttribute('data-status') : '');
+
+        // Check eligibility
+        if (!isDownloadEligible(rowStatus)) {
+            showAppToast('Download not available: Only Completed and Partially Completed reports can be downloaded.', 'error');
+            return;
+        }
+
+        const patientName = badgeElement.getAttribute('data-patient-name') || (row ? row.getAttribute('data-patient-name') : '');
+        const originalHTML = badgeElement.innerHTML;
+        badgeElement.classList.add('is-loading');
+        badgeElement.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span>Generating...</span>`;
+
+        ReportDownloadBuffer.show({
+            title: 'Generating Clinical Report',
+            bookingId: bookingId,
+            patientName: patientName,
+            status: 'Fetching patient diagnostics & test data...',
+            percent: 25
+        });
+
+        try {
+            const patientDetails = await fetchReportData(bookingId);
+            if (!patientDetails || !patientDetails._id) {
+                throw new Error('No report data returned for this booking.');
+            }
+
+            const resolvedPatientName = patientDetails.patientName || patientDetails.PatientName || patientName || ('Report_' + bookingId);
+            const letterPadOption = getLetterheadPreference();
+
+            ReportDownloadBuffer.update({
+                patientName: resolvedPatientName,
+                status: 'Applying letterhead, digital signatures & generating PDF...',
+                percent: 70
+            });
+
+            const success = await autogeneratingpdf({
+                value1: patientDetails._id,
+                bookingId: bookingId,
+                startDate: letterPadOption,
+                patientname: resolvedPatientName,
+                skipLoader: true
+            });
+
+            if (!success) throw new Error('PDF generation failed on server.');
+
+            ReportDownloadBuffer.update({
+                status: 'Report ready! Saving to your downloads...',
+                percent: 100
+            });
+            ReportDownloadBuffer.hide(500);
+
+            showAppToast(`Report downloaded successfully for ${resolvedPatientName}!`, 'success');
+        } catch (error) {
+            console.error(`Error downloading report for booking ${bookingId}:`, error);
+            ReportDownloadBuffer.hide(100);
+            showAppToast(`Download failed for booking ${bookingId}. Please try again.`, 'error');
+        } finally {
+            badgeElement.classList.remove('is-loading');
+            badgeElement.innerHTML = originalHTML;
+        }
+    }
+
+    async function downloadReportForBooking(bookingId, patientName, skipLoader = true) {
+        try {
+            const patientDetails = await fetchReportData(bookingId);
+            const letterPadOption = getLetterheadPreference();
+
+            if (!patientDetails || !patientDetails._id) {
+                console.error('Could not find report data for', bookingId);
+                showAppToast(`Report data not found for booking ${bookingId}`, 'error');
+                return false;
+            }
+
+            const resolvedPatientName = patientDetails.patientName || patientDetails.PatientName || patientName || ('Report_' + bookingId);
+
+            return await autogeneratingpdf({
+                value1: patientDetails._id,
+                bookingId: bookingId,
+                startDate: letterPadOption,
+                patientname: resolvedPatientName,
+                skipLoader: skipLoader
+            });
+        } catch (error) {
+            console.error(`Error downloading report for booking ${bookingId}:`, error);
+            return false;
+        }
+    }
+
+    function setBulkDownloadBtnState(iconClass, labelText) {
+        const downloadBtn = document.getElementById('downloadSelectedCases');
+        if (!downloadBtn) return;
+        const icon = downloadBtn.querySelector('i');
+        const label = document.getElementById('downloadSelectedCasesLabel');
+        if (icon) icon.className = iconClass;
+        if (label) label.textContent = labelText;
+    }
+
+    async function downloadSelectedReports() {
+        const downloadBtn = document.getElementById('downloadSelectedCases');
+        if (!downloadBtn) return;
+
+        // If currently downloading, toggle cancel
+        if (isBulkDownloading) {
+            cancelBulkDownload = true;
+            setBulkDownloadBtnState('fas fa-spinner fa-spin', 'Stopping...');
+            ReportDownloadBuffer.update({ status: 'Stopping download after current report...' });
+            return;
+        }
+
+        const checkedBoxes = document.querySelectorAll('#tbody .case-checkbox:checked');
+        if (!checkedBoxes.length) {
+            showAppToast('Please select at least one booking to download.', 'error');
+            return;
+        }
+
+        const itemsToDownload = Array.from(checkedBoxes).map(cb => {
+            const row = cb.closest('tr');
+            const badge = row ? row.querySelector('.booking-id-badge') : null;
+            return {
+                bookingId: cb.getAttribute('data-booking-id') || (badge ? badge.getAttribute('data-booking-id') : ''),
+                patientName: badge ? badge.getAttribute('data-patient-name') : '',
+                status: row ? row.getAttribute('data-status') : ''
+            };
+        }).filter(item => item.bookingId && isDownloadEligible(item.status));
+
+        if (!itemsToDownload.length) {
+            showAppToast('None of the selected bookings are eligible for download. Only Completed and Partially Completed reports can be downloaded.', 'error');
+            return;
+        }
+
+        isBulkDownloading = true;
+        cancelBulkDownload = false;
+        downloadBtn.classList.add('is-downloading');
+        setBulkDownloadBtnState('fas fa-stop', `Stop Download (0/${itemsToDownload.length})`);
+
+        ReportDownloadBuffer.show({
+            title: 'Downloading Selected Reports',
+            total: itemsToDownload.length,
+            current: 1,
+            percent: 5,
+            status: `Starting download of ${itemsToDownload.length} report(s)...`,
+            canCancel: true,
+            onCancel: () => {
+                cancelBulkDownload = true;
+                ReportDownloadBuffer.update({ status: 'Stopping download...' });
+            }
+        });
+
+        try {
+            for (let i = 0; i < itemsToDownload.length; i++) {
+                if (cancelBulkDownload) {
+                    showAppToast('Download stopped by user.', 'info');
+                    break;
+                }
+
+                const item = itemsToDownload[i];
+                const pct = Math.round(((i) / itemsToDownload.length) * 100);
+
+                setBulkDownloadBtnState('fas fa-spinner fa-spin', `Downloading (${i + 1}/${itemsToDownload.length})… Click to Stop`);
+                ReportDownloadBuffer.update({
+                    bookingId: item.bookingId,
+                    patientName: item.patientName,
+                    current: i + 1,
+                    total: itemsToDownload.length,
+                    percent: Math.max(10, pct),
+                    status: `Downloading (${i + 1}/${itemsToDownload.length}): ${item.patientName || item.bookingId}...`
+                });
+
+                await downloadReportForBooking(item.bookingId, item.patientName, true);
+            }
+
+            if (!cancelBulkDownload) {
+                ReportDownloadBuffer.update({
+                    percent: 100,
+                    status: `All ${itemsToDownload.length} report(s) downloaded successfully!`
+                });
+                ReportDownloadBuffer.hide(600);
+                showAppToast(`All ${itemsToDownload.length} report(s) downloaded successfully!`, 'success');
+            } else {
+                ReportDownloadBuffer.hide(300);
+            }
+        } finally {
+            ReportDownloadBuffer.hide(300);
+            isBulkDownloading = false;
+            cancelBulkDownload = false;
+            downloadBtn.classList.remove('is-downloading');
+            setBulkDownloadBtnState('fas fa-download', 'Download Selected');
+            updateCasesSelectionState();
+        }
+    }
+
+    async function mergeSelectedReports() {
+        const checkedBoxes = document.querySelectorAll('#tbody .case-checkbox:checked');
+        const selectedItems = Array.from(checkedBoxes).map(cb => {
+            const row = cb.closest('tr');
+            const badge = row ? row.querySelector('.booking-id-badge') : null;
+            return {
+                bookingId: cb.getAttribute('data-booking-id') || (badge ? badge.getAttribute('data-booking-id') : ''),
+                status: row ? row.getAttribute('data-status') : ''
+            };
+        }).filter(item => item.bookingId && isDownloadEligible(item.status));
+
+        if (selectedItems.length < 2) {
+            showAppToast('Please select at least two eligible bookings to merge.', 'error');
+            return;
+        }
+
+        ReportDownloadBuffer.show({
+            title: 'Merging Clinical Reports',
+            total: selectedItems.length,
+            current: 1,
+            percent: 15,
+            status: `Preparing to merge ${selectedItems.length} reports into unified PDF...`
+        });
+
+        try {
+            const reportIds = [];
+            for (let i = 0; i < selectedItems.length; i++) {
+                const item = selectedItems[i];
+                ReportDownloadBuffer.update({
+                    current: i + 1,
+                    total: selectedItems.length,
+                    percent: Math.round(15 + (i / selectedItems.length) * 45),
+                    status: `Fetching report ${i + 1} of ${selectedItems.length} (${item.bookingId})...`
+                });
+                const patientDetails = await fetchReportData(item.bookingId);
+                if (patientDetails && patientDetails._id) {
+                    reportIds.push(patientDetails._id);
+                }
+            }
+
+            if (reportIds.length < 2) {
+                throw new Error('Not enough valid reports available to merge.');
+            }
+
+            ReportDownloadBuffer.update({
+                percent: 75,
+                status: `Merging ${reportIds.length} reports into unified PDF...`
+            });
+
+            const letterPadOption = getLetterheadPreference();
+            const response = await fetch(`${BASE_URL}/api/v1/user/merge-pdfs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    reportIds: reportIds,
+                    checkBox: letterPadOption === 'with' ? false : true
+                })
+            });
+
+            if (!response.ok) throw new Error('PDF merge failed on server');
+
+            ReportDownloadBuffer.update({
+                percent: 95,
+                status: 'Assembling merged PDF file...'
+            });
+
+            const pdfBlob = await response.blob();
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+
+            const link = document.createElement('a');
+            link.href = pdfUrl;
+            link.download = `Merged_Reports_${Date.now()}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(pdfUrl), 500);
+
+            ReportDownloadBuffer.update({
+                percent: 100,
+                status: `Successfully merged ${reportIds.length} reports!`
+            });
+            ReportDownloadBuffer.hide(600);
+
+            showAppToast(`Successfully merged ${reportIds.length} reports!`, 'success');
+        } catch (error) {
+            console.error('Error merging reports:', error);
+            ReportDownloadBuffer.hide(200);
+            showAppToast('Merge failed. Please try again.', 'error');
+        }
+    }
+
+    function updateCasesSelectionState() {
+        const checkedBoxes = document.querySelectorAll('#tbody .case-checkbox:checked');
+        const allEnabledBoxes = document.querySelectorAll('#tbody .case-checkbox:not(:disabled)');
+        const selectAllCheckbox = document.getElementById('selectAllCases');
+        const selectedCount = checkedBoxes.length;
+
+        // Update select all checkbox
+        if (selectAllCheckbox) {
+            if (allEnabledBoxes.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                selectAllCheckbox.disabled = true;
+            } else {
+                selectAllCheckbox.disabled = false;
+                if (selectedCount === 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                } else if (selectedCount === allEnabledBoxes.length) {
+                    selectAllCheckbox.checked = true;
+                    selectAllCheckbox.indeterminate = false;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = true;
+                }
+            }
+        }
+
+        // Update selection count badge
+        const countBadge = document.getElementById('casesSelectedCount');
+        const countNum = document.getElementById('casesSelectedNum');
+        if (countBadge && countNum) {
+            if (selectedCount > 0) {
+                countBadge.style.display = 'inline-flex';
+                countNum.textContent = selectedCount;
+            } else {
+                countBadge.style.display = 'none';
+            }
+        }
+
+        // Update Download button label
+        const downloadLabel = document.getElementById('downloadSelectedCasesLabel');
+        if (downloadLabel && !isBulkDownloading) {
+            downloadLabel.textContent = selectedCount > 0 ? `Download Selected (${selectedCount})` : 'Download Selected';
+        }
+
+        // Update Merge button visibility (visible when 2 or more selected)
+        const mergeBtn = document.getElementById('mergeSelectedCases');
+        const mergeLabel = document.getElementById('mergeSelectedCasesLabel');
+        if (mergeBtn) {
+            if (selectedCount >= 2) {
+                mergeBtn.style.display = 'inline-flex';
+                if (mergeLabel) mergeLabel.textContent = `Merge Reports (${selectedCount})`;
+            } else {
+                mergeBtn.style.display = 'none';
+            }
+        }
+    }
+
     function openEditBookingPage(booking, row) {
         saveBookingToLocalStorage(booking, row);
         loadPage('editbooking', booking.bookingId, booking._id);
@@ -216,6 +824,7 @@ async function allcases() {
             }
 
             displayBookings(bookings);
+            updateCasesSelectionState();
         } catch (error) {
             console.error("Error fetching bookings:", error);
             totalPages = 1;
@@ -229,6 +838,7 @@ async function allcases() {
             if (pageCounterEl) pageCounterEl.innerHTML = "Page 1 of 1";
 
             setTableState(error.message || "Unable to load bookings right now.", "table-state-row error-state");
+            updateCasesSelectionState();
         } finally {
             hideLoader();
             setSearchLoadingState(false);
@@ -372,10 +982,19 @@ async function allcases() {
 
         const bookingId = row.getAttribute("data-booking-id");
         const isReportReady = booking ? booking.isreportready : false;
+        const isEligibleForDownload = isDownloadEligible(booking?.status);
 
         const cancelAction = isReportReady
             ? ""
             : `<button type="button" class="action-btn cancel-btn" data-action="cancel"><i class="fa-solid fa-rectangle-xmark"></i><span>Cancel</span></button>`;
+
+        const downloadAction = isEligibleForDownload
+            ? `<button type="button" class="action-btn download-report-btn is-pdf-action" data-action="download-report">
+                <i class="fa-solid fa-file-arrow-down"></i>
+                <span>Download Report</span>
+                <span class="pdf-badge">PDF</span>
+            </button>`
+            : "";
 
         const popover = document.createElement("div");
         popover.id = "allcases-dropdown-popover";
@@ -395,6 +1014,7 @@ async function allcases() {
                 <span>Generate TRF</span>
                 <span class="pdf-badge">PDF</span>
             </button>
+            ${downloadAction}
             <div class="dropdown-divider"></div>
             <button type="button" class="action-btn edit-booking" data-action="edit-booking">
                 <i class="fa-solid fa-file-pen"></i>
@@ -424,7 +1044,12 @@ async function allcases() {
             closeDropdown();
             const createdBy = row.getAttribute("data-created-by") || booking?.createdBy;
 
-            if (action === "generate-bill") {
+            if (action === "download-report") {
+                const badge = row.querySelector(".booking-id-badge");
+                if (badge) {
+                    await downloadSingleReport(badge);
+                }
+            } else if (action === "generate-bill") {
                 openInvoiceCustomizerModal(booking);
             } else if (action === "generate-trf") {
                 handleGenerateTRF(bookingId);
@@ -485,6 +1110,7 @@ async function allcases() {
 
         if (!Array.isArray(bookings) || bookings.length === 0) {
             setTableState("No bookings found for selected filters.");
+            updateCasesSelectionState();
             return;
         }
 
@@ -496,6 +1122,9 @@ async function allcases() {
             }
 
             const row = document.createElement("tr");
+            const eligible = isDownloadEligible(booking.status);
+            const patientNameStr = String(booking.patientName || "").trim();
+
             const tableData = Array.isArray(booking.tableData) ? booking.tableData : [];
             const testNamesArray = [...new Set(
                 tableData.flatMap((obj) => String(obj.testName || "")
@@ -513,6 +1142,8 @@ async function allcases() {
             row.setAttribute("data-lab-name", booking.labName || "");
             row.setAttribute("data-updated-at", booking.updatedAt || "");
             row.setAttribute("data-created-by", booking.createdBy || "");
+            row.setAttribute("data-status", String(booking.status || "").toLowerCase());
+            row.setAttribute("data-patient-name", patientNameStr);
             row.setAttribute("data-booking", JSON.stringify(booking));
 
             const normalizedStatus = String(booking.status || "").toLowerCase();
@@ -540,12 +1171,26 @@ async function allcases() {
                 : `<td class="barcode-cell">${buildBarcodeHtml(booking)}</td>`;
 
             row.innerHTML = `
-                <td class="reg-no">${booking.bookingId || "--"}</td>
+                <td style="text-align: center;">
+                    <input type="checkbox" class="case-checkbox" data-booking-id="${escapeHtml(booking.bookingId || '')}" aria-label="Select booking ${escapeHtml(booking.bookingId || '')}" ${eligible ? '' : 'disabled'} title="${eligible ? 'Select booking' : 'Report not ready for download (Only Completed and Partially Completed)'}">
+                </td>
+                <td class="reg-no">
+                    <span class="booking-id-badge${eligible ? '' : ' is-not-ready'}" role="button" tabindex="${eligible ? '0' : '-1'}"
+                          title="${eligible ? 'Click to Download Report' : 'Report not ready for download (Only Completed and Partially Completed)'}"
+                          aria-label="${eligible ? 'Download report for booking ' + escapeHtml(booking.bookingId || '') : 'Report not ready for booking ' + escapeHtml(booking.bookingId || '')}"
+                          data-booking-id="${escapeHtml(booking.bookingId || '')}"
+                          data-patient-name="${escapeHtml(patientNameStr)}"
+                          data-status="${escapeHtml(booking.status || '')}">
+                        <i class="fas ${eligible ? 'fa-download' : 'fa-lock'} booking-id-icon" aria-hidden="true"></i>
+                        ${escapeHtml(booking.bookingId || '--')}
+                        ${eligible ? '' : '<span class="not-ready-tooltip" title="Only Completed and Partially Completed reports can be downloaded"><i class="fas fa-circle-info"></i></span>'}
+                    </span>
+                </td>
                 <td class="booking-date-cell">${bookingDateTime}</td>
-                <td>${booking.patientName || "--"}</td>
-                <td>${islayerone ? (booking.doctorName || "--") : (booking.createdbyuser || "--")}</td>
+                <td>${escapeHtml(booking.patientName || '--')}</td>
+                <td>${islayerone ? escapeHtml(booking.doctorName || '--') : escapeHtml(booking.createdbyuser || '--')}</td>
                 ${amountOrBarcodeCell}
-                <td><button class="status-btn">${booking.status || "pending"}</button></td>
+                <td><button class="status-btn">${escapeHtml(booking.status || 'pending')}</button></td>
                 <td class="actions">${buildActionCell(booking)}</td>`;
 
             tableBody.appendChild(row);
@@ -555,6 +1200,7 @@ async function allcases() {
         if (renderedRows === 0) {
             setTableState("No bookings found for selected filters.");
         }
+        updateCasesSelectionState();
     }
 
     // Event delegation for table actions
@@ -562,10 +1208,25 @@ async function allcases() {
     if (tableBody && !tableBody.dataset.actionsBound) {
         tableBody.dataset.actionsBound = "true";
         tableBody.addEventListener("click", async function (e) {
-            e.stopImmediatePropagation();
-            e.preventDefault();
+            // Handle clicking on Booking ID badge for report download
+            const badge = e.target.closest(".booking-id-badge");
+            if (badge) {
+                e.preventDefault();
+                e.stopPropagation();
+                await downloadSingleReport(badge);
+                return;
+            }
+
+            // Handle checkbox click
+            if (e.target.classList.contains("case-checkbox")) {
+                updateCasesSelectionState();
+                return;
+            }
+
             const target = e.target.closest("a, button, .more-options");
             if (!target) return;
+            e.stopImmediatePropagation();
+            e.preventDefault();
 
             const row = target.closest("tr");
             if (!row) return;
@@ -597,8 +1258,13 @@ async function allcases() {
                 window.location.href = url;
             }
             else if (target.classList.contains("download-report")) {
-                saveBookingToLocalStorage(booking, row);
-                window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                const badge = row.querySelector(".booking-id-badge");
+                if (badge && !badge.classList.contains("is-not-ready")) {
+                    await downloadSingleReport(badge);
+                } else {
+                    saveBookingToLocalStorage(booking, row);
+                    window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                }
             }
             else if (target.classList.contains("edit-booking")) {
                 openEditBookingPage(booking, row);
@@ -618,6 +1284,16 @@ async function allcases() {
             }
             else if (target.classList.contains("generate-trf-btn")) {
                 handleGenerateTRF(bookingId);
+            }
+        });
+
+        tableBody.addEventListener("keydown", async function (e) {
+            if (e.key === "Enter" || e.key === " ") {
+                const badge = e.target.closest(".booking-id-badge");
+                if (badge) {
+                    e.preventDefault();
+                    await downloadSingleReport(badge);
+                }
             }
         });
 
@@ -2010,6 +2686,46 @@ async function allcases() {
                 if (bookingId) {
                     await rejectBooking(bookingId);
                 }
+            });
+        }
+
+        // Select All Checkbox
+        const selectAllCheckbox = document.getElementById("selectAllCases");
+        if (selectAllCheckbox && !selectAllCheckbox.dataset.listenerBound) {
+            selectAllCheckbox.dataset.listenerBound = "true";
+            selectAllCheckbox.addEventListener("change", function () {
+                const checkboxes = document.querySelectorAll("#tbody .case-checkbox:not(:disabled)");
+                checkboxes.forEach(cb => {
+                    cb.checked = selectAllCheckbox.checked;
+                });
+                updateCasesSelectionState();
+            });
+        }
+
+        // Download Selected Cases Button
+        const downloadSelectedBtn = document.getElementById("downloadSelectedCases");
+        if (downloadSelectedBtn && !downloadSelectedBtn.dataset.listenerBound) {
+            downloadSelectedBtn.dataset.listenerBound = "true";
+            downloadSelectedBtn.addEventListener("click", downloadSelectedReports);
+        }
+
+        // Merge Selected Cases Button
+        const mergeSelectedBtn = document.getElementById("mergeSelectedCases");
+        if (mergeSelectedBtn && !mergeSelectedBtn.dataset.listenerBound) {
+            mergeSelectedBtn.dataset.listenerBound = "true";
+            mergeSelectedBtn.addEventListener("click", mergeSelectedReports);
+        }
+
+        // Letterhead Format Toggle
+        const letterheadSeg = document.getElementById("allcases-letterhead-seg");
+        if (letterheadSeg && !letterheadSeg.dataset.listenerBound) {
+            letterheadSeg.dataset.listenerBound = "true";
+            syncLetterheadUI(getLetterheadPreference());
+            letterheadSeg.addEventListener("click", function (e) {
+                const btn = e.target.closest(".seg-option");
+                if (!btn) return;
+                const value = btn.getAttribute("data-value");
+                setLetterheadPreference(value);
             });
         }
     }

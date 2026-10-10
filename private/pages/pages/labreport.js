@@ -629,8 +629,17 @@ async function loadfunction() {
             displayExpression: "Neutrophils-Absolute Count / Lymphocytes-Absolute Count",
             expressionTemplate: "{{neutrophilsAbsolute}} / {{lymphocytesAbsolute}}",
             dependencies: {
-                neutrophilsAbsolute: ["Neutrophils-Absolute Count", "Neutrophils (Abs)", "Neutrophils Percentage", "Neutrophils (%)"],
-                lymphocytesAbsolute: ["Lymphocytes-Absolute Count", "Lymphocytes (Abs)", "Lymphocyte Percentage", "Lymphocytes (%)"],
+                neutrophilsAbsolute: ["Neutrophils-Absolute Count", "Neutrophils (Abs)", "Absolute Neutrophil Count", "ANC"],
+                lymphocytesAbsolute: ["Lymphocytes-Absolute Count", "Lymphocytes (Abs)", "Absolute Lymphocyte Count", "ALC"],
+            },
+        },
+        {
+            targetNames: ["Neutrophil Lymphocyte Ratio", "NLR"],
+            displayExpression: "Neutrophils Percentage / Lymphocytes Percentage",
+            expressionTemplate: "{{neutrophilsPercentage}} / {{lymphocytesPercentage}}",
+            dependencies: {
+                neutrophilsPercentage: ["Neutrophils Percentage", "Neutrophils (%)", "Neutrophils", "Neutrophils (%) (COMPLETE BLOOD COUNT (CBC))"],
+                lymphocytesPercentage: ["Lymphocyte Percentage", "Lymphocytes Percentage", "Lymphocytes (%)", "Lymphocytes", "Lymphocytes (%) (COMPLETE BLOOD COUNT (CBC))"],
             },
         },
         {
@@ -754,12 +763,12 @@ async function loadfunction() {
             },
         },
         {
-            targetNames: ["Sgot/Sgpt Ratio Formula", "SGOT/SGPT RATIO"],
-            displayExpression: "SGPT (ALT) / SGOT (AST)",
-            expressionTemplate: "{{sgpt}} / {{sgot}}",
+            targetNames: ["Sgot/Sgpt Ratio Formula", "SGOT/SGPT RATIO", "De Ritis Ratio", "AST/ALT Ratio", "SGOT / SGPT Ratio"],
+            displayExpression: "SGOT (AST) / SGPT (ALT)",
+            expressionTemplate: "{{sgot}} / {{sgpt}}",
             dependencies: {
-                sgpt: ["SGPT (ALT)"],
-                sgot: ["SGOT (AST)"],
+                sgot: ["SGOT (AST)", "SGOT", "AST", "Aspartate Aminotransferase"],
+                sgpt: ["SGPT (ALT)", "SGPT", "ALT", "Alanine Aminotransferase"],
             },
         },
         {
@@ -1079,6 +1088,11 @@ async function loadfunction() {
         monocytesabs: ["monocyteabsolutecount", "monocytesabs", "absolutemonocytecount", "amc", "monocyteabsolutecountamc"],
         eosinophilsabs: ["eosinophilabsolutecount", "eosinophilsabs", "absoluteeosinophilcount", "aec", "eosinophilsabsolutecountaec"],
         basophilsabs: ["basophilsabsolutecount", "basophilsabs", "absolutebasophilcount", "abc", "basophilsabsolutecountabc"],
+        anc: ["neutrophilsabsolutecount", "neutrophilsabs", "absoluteneutrophilcount", "anc", "neutrophilsabsolutecountanc"],
+        alc: ["lymphocytesabsolutecount", "lymphocytesabs", "absolutelymphocytecount", "alc", "lymphocytesabsolutecountalc"],
+        amc: ["monocyteabsolutecount", "monocytesabs", "absolutemonocytecount", "amc", "monocyteabsolutecountamc"],
+        aec: ["eosinophilabsolutecount", "eosinophilsabs", "absoluteeosinophilcount", "aec", "eosinophilsabsolutecountaec"],
+        abc: ["basophilsabsolutecount", "basophilsabs", "absolutebasophilcount", "abc", "basophilsabsolutecountabc"],
         nlr: ["neutrophillymphocyteratio", "nlr"],
         vldl: ["vldlcholesterol", "vldl"],
         ldl: ["ldlcholesterol", "ldl"],
@@ -1120,11 +1134,15 @@ async function loadfunction() {
         if (s.includes(" hb ") || s.includes(" hemoglobin ") || s.includes(" haemoglobin ")) return "hemoglobin";
         if (s.includes(" rbc ") || s.includes(" red blood cell ") || s.includes(" red blood cells ") || s.includes(" red cell ") || s.includes(" erythrocyte ")) return "rbc";
         if (s.includes(" tlc ") || s.includes(" wbc ") || s.includes(" leukocyte ") || s.includes(" leucocyte ") || s.includes(" total count wbc ") || s.includes(" white blood cell ") || s.includes(" total count ")) return "tlc";
-        if (s.includes(" anc ") || s.includes(" absolute neutrophil ")) return "anc";
-        if (s.includes(" alc ") || s.includes(" absolute lymphocyte ")) return "alc";
-        if (s.includes(" aec ") || s.includes(" absolute eosinophil ")) return "aec";
-        if (s.includes(" amc ") || s.includes(" absolute monocyte ")) return "amc";
-        if (s.includes(" abc ") || s.includes(" absolute basophil ")) return "abc";
+
+        const isAbs = s.includes(" abs ") || s.includes(" absolute ") || s.includes(" anc ") || s.includes(" alc ") || s.includes(" aec ") || s.includes(" amc ") || s.includes(" abc ");
+
+        if (s.includes(" anc ") || (isAbs && (s.includes(" neutrophil ") || s.includes(" neutrophils ")))) return "neutrophilsabs";
+        if (s.includes(" alc ") || (isAbs && (s.includes(" lymphocyte ") || s.includes(" lymphocytes ")))) return "lymphocytesabs";
+        if (s.includes(" aec ") || (isAbs && (s.includes(" eosinophil ") || s.includes(" eosinophils ")))) return "eosinophilsabs";
+        if (s.includes(" amc ") || (isAbs && (s.includes(" monocyte ") || s.includes(" monocytes ")))) return "monocytesabs";
+        if (s.includes(" abc ") || (isAbs && (s.includes(" basophil ") || s.includes(" basophils ")))) return "basophilsabs";
+
         if (s.includes(" neutrophil ") || s.includes(" neutrophils ")) return "neutrophils";
         if (s.includes(" lymphocyte ") || s.includes(" lymphocytes ")) return "lymphocytes";
         if (s.includes(" eosinophil ") || s.includes(" eosinophils ")) return "eosinophils";
@@ -1535,6 +1553,8 @@ async function loadfunction() {
         input.dataset.formulaTargetId = String(formula._id || "");
         input.readOnly = false;
         input.removeAttribute("readonly");
+        input.disabled = false;
+        input.removeAttribute("disabled");
         input.classList.toggle("formula-value-input", true);
     }
 
@@ -1644,10 +1664,15 @@ async function loadfunction() {
     function applyComputedFormulaValue(input, formula, value) {
         if (!input) return;
 
+        // If user has manually entered/overridden a value, do not overwrite it with computed value
+        if (input.dataset.formulaManual === "true" && String(input.value || "").trim() !== "") {
+            return;
+        }
+
         const precision = Number.isFinite(Number(formula.precision)) ? Number(formula.precision) : 2;
         input.value = Number(value).toFixed(precision);
         input.dataset.formulaAutoCalculated = "true";
-        input.dataset.formulaManual = "false";
+        delete input.dataset.formulaManual;
         processInput(input);
     }
 
@@ -1655,7 +1680,7 @@ async function loadfunction() {
         if (!input) return;
         input.value = "";
         delete input.dataset.formulaAutoCalculated;
-        input.dataset.formulaManual = "false";
+        delete input.dataset.formulaManual;
         processInput(input);
     }
 
@@ -1663,6 +1688,15 @@ async function loadfunction() {
         const targetMasterKey = String(formula.targetMasterKey || "");
         const targetInput = formulaState.inputByMasterKey.get(targetMasterKey);
         if (!targetInput) {
+            return false;
+        }
+
+        const prevVal = String(targetInput.value || "").trim();
+
+        // MANUAL OVERRIDE GUARD:
+        // If the user manually entered or modified this field and it has a value,
+        // NEVER overwrite it with an automated formula calculation!
+        if (targetInput.dataset.formulaManual === "true" && prevVal !== "") {
             return false;
         }
 
@@ -1696,8 +1730,6 @@ async function loadfunction() {
             hasMissingDependency = hasMissingDependency || !hasValue;
         });
 
-        const prevVal = String(targetInput.value || "").trim();
-
         if (!hasAnyDependencyValue || hasMissingDependency) {
             // Never clear user-entered or manually modified values when dependencies are missing
             if (targetInput.dataset.formulaManual === "true" || targetInput.dataset.formulaAutoCalculated !== "true") {
@@ -1720,6 +1752,10 @@ async function loadfunction() {
                 if (clinicalKey in dependencyValues) return dependencyValues[clinicalKey];
                 return 0;
             });
+
+            if (!Number.isFinite(computedValue)) {
+                return false;
+            }
 
             applyComputedFormulaValue(targetInput, formula, computedValue);
             const newVal = String(targetInput.value || "").trim();
@@ -1768,6 +1804,16 @@ async function loadfunction() {
                     return;
                 }
 
+                const targetInput = formulaState.inputByMasterKey.get(targetMasterKey);
+                // 1) Never recalculate the exact input that the user is actively typing in
+                if (inputElement && targetInput === inputElement) {
+                    return;
+                }
+                // 2) Never recalculate a field that was manually overridden by the user
+                if (targetInput && targetInput.dataset.formulaManual === "true" && String(targetInput.value || "").trim() !== "") {
+                    return;
+                }
+
                 const wasChanged = recalculateSingleFormula(formula);
                 if (wasChanged) {
                     queue.push(targetMasterKey);
@@ -1784,6 +1830,13 @@ async function loadfunction() {
             changed = false;
             passes += 1;
             formulaState.formulas.forEach((formula) => {
+                const targetMasterKey = String(formula.targetMasterKey || "");
+                const targetInput = formulaState.inputByMasterKey.get(targetMasterKey);
+                // Do not recalculate manually entered values
+                if (targetInput && targetInput.dataset.formulaManual === "true" && String(targetInput.value || "").trim() !== "") {
+                    return;
+                }
+
                 const didChange = recalculateSingleFormula(formula);
                 if (didChange) {
                     changed = true;
@@ -3615,8 +3668,14 @@ async function loadfunction() {
             const input = event.target.closest(".value-input");
             if (!input) return;
             if (input.dataset.formulaField === "true") {
-                input.dataset.formulaManual = "true";
-                delete input.dataset.formulaAutoCalculated;
+                const val = String(input.value || "").trim();
+                if (val !== "") {
+                    input.dataset.formulaManual = "true";
+                    delete input.dataset.formulaAutoCalculated;
+                } else {
+                    delete input.dataset.formulaManual;
+                    delete input.dataset.formulaAutoCalculated;
+                }
             }
             if (isTextReferenceInput(input) && event.isTrusted) {
                 input.dataset.isAbnormal = "false";
@@ -3629,8 +3688,14 @@ async function loadfunction() {
             const input = event.target.closest(".value-input");
             if (!input) return;
             if (input.dataset.formulaField === "true") {
-                input.dataset.formulaManual = "true";
-                delete input.dataset.formulaAutoCalculated;
+                const val = String(input.value || "").trim();
+                if (val !== "") {
+                    input.dataset.formulaManual = "true";
+                    delete input.dataset.formulaAutoCalculated;
+                } else {
+                    delete input.dataset.formulaManual;
+                    delete input.dataset.formulaAutoCalculated;
+                }
             }
             processInput(input);
             handleInputChange(input);
