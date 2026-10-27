@@ -16,7 +16,8 @@ module.exports = {
 
         // Database
         MONGODB_URI:
-          "mongodb+srv://ahadsidd5:Ahad9520@cluster0.uiadu.mongodb.net/myfranchisee_super_admin",
+          process.env.MONGODB_URI ||
+          "mongodb://adminUser:Occu%402023@127.0.0.1:27017/myfranchisee_super_admin?authSource=admin",
 
         // Token Secrets
         SUPER_ADMIN_ACCESS_TOKEN_SECRET:

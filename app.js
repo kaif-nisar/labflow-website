@@ -1,3 +1,4 @@
+// Server startup - catalog sync updated: 2026-10-27
 import "dotenv/config";
 import { UPLOAD_ROOT } from "./src/utils/localStorage.js";
 import express from "express";
