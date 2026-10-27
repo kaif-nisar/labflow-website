@@ -12,20 +12,52 @@ jobs:
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
-
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT || 22 }}
           script: |
-            cd /home/opc/labflowlis
+            # 1. Load Node & PM2 environment (NVM / standard paths)
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            export PATH=$PATH:/usr/local/bin:/usr/bin:~/.npm-global/bin
 
+            echo "=== Node & PM2 Path Check ==="
+            which node || true
+            which npm || true
+            which pm2 || true
+
+            # 2. Find and switch to project directory
+            if [ -d "/root/labflowlis" ]; then
+              cd /root/labflowlis
+            elif [ -d "/home/opc/labflowlis" ]; then
+              cd /home/opc/labflowlis
+            elif [ -d "/var/www/labflowlis" ]; then
+              cd /var/www/labflowlis
+            else
+              echo "Error: labflowlis directory not found!"
+              exit 1
+            fi
+
+            echo "Deploying in directory: $(pwd)"
+
+            # 3. Discard local uncommitted changes and pull latest code
             git reset --hard
             git clean -fd
-
             git pull origin main
 
-            npm install
+            # 4. Install production dependencies
+            npm install --production
 
-            pm2 restart labflowlis --update-env
+            # 5. Restart server with updated environment
+            if pm2 describe labflowlis > /dev/null 2>&1; then
+              pm2 restart labflowlis --update-env
+            elif [ -f "ecosystem.config.cjs" ]; then
+              pm2 restart ecosystem.config.cjs || pm2 start ecosystem.config.cjs
+            else
+              pm2 restart all --update-env
+            fi
+
+            echo "=== Deployment Successfully Completed ==="
