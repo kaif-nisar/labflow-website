@@ -19,7 +19,6 @@ jobs:
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT || 22 }}
           script: |
-            # 1. Load Node & PM2 environment (NVM / standard paths)
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             export PATH=$PATH:/usr/local/bin:/usr/bin:~/.npm-global/bin
@@ -29,35 +28,76 @@ jobs:
             which npm || true
             which pm2 || true
 
-            # 2. Find and switch to project directory
-            if [ -d "/root/labflowlis" ]; then
-              cd /root/labflowlis
-            elif [ -d "/home/opc/labflowlis" ]; then
-              cd /home/opc/labflowlis
-            elif [ -d "/var/www/labflowlis" ]; then
-              cd /var/www/labflowlis
-            else
-              echo "Error: labflowlis directory not found!"
+            # Auto-detect project directory from PM2 or common locations
+            TARGET_DIR=""
+
+            # 1. Ask PM2 for the running directory of labflowlis
+            PM2_DIR=$(node -e '
+              try {
+                const j = JSON.parse(require("child_process").execSync("pm2 jlist").toString());
+                const app = j.find(a => a.name === "labflowlis" || a.name.includes("labflow")) || j[0];
+                if (app && app.pm2_env && app.pm2_env.pm_cwd) {
+                  console.log(app.pm2_env.pm_cwd);
+                }
+              } catch(e) {}
+            ' 2>/dev/null)
+
+            if [ -n "$PM2_DIR" ] && [ -d "$PM2_DIR" ]; then
+              TARGET_DIR="$PM2_DIR"
+            fi
+
+            # 2. If not found via PM2, check common paths
+            if [ -z "$TARGET_DIR" ]; then
+              for dir in \
+                "$HOME/labflowlis" \
+                "$HOME/labflow-website" \
+                "$HOME/labflow" \
+                "/root/labflowlis" \
+                "/root/labflow-website" \
+                "/root/labflow" \
+                "/home/opc/labflowlis" \
+                "/home/opc/labflow-website" \
+                "/var/www/labflowlis" \
+                "/var/www/labflow-website" \
+                "/labflowlis" \
+                "/labflow-website"; do
+                if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
+                  TARGET_DIR="$dir"
+                  break
+                fi
+              done
+            fi
+
+            # 3. Last fallback: find where ecosystem.config.cjs or package.json with labflowlis is
+            if [ -z "$TARGET_DIR" ]; then
+              echo "Searching filesystem for ecosystem.config.cjs..."
+              FOUND=$(find /root /home /var -name "ecosystem.config.cjs" 2>/dev/null | head -n 1)
+              if [ -n "$FOUND" ]; then
+                TARGET_DIR=$(dirname "$FOUND")
+              fi
+            fi
+
+            if [ -z "$TARGET_DIR" ] || [ ! -d "$TARGET_DIR" ]; then
+              echo "Error: Project directory could not be located automatically!"
+              echo "Current user: $(whoami)"
+              echo "Home directory: $HOME"
+              ls -la "$HOME"
+              pm2 list
               exit 1
             fi
 
-            echo "Deploying in directory: $(pwd)"
+            echo "Deploying in directory: $TARGET_DIR"
+            cd "$TARGET_DIR"
 
-            # 3. Discard local uncommitted changes and pull latest code
+            # 4. Pull latest code
             git reset --hard
             git clean -fd
             git pull origin main
 
-            # 4. Install production dependencies
+            # 5. Install dependencies
             npm install --production
 
-            # 5. Restart server with updated environment
-            if pm2 describe labflowlis > /dev/null 2>&1; then
-              pm2 restart labflowlis --update-env
-            elif [ -f "ecosystem.config.cjs" ]; then
-              pm2 restart ecosystem.config.cjs || pm2 start ecosystem.config.cjs
-            else
-              pm2 restart all --update-env
-            fi
+            # 6. Restart PM2
+            pm2 restart labflowlis --update-env || pm2 restart ecosystem.config.cjs || pm2 restart all --update-env
 
             echo "=== Deployment Successfully Completed ==="
