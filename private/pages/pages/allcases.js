@@ -37,12 +37,18 @@ async function allcases() {
     let totalPages = 1;
     let intervalId;
     let filterDebounceTimer;
+    let currentLoadedBookings = [];
 
     // Clean up any stale invoice modal on body from prior page view
     const staleModal = document.querySelector("body > #invoiceCustomizerModal");
     const containerModal = document.querySelector(".container-allcases #invoiceCustomizerModal");
     if (staleModal && containerModal && staleModal !== containerModal) {
         staleModal.remove();
+    }
+    const staleExcelModal = document.querySelector("body > #excelExportModal");
+    const containerExcelModal = document.querySelector(".container-allcases #excelExportModal");
+    if (staleExcelModal && containerExcelModal && staleExcelModal !== containerExcelModal) {
+        staleExcelModal.remove();
     }
 
     // Global variables for popup with null checks
@@ -672,6 +678,17 @@ async function allcases() {
                 mergeBtn.style.display = 'none';
             }
         }
+
+        // Update Excel Export button label & modal badge
+        const exportLabel = document.getElementById('exportCasesExcelLabel');
+        if (exportLabel && !isExportingExcel) {
+            exportLabel.textContent = selectedCount > 0 ? `Export Excel (${selectedCount})` : 'Export to Excel';
+        }
+        const excelSelectedBadge = document.getElementById('excelSelectedBadge');
+        if (excelSelectedBadge) {
+            excelSelectedBadge.textContent = `${selectedCount} selected`;
+            excelSelectedBadge.style.display = selectedCount > 0 ? 'inline-flex' : 'none';
+        }
     }
 
     function openEditBookingPage(booking, row) {
@@ -799,6 +816,7 @@ async function allcases() {
             }
 
             const bookings = Array.isArray(result.bookings) ? result.bookings : [];
+            currentLoadedBookings = bookings;
             const total = Number(result.total) || 0;
             totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -2571,6 +2589,648 @@ async function allcases() {
         }, 3200);
     }
 
+    // ============================================================
+    // COMPREHENSIVE EXCEL EXPORT (PATHOLOGY MIS & CLINICAL DATA)
+    // ============================================================
+    let isExportingExcel = false;
+
+    async function ensureXLSXLoaded() {
+        if (window.XLSX && window.XLSX.utils) {
+            return true;
+        }
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = '/vendor/xlsx/xlsx.full.min.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => {
+                console.error('Failed to load local SheetJS script');
+                resolve(false);
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    function getPresetDateRange(preset) {
+        const now = new Date();
+        const formatYMD = (d) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+
+        if (preset === 'today') {
+            const todayStr = formatYMD(now);
+            return { start: todayStr, end: todayStr };
+        }
+        if (preset === 'yesterday') {
+            const y = new Date(now);
+            y.setDate(y.getDate() - 1);
+            const yStr = formatYMD(y);
+            return { start: yStr, end: yStr };
+        }
+        if (preset === 'last7') {
+            const past = new Date(now);
+            past.setDate(past.getDate() - 6);
+            return { start: formatYMD(past), end: formatYMD(now) };
+        }
+        if (preset === 'thismonth') {
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            return { start: formatYMD(firstDay), end: formatYMD(now) };
+        }
+        if (preset === 'lastmonth') {
+            const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+            return { start: formatYMD(firstDay), end: formatYMD(lastDay) };
+        }
+        return { start: '', end: '' };
+    }
+
+    function autoFitColumns(aoa) {
+        if (!aoa || !aoa.length) return [];
+        return aoa[0].map((_, colIdx) => {
+            let maxLen = 10;
+            aoa.forEach(row => {
+                const cell = row[colIdx];
+                if (cell !== null && cell !== undefined) {
+                    const str = String(cell);
+                    const lines = str.split(/\r\n|\r|\n/);
+                    lines.forEach(l => {
+                        if (l.length > maxLen) maxLen = Math.min(l.length, 55);
+                    });
+                }
+            });
+            return { wch: maxLen + 3 };
+        });
+    }
+
+    function formatExcelDate(dateStr, timeStr) {
+        if (!dateStr) return "--";
+        const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) {
+            return timeStr ? `${dateStr} ${timeStr}` : String(dateStr);
+        }
+        const y = date.getFullYear();
+        const m = date.toLocaleString('en-US', { month: 'short' });
+        const d = String(date.getDate()).padStart(2, '0');
+        const formattedDate = `${d}-${m}-${y}`;
+        if (timeStr) {
+            return `${formattedDate} ${timeStr}`;
+        }
+        return formattedDate;
+    }
+
+    function openExcelExportModal() {
+        const modal = document.getElementById('excelExportModal');
+        if (!modal) return;
+
+        const checkedBoxes = document.querySelectorAll('#tbody .case-checkbox:checked');
+        const selectedCount = checkedBoxes.length;
+
+        const selectedRadio = document.getElementById('excelScopeSelectedRadio');
+        const selectedCard = document.getElementById('excelScopeCardSelected');
+        const filteredRadio = document.querySelector('input[name="excelExportScope"][value="filtered"]');
+        const filteredCard = document.getElementById('excelScopeCardFiltered');
+        const pageCard = document.getElementById('excelScopeCardCurrentPage');
+        const selectedBadge = document.getElementById('excelSelectedBadge');
+        const selectedDesc = document.getElementById('excelSelectedDesc');
+
+        if (selectedBadge) {
+            selectedBadge.textContent = `${selectedCount} selected`;
+            selectedBadge.style.display = selectedCount > 0 ? 'inline-flex' : 'none';
+        }
+        if (selectedDesc) {
+            selectedDesc.textContent = selectedCount > 0 
+                ? `Export ${selectedCount} case(s) currently checked in table`
+                : 'No cases checked in table (check boxes to select)';
+        }
+
+        if (selectedCount > 0) {
+            if (selectedRadio) selectedRadio.checked = true;
+            if (selectedCard) selectedCard.classList.add('active');
+            if (filteredCard) filteredCard.classList.remove('active');
+            if (pageCard) pageCard.classList.remove('active');
+        } else {
+            if (filteredRadio) filteredRadio.checked = true;
+            if (filteredCard) filteredCard.classList.add('active');
+            if (selectedCard) selectedCard.classList.remove('active');
+            if (pageCard) pageCard.classList.remove('active');
+        }
+
+        // Sync date range inputs with main filter section if available
+        const mainStartDate = document.getElementById('start-date')?.value || '';
+        const mainEndDate = document.getElementById('end-date')?.value || '';
+        const modalStartInput = document.getElementById('excelStartDate');
+        const modalEndInput = document.getElementById('excelEndDate');
+
+        if (mainStartDate || mainEndDate) {
+            if (modalStartInput) modalStartInput.value = mainStartDate;
+            if (modalEndInput) modalEndInput.value = mainEndDate;
+            document.querySelectorAll('#excelDatePresets .excel-preset-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.getAttribute('data-preset') === 'custom');
+            });
+        } else {
+            const range = getPresetDateRange('thismonth');
+            if (modalStartInput) modalStartInput.value = range.start;
+            if (modalEndInput) modalEndInput.value = range.end;
+            document.querySelectorAll('#excelDatePresets .excel-preset-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.getAttribute('data-preset') === 'thismonth');
+            });
+        }
+
+        modal.classList.add('is-open');
+    }
+
+    function closeExcelExportModal() {
+        const modal = document.getElementById('excelExportModal');
+        if (modal) {
+            modal.classList.remove('is-open');
+        }
+    }
+
+    function buildSummaryRow(b, idx) {
+        const bDate = formatExcelDate(b.date || b.createdAt);
+        const bTime = b.time || (b.createdAt ? new Date(b.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '');
+        const pName = String(b.patientName || '--').trim();
+        const age = String(b.year || '--').trim();
+        const gender = String(b.gender || '--').trim();
+        const phone = String(b.patientPhone || '--').trim();
+        const doctor = String(b.doctorName || b.savedDoctor || '--').trim();
+        const franchisee = String(b.franchisee || b.subFranchisee || b.createdbyuser || b.labName || '--').trim();
+
+        const tests = [];
+        if (Array.isArray(b.tableData) && b.tableData.length > 0) {
+            b.tableData.forEach(t => { if (t.testName) tests.push(t.testName); });
+        } else if (Array.isArray(b.selectedItems) && b.selectedItems.length > 0) {
+            b.selectedItems.forEach(i => { if (i.itemName) tests.push(i.itemName); });
+        } else if (b.reportData && Array.isArray(b.reportData.CategoryAndTest)) {
+            b.reportData.CategoryAndTest.forEach(c => {
+                if (c.title || c.category) tests.push(c.title || c.category);
+            });
+        }
+        const testsBooked = tests.length > 0 ? [...new Set(tests)].join(', ') : '--';
+
+        const barcodes = Array.isArray(b.acceptedbarcode) && b.acceptedbarcode.length > 0
+            ? b.acceptedbarcode.join(', ')
+            : (Array.isArray(b.barcodeDetails) ? b.barcodeDetails.map(d => d.barcode).join(', ') : '--');
+
+        const totalAmt = Number(b.total) || 0;
+        const discountAmt = Number(b.discountamount) || 0;
+        const netAmt = Math.max(0, totalAmt - discountAmt);
+
+        const rep = b.reportData || {};
+        const collectedOn = rep.collectedOn || '--';
+        const receivedOn = rep.receivedOn || '--';
+        const reportedOn = rep.reportedOn || (b.updatedAt ? formatExcelDate(b.updatedAt) : '--');
+        const verifiedBy = rep.signedBy || '--';
+
+        return [
+            idx + 1,
+            b.bookingId || '--',
+            bDate,
+            bTime,
+            pName,
+            age,
+            gender,
+            phone,
+            doctor,
+            franchisee,
+            testsBooked,
+            barcodes,
+            b.status || '--',
+            totalAmt,
+            discountAmt,
+            netAmt,
+            collectedOn,
+            receivedOn,
+            reportedOn,
+            verifiedBy
+        ];
+    }
+
+    function buildParameterRows(b, startIdx = 1) {
+        const rows = [];
+        let currentRowIdx = startIdx;
+
+        const bDate = formatExcelDate(b.date || b.createdAt);
+        const pName = String(b.patientName || '--').trim();
+        const age = String(b.year || '--').trim();
+        const gender = String(b.gender || '--').trim();
+        const phone = String(b.patientPhone || '--').trim();
+        const doctor = String(b.doctorName || b.savedDoctor || '--').trim();
+        const franchisee = String(b.franchisee || b.subFranchisee || b.createdbyuser || b.labName || '--').trim();
+        const barcodeStr = Array.isArray(b.acceptedbarcode) && b.acceptedbarcode.length > 0
+            ? b.acceptedbarcode.join(', ')
+            : (Array.isArray(b.barcodeDetails) ? b.barcodeDetails.map(d => d.barcode).join(', ') : '--');
+
+        const rep = b.reportData || {};
+        const collectedOn = rep.collectedOn || '--';
+        const receivedOn = rep.receivedOn || '--';
+        const reportedOn = rep.reportedOn || (b.updatedAt ? formatExcelDate(b.updatedAt) : '--');
+        const verifiedBy = rep.signedBy || '--';
+
+        const categoryAndTest = Array.isArray(rep.CategoryAndTest) ? rep.CategoryAndTest : [];
+
+        if (categoryAndTest.length > 0) {
+            categoryAndTest.forEach(cat => {
+                const department = String(cat.category || cat.title || 'Pathology').trim();
+                const testTitle = String(cat.title || cat.category || 'Investigation').trim();
+                const generalRemarks = String(cat.remarks || cat.notes || cat.interpretation || cat.advice || '').trim();
+
+                const testsList = Array.isArray(cat.tests) ? cat.tests : [];
+                if (testsList.length > 0) {
+                    testsList.forEach(param => {
+                        const isHeading = Boolean(param.isMultiParameterHeading);
+                        const paramName = String(param.testName || '--').trim();
+                        const resultVal = isHeading ? '(Section Header)' : String(param.value || 'Pending').trim();
+                        const unit = String(param.unit || '').trim();
+                        const refRange = String(param.reference || '').trim();
+                        
+                        let flag = '--';
+                        if (!isHeading) {
+                            if (param.isAbnormal) {
+                                flag = 'ABNORMAL / HIGH-LOW';
+                            } else if (param.value && param.value !== 'Pending') {
+                                flag = 'NORMAL';
+                            } else {
+                                flag = 'PENDING';
+                            }
+                        }
+
+                        const remarks = String(param.remark || param.details || generalRemarks || '').trim();
+
+                        rows.push([
+                            currentRowIdx++,
+                            b.bookingId || '--',
+                            bDate,
+                            pName,
+                            age,
+                            gender,
+                            phone,
+                            doctor,
+                            franchisee,
+                            department,
+                            testTitle,
+                            paramName,
+                            resultVal,
+                            unit,
+                            refRange,
+                            flag,
+                            remarks,
+                            barcodeStr,
+                            collectedOn,
+                            receivedOn,
+                            reportedOn,
+                            verifiedBy
+                        ]);
+                    });
+                } else {
+                    rows.push([
+                        currentRowIdx++,
+                        b.bookingId || '--',
+                        bDate,
+                        pName,
+                        age,
+                        gender,
+                        phone,
+                        doctor,
+                        franchisee,
+                        department,
+                        testTitle,
+                        '(All Parameters)',
+                        'Result Saved',
+                        '--',
+                        '--',
+                        'COMPLETED',
+                        generalRemarks,
+                        barcodeStr,
+                        collectedOn,
+                        receivedOn,
+                        reportedOn,
+                        verifiedBy
+                    ]);
+                }
+            });
+        } else {
+            const bookedItems = [];
+            if (Array.isArray(b.tableData) && b.tableData.length > 0) {
+                b.tableData.forEach(t => { if (t.testName) bookedItems.push(t.testName); });
+            } else if (Array.isArray(b.selectedItems) && b.selectedItems.length > 0) {
+                b.selectedItems.forEach(i => { if (i.itemName) bookedItems.push(i.itemName); });
+            }
+
+            if (bookedItems.length > 0) {
+                bookedItems.forEach(testName => {
+                    rows.push([
+                        currentRowIdx++,
+                        b.bookingId || '--',
+                        bDate,
+                        pName,
+                        age,
+                        gender,
+                        phone,
+                        doctor,
+                        franchisee,
+                        'Clinical Laboratory',
+                        testName,
+                        '(All Parameters)',
+                        'Pending / Not Entered',
+                        '--',
+                        '--',
+                        'PENDING',
+                        'Results pending from laboratory',
+                        barcodeStr,
+                        collectedOn,
+                        receivedOn,
+                        reportedOn,
+                        verifiedBy
+                    ]);
+                });
+            } else {
+                rows.push([
+                    currentRowIdx++,
+                    b.bookingId || '--',
+                    bDate,
+                    pName,
+                    age,
+                    gender,
+                    phone,
+                    doctor,
+                    franchisee,
+                    'Clinical Laboratory',
+                    'General Test',
+                    '(All Parameters)',
+                    'Pending / Not Entered',
+                    '--',
+                    '--',
+                    'PENDING',
+                    '--',
+                    barcodeStr,
+                    collectedOn,
+                    receivedOn,
+                    reportedOn,
+                    verifiedBy
+                ]);
+            }
+        }
+
+        return rows;
+    }
+
+    async function executeExcelExport() {
+        if (isExportingExcel) return;
+
+        const scopeRadio = document.querySelector('input[name="excelExportScope"]:checked');
+        const scope = scopeRadio ? scopeRadio.value : 'filtered';
+
+        const formatRadio = document.querySelector('input[name="excelExportFormat"]:checked');
+        const formatOption = formatRadio ? formatRadio.value : 'full';
+
+        const includeResults = Boolean(document.getElementById('excelOptIncludeResults')?.checked);
+        const autoFit = Boolean(document.getElementById('excelOptAutoFitCols')?.checked);
+
+        const startDateInput = document.getElementById('excelStartDate');
+        const endDateInput = document.getElementById('excelEndDate');
+        const startDate = startDateInput ? startDateInput.value : '';
+        const endDate = endDateInput ? endDateInput.value : '';
+
+        if (scope === 'filtered' && startDate && endDate && new Date(startDate) > new Date(endDate)) {
+            alert('Start Date cannot be greater than End Date');
+            return;
+        }
+
+        const submitBtn = document.getElementById('excelModalSubmitBtn');
+        const originalBtnHTML = submitBtn ? submitBtn.innerHTML : '';
+
+        try {
+            isExportingExcel = true;
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+            }
+
+            ReportDownloadBuffer.show({
+                title: 'Exporting Data to Excel',
+                status: 'Fetching cases & clinical test findings from server...',
+                percent: 25
+            });
+
+            const xlsxReady = await ensureXLSXLoaded();
+            if (!xlsxReady || !window.XLSX) {
+                throw new Error('SheetJS (XLSX) library could not be loaded.');
+            }
+
+            let exportCases = [];
+
+            if (scope === 'selected') {
+                const checkedBoxes = document.querySelectorAll('#tbody .case-checkbox:checked');
+                const selectedBookingIds = Array.from(checkedBoxes).map(cb => {
+                    const row = cb.closest('tr');
+                    return cb.getAttribute('data-booking-id') || (row ? row.getAttribute('data-booking-id') : '');
+                }).filter(Boolean);
+
+                if (!selectedBookingIds.length) {
+                    throw new Error('No cases are selected in the table. Please tick checkboxes or select "Date Range / Filtered Cases".');
+                }
+
+                ReportDownloadBuffer.update({
+                    status: `Fetching details for ${selectedBookingIds.length} selected cases...`,
+                    percent: 45
+                });
+
+                const resp = await fetch(`${BASE_URL}/api/v1/user/export-cases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        bookingIds: selectedBookingIds,
+                        includeResults: includeResults
+                    })
+                });
+
+                if (!resp.ok) throw new Error('Failed to retrieve selected cases data');
+                const data = await resp.json();
+                exportCases = Array.isArray(data.cases) ? data.cases : [];
+            } else if (scope === 'page') {
+                if (currentLoadedBookings && currentLoadedBookings.length > 0) {
+                    const pageBookingIds = currentLoadedBookings.map(b => b.bookingId).filter(Boolean);
+                    ReportDownloadBuffer.update({
+                        status: `Fetching full clinical details for current page (${pageBookingIds.length} cases)...`,
+                        percent: 45
+                    });
+
+                    const resp = await fetch(`${BASE_URL}/api/v1/user/export-cases`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            bookingIds: pageBookingIds,
+                            includeResults: includeResults
+                        })
+                    });
+
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        exportCases = Array.isArray(data.cases) ? data.cases : [];
+                    } else {
+                        exportCases = currentLoadedBookings;
+                    }
+                } else {
+                    throw new Error('No cases loaded on current page to export.');
+                }
+            } else {
+                const filters = buildFilters();
+                const reqBody = {
+                    ...filters,
+                    startDate: startDate || filters.startDate,
+                    endDate: endDate || filters.endDate,
+                    includeResults: includeResults
+                };
+
+                ReportDownloadBuffer.update({
+                    status: 'Retrieving all cases matching date range and filters from database...',
+                    percent: 50
+                });
+
+                const resp = await fetch(`${BASE_URL}/api/v1/user/export-cases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(reqBody)
+                });
+
+                if (!resp.ok) {
+                    const errResult = await resp.json().catch(() => ({}));
+                    throw new Error(errResult.message || 'Server error fetching export records');
+                }
+
+                const data = await resp.json();
+                exportCases = Array.isArray(data.cases) ? data.cases : [];
+            }
+
+            if (!exportCases.length) {
+                throw new Error('No cases found matching the export criteria.');
+            }
+
+            ReportDownloadBuffer.update({
+                status: `Building Excel worksheets for ${exportCases.length} case(s)...`,
+                percent: 80
+            });
+
+            const wb = XLSX.utils.book_new();
+
+            // 1. Build Cases Summary Sheet
+            if (formatOption === 'full' || formatOption === 'summary') {
+                const summaryHeaders = [
+                    "S.No.",
+                    "Booking ID",
+                    "Booking Date",
+                    "Booking Time",
+                    "Patient Name",
+                    "Age",
+                    "Gender",
+                    "Mobile Number",
+                    "Referring Doctor",
+                    "Franchisee / Company",
+                    "Tests Booked",
+                    "Barcodes",
+                    "Status",
+                    "Total Amount (INR)",
+                    "Discount (INR)",
+                    "Net Amount (INR)",
+                    "Sample Collected On",
+                    "Sample Received On",
+                    "Report Approved On",
+                    "Approved By"
+                ];
+
+                const summaryAOA = [summaryHeaders];
+                exportCases.forEach((b, idx) => {
+                    summaryAOA.push(buildSummaryRow(b, idx));
+                });
+
+                const wsSummary = XLSX.utils.aoa_to_sheet(summaryAOA);
+                if (autoFit) {
+                    wsSummary['!cols'] = autoFitColumns(summaryAOA);
+                }
+                XLSX.utils.book_append_sheet(wb, wsSummary, 'Cases Summary');
+            }
+
+            // 2. Build Test Results & Parameters Sheet
+            if (formatOption === 'full' || formatOption === 'parameters') {
+                const parameterHeaders = [
+                    "S.No.",
+                    "Booking ID",
+                    "Booking Date",
+                    "Patient Name",
+                    "Age",
+                    "Gender",
+                    "Mobile Number",
+                    "Referring Doctor",
+                    "Franchisee / Company",
+                    "Department / Category",
+                    "Test / Panel Name",
+                    "Parameter Name",
+                    "Result Value",
+                    "Unit",
+                    "Reference / Normal Range",
+                    "Result Status / Flag",
+                    "Remarks / Clinical Notes",
+                    "Barcode",
+                    "Sample Collected On",
+                    "Sample Received On",
+                    "Report Approved On",
+                    "Approved By"
+                ];
+
+                const paramAOA = [parameterHeaders];
+                let currentParamIdx = 1;
+                exportCases.forEach((b) => {
+                    const rows = buildParameterRows(b, currentParamIdx);
+                    currentParamIdx += rows.length;
+                    rows.forEach(r => paramAOA.push(r));
+                });
+
+                const wsParams = XLSX.utils.aoa_to_sheet(paramAOA);
+                if (autoFit) {
+                    wsParams['!cols'] = autoFitColumns(paramAOA);
+                }
+                XLSX.utils.book_append_sheet(wb, wsParams, 'Test Results & Parameters');
+            }
+
+            ReportDownloadBuffer.update({
+                status: 'Writing Excel file and initiating download...',
+                percent: 95
+            });
+
+            const dateTag = (startDate && endDate)
+                ? `${startDate}_to_${endDate}`
+                : (scope === 'selected' ? `Selected_${exportCases.length}_Cases` : new Date().toISOString().split('T')[0]);
+            const filename = `LabFlow_Cases_Export_${dateTag}.xlsx`;
+
+            XLSX.writeFile(wb, filename);
+
+            ReportDownloadBuffer.update({
+                status: `Excel download complete! (${exportCases.length} cases)`,
+                percent: 100
+            });
+            ReportDownloadBuffer.hide(500);
+
+            closeExcelExportModal();
+            showAppToast(`Excel exported successfully! (${exportCases.length} cases saved)`, 'success');
+        } catch (error) {
+            console.error('Error exporting cases to Excel:', error);
+            ReportDownloadBuffer.hide(200);
+            showAppToast(error.message || 'Export failed. Please check filters and try again.', 'error');
+        } finally {
+            isExportingExcel = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHTML;
+            }
+        }
+    }
+
     function setupEventListeners() {
         const nextBtn = document.getElementById("next");
         const prevBtn = document.getElementById("previous");
@@ -2727,6 +3387,79 @@ async function allcases() {
                 const value = btn.getAttribute("data-value");
                 setLetterheadPreference(value);
             });
+        }
+
+        // Excel Export Trigger & Modal Event Listeners
+        const exportExcelBtn = document.getElementById("exportCasesExcelBtn");
+        if (exportExcelBtn && !exportExcelBtn.dataset.listenerBound) {
+            exportExcelBtn.dataset.listenerBound = "true";
+            exportExcelBtn.addEventListener("click", openExcelExportModal);
+        }
+
+        const excelCloseBtn = document.getElementById("excelModalCloseBtn");
+        if (excelCloseBtn && !excelCloseBtn.dataset.listenerBound) {
+            excelCloseBtn.dataset.listenerBound = "true";
+            excelCloseBtn.addEventListener("click", closeExcelExportModal);
+        }
+
+        const excelCancelBtn = document.getElementById("excelModalCancelBtn");
+        if (excelCancelBtn && !excelCancelBtn.dataset.listenerBound) {
+            excelCancelBtn.dataset.listenerBound = "true";
+            excelCancelBtn.addEventListener("click", closeExcelExportModal);
+        }
+
+        const excelModal = document.getElementById("excelExportModal");
+        if (excelModal && !excelModal.dataset.listenerBound) {
+            excelModal.dataset.listenerBound = "true";
+            excelModal.addEventListener("click", (e) => {
+                if (e.target === excelModal) {
+                    closeExcelExportModal();
+                }
+            });
+        }
+
+        // Preset Chips in Excel Modal
+        const presetChips = document.querySelectorAll("#excelDatePresets .excel-preset-chip");
+        presetChips.forEach(chip => {
+            if (chip.dataset.listenerBound) return;
+            chip.dataset.listenerBound = "true";
+            chip.addEventListener("click", () => {
+                presetChips.forEach(c => c.classList.remove("active"));
+                chip.classList.add("active");
+                const preset = chip.getAttribute("data-preset");
+                if (preset !== "custom") {
+                    const range = getPresetDateRange(preset);
+                    const sInput = document.getElementById("excelStartDate");
+                    const eInput = document.getElementById("excelEndDate");
+                    if (sInput) sInput.value = range.start;
+                    if (eInput) eInput.value = range.end;
+                }
+            });
+        });
+
+        // Scope & Format option cards
+        const scopeCards = document.querySelectorAll(".excel-options-grid .excel-option-card");
+        scopeCards.forEach(card => {
+            if (card.dataset.listenerBound) return;
+            card.dataset.listenerBound = "true";
+            card.addEventListener("click", () => {
+                const radio = card.querySelector('input[type="radio"]');
+                if (radio) {
+                    radio.checked = true;
+                    const group = document.querySelectorAll(`input[name="${radio.name}"]`);
+                    group.forEach(r => {
+                        const parent = r.closest(".excel-option-card");
+                        if (parent) parent.classList.toggle("active", r === radio);
+                    });
+                }
+            });
+        });
+
+        // Submit Button in Excel Modal
+        const excelSubmitBtn = document.getElementById("excelModalSubmitBtn");
+        if (excelSubmitBtn && !excelSubmitBtn.dataset.listenerBound) {
+            excelSubmitBtn.dataset.listenerBound = "true";
+            excelSubmitBtn.addEventListener("click", executeExcelExport);
         }
     }
 

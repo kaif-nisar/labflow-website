@@ -2563,6 +2563,158 @@ const getAllBookingsController = asyncHandler(async (req, res) => {
     });
 });
 
+const exportCasesDataController = asyncHandler(async (req, res) => {
+    const rawTenantId = req.user?.tenantId?._id || req.user?.tenantId;
+    if (!rawTenantId) {
+        throw new ApiError(401, "Tenant ID not found in session");
+    }
+    const tenantObjId = mongoose.Types.ObjectId.isValid(rawTenantId)
+        ? new mongoose.Types.ObjectId(rawTenantId)
+        : rawTenantId;
+
+    const {
+        bookingIds,
+        regNo,
+        patientName,
+        gender,
+        patientPhone,
+        labName,
+        status,
+        franchisee,
+        doctorName,
+        barcode,
+        startDate,
+        endDate,
+        includeResults = true
+    } = req.body;
+
+    let query = {
+        tenantId: tenantObjId,
+        status: { $nin: ["cancelled", "canceled"] }
+    };
+    const andConditions = [];
+
+    if (Array.isArray(bookingIds) && bookingIds.length > 0) {
+        const cleanIds = bookingIds.map(id => String(id).trim()).filter(Boolean);
+        if (cleanIds.length > 0) {
+            andConditions.push({ bookingId: { $in: cleanIds } });
+        }
+    } else {
+        const parseLocalDateBoundary = (value, endOfDay = false) => {
+            if (!value) return null;
+            const [year, month, day] = String(value).split("-").map(Number);
+            if (!year || !month || !day) return null;
+            return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        };
+
+        const parsedStartDate = parseLocalDateBoundary(startDate, false);
+        const parsedEndDate = parseLocalDateBoundary(endDate, true);
+
+        if (parsedStartDate || parsedEndDate) {
+            query.createdAt = {};
+            if (parsedStartDate) query.createdAt.$gte = parsedStartDate;
+            if (parsedEndDate) query.createdAt.$lte = parsedEndDate;
+        }
+
+        if (regNo) andConditions.push({ bookingId: { $regex: regNo, $options: 'i' } });
+        if (patientName) query.patientName = { $regex: patientName, $options: 'i' };
+        if (gender) query.gender = { $regex: gender, $options: 'i' };
+        if (patientPhone) query.patientPhone = { $regex: patientPhone, $options: 'i' };
+        if (labName) query.labName = { $regex: labName, $options: 'i' };
+        if (status) query.status = { $regex: status, $options: 'i' };
+        if (franchisee) {
+            andConditions.push({
+                $or: [
+                    { createdbyuser: { $regex: franchisee, $options: 'i' } },
+                    { franchisee: { $regex: franchisee, $options: 'i' } }
+                ]
+            });
+        }
+        if (doctorName) {
+            andConditions.push({
+                $or: [
+                    { doctorName: { $regex: doctorName, $options: 'i' } },
+                    { savedDoctor: { $regex: doctorName, $options: 'i' } }
+                ]
+            });
+        }
+
+        if (barcode) {
+            const barcodeDocs = await acceptedBarcode.find(
+                { "barcodes.barcode": { $regex: barcode, $options: 'i' } },
+                { bookingId: 1 }
+            ).lean();
+            if (barcodeDocs.length > 0) {
+                const matchedIds = barcodeDocs.map(doc => doc.bookingId);
+                andConditions.push({ bookingId: { $in: matchedIds } });
+            } else {
+                return res.status(200).json({ cases: [], count: 0 });
+            }
+        }
+    }
+
+    if (andConditions.length > 0) {
+        query.$and = andConditions;
+    }
+
+    const bookings = await newBooking.find(query)
+        .sort({ createdAt: -1 })
+        .limit(10000)
+        .lean();
+
+    if (!bookings || bookings.length === 0) {
+        return res.status(200).json({ cases: [], count: 0 });
+    }
+
+    const allBookingIds = bookings.map(b => b.bookingId).filter(Boolean);
+
+    const barcodeDocs = await acceptedBarcode.find(
+        { bookingId: { $in: allBookingIds } },
+        { bookingId: 1, barcodes: 1 }
+    ).lean();
+
+    const barcodeMap = new Map();
+    barcodeDocs.forEach(item => {
+        if (item && item.bookingId) {
+            const list = Array.isArray(item.barcodes)
+                ? item.barcodes.map(b => (typeof b === "string" ? b : b?.barcode)).filter(Boolean)
+                : [];
+            barcodeMap.set(item.bookingId, list);
+        }
+    });
+
+    const reportMap = new Map();
+    if (includeResults) {
+        const reportDocs = await reports.find({
+            tenantId: tenantObjId,
+            bookingId: { $in: allBookingIds }
+        }).select("bookingId CategoryAndTest collectedOn receivedOn reportedOn signedBy status doctorName").lean();
+
+        reportDocs.forEach(r => {
+            if (r && r.bookingId) {
+                reportMap.set(r.bookingId, r);
+            }
+        });
+    }
+
+    const enrichedCases = bookings.map(b => {
+        const rep = reportMap.get(b.bookingId) || null;
+        const bCodes = barcodeMap.get(b.bookingId) || (Array.isArray(b.acceptedbarcode) ? b.acceptedbarcode : []);
+        return {
+            ...b,
+            acceptedbarcode: bCodes,
+            reportData: rep
+        };
+    });
+
+    return res.status(200).json({
+        success: true,
+        count: enrichedCases.length,
+        cases: enrichedCases
+    });
+});
+
+
 const getDashboardDataController = asyncHandler(async (req, res) => {
     // 1. Strict Tenant ID resolution - strictly prevent data leaks across tenants
     const rawTenantId = req.user?.tenantId?._id || req.user?.tenantId;
@@ -4789,5 +4941,6 @@ export {
     DeleteBookingByParamsController,
     SearchBookingController,
     cancelBookingController,
-    getAllCancelledBookingsController
+    getAllCancelledBookingsController,
+    exportCasesDataController
 }

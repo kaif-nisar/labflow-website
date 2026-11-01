@@ -185,6 +185,7 @@ import {
   NewBookingcontroller,
   allBookingsController,
   getAllBookingsController,
+  exportCasesDataController,
   getAllCancelledBookingsController,
   updatebookingstatus,
   getbarcodebooking,
@@ -937,6 +938,7 @@ router.route("/labs/update").put(verifyJWT, updateLabController);
 router.route("/delete-lab").delete(verifyJWT, deleteLabController);
 // // get all bookings controller
 router.route("/get-bookings").post(verifyJWT, checkStaffPermission("canViewReports"), getAllBookingsController)
+router.route("/export-cases").post(verifyJWT, checkStaffPermission("canViewReports"), exportCasesDataController)
 router.route("/bookings/:bookingId/trf-slip").get(verifyJWT, checkStaffPermission("canViewReports"), generateTrfSlipController)
 
 // // get all cancelled bookings controller

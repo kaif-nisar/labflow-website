@@ -3,6 +3,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>All Cases</title>
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <script src="/vendor/xlsx/xlsx.full.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -1501,6 +1502,21 @@
             box-shadow: 0 4px 10px rgba(5, 150, 105, 0.25);
             transform: translateY(-1px);
         }
+        .btn-export-excel {
+            background: linear-gradient(135deg, #107c41 0%, #15803d 100%);
+            color: #ffffff;
+            border: 1px solid #166534;
+        }
+        .btn-export-excel:hover {
+            background: linear-gradient(135deg, #0e6b37 0%, #14532d 100%);
+            box-shadow: 0 4px 10px rgba(16, 124, 65, 0.3);
+            transform: translateY(-1px);
+        }
+        .btn-export-excel.is-exporting {
+            background: #d97706;
+            color: #ffffff;
+            animation: pulseGlow 1.2s ease-in-out infinite;
+        }
         .btn-bulk-action:disabled {
             opacity: 0.55;
             cursor: not-allowed;
@@ -1787,6 +1803,282 @@
             justify-content: center;
             gap: 5px;
         }
+
+        /* ================= EXCEL EXPORT MODAL STYLES ================= */
+        .excel-modal-overlay {
+            display: none;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(15, 23, 42, 0.72) !important;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            z-index: 2147483647 !important;
+            overflow-y: auto !important;
+            padding: 30px 16px;
+            box-sizing: border-box;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .excel-modal-overlay.is-open {
+            display: flex !important;
+        }
+
+        .excel-modal-card {
+            background: #ffffff;
+            width: 100%;
+            max-width: 680px;
+            border-radius: 18px;
+            box-shadow: 0 25px 65px -12px rgba(15, 23, 42, 0.45);
+            border: 1px solid #cbd5e1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: invModalSlideIn 0.22s ease-out;
+            margin: auto;
+            position: relative;
+        }
+
+        .excel-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 22px;
+            background: linear-gradient(135deg, #0f3822 0%, #107c41 100%);
+            color: #ffffff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .excel-modal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .excel-modal-header-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #86efac;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 19px;
+        }
+
+        .excel-modal-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            margin: 0;
+            color: #ffffff;
+        }
+
+        .excel-modal-subtitle {
+            font-size: 12px;
+            color: #d1fae5;
+            margin: 2px 0 0 0;
+        }
+
+        .excel-modal-close-btn {
+            background: transparent;
+            border: none;
+            color: #cbd5e1;
+            font-size: 20px;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+
+        .excel-modal-close-btn:hover {
+            background: rgba(239, 68, 68, 0.25);
+            color: #f87171;
+        }
+
+        .excel-modal-body {
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            max-height: calc(85vh - 140px);
+            overflow-y: auto;
+        }
+
+        .excel-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .excel-options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .excel-option-card {
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: #ffffff;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .excel-option-card:hover {
+            border-color: #107c41;
+            background: #f0fdf4;
+        }
+
+        .excel-option-card.active {
+            border-color: #107c41;
+            background: #f0fdf4;
+            box-shadow: 0 0 0 1px #107c41;
+        }
+
+        .excel-option-card input[type="radio"] {
+            margin-top: 3px;
+            accent-color: #107c41;
+            cursor: pointer;
+        }
+
+        .excel-option-card-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+            display: block;
+        }
+
+        .excel-option-card-desc {
+            font-size: 11.5px;
+            color: #64748b;
+            margin-top: 2px;
+            display: block;
+            line-height: 1.35;
+        }
+
+        .excel-date-presets {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .excel-preset-chip {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .excel-preset-chip:hover,
+        .excel-preset-chip.active {
+            background: #107c41;
+            color: #ffffff;
+            border-color: #107c41;
+        }
+
+        .excel-date-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .excel-input-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .excel-input-group input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 13px;
+            box-sizing: border-box;
+            background: #fff;
+        }
+
+        .excel-badge-highlight {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 1px 6px;
+            background: #dcfce7;
+            color: #15803d;
+            border-radius: 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            margin-left: 4px;
+        }
+
+        .excel-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .excel-submit-btn {
+            background: linear-gradient(135deg, #107c41 0%, #15803d 100%);
+            color: #ffffff;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 14px rgba(16, 124, 65, 0.28);
+            transition: all 0.15s ease;
+        }
+
+        .excel-submit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(16, 124, 65, 0.38);
+        }
+
+        .excel-submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
     </style>
 </head>
 <body>
@@ -1884,6 +2176,11 @@
                 <i class="fas fa-file-pdf"></i>
                 <span class="btn-label" id="mergeSelectedCasesLabel">Merge Reports</span>
             </button>
+
+            <button class="btn-bulk-action btn-export-excel" id="exportCasesExcelBtn" type="button" title="Export cases and test parameter results to Excel (.xlsx)">
+                <i class="fas fa-file-excel"></i>
+                <span class="btn-label" id="exportCasesExcelLabel">Export to Excel</span>
+            </button>
         </div>
     </div>
 
@@ -1920,6 +2217,140 @@
             <textarea id="messageInput" placeholder="Type your message here..."></textarea>
             <button type="button" id="sendMessage">Send</button>
             <button type="button" id="closePopup">Close</button>
+        </div>
+
+        <!-- ================= EXCEL EXPORT MODAL ================= -->
+        <div id="excelExportModal" class="excel-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="excelModalTitle">
+            <div class="excel-modal-card">
+                <div class="excel-modal-header">
+                    <div class="excel-modal-header-left">
+                        <div class="excel-modal-header-icon">
+                            <i class="fa-solid fa-file-excel"></i>
+                        </div>
+                        <div>
+                            <h2 id="excelModalTitle" class="excel-modal-title">Export Cases & Test Results to Excel</h2>
+                            <p class="excel-modal-subtitle">Download comprehensive pathology MIS records & clinical findings (.xlsx)</p>
+                        </div>
+                    </div>
+                    <button type="button" id="excelModalCloseBtn" class="excel-modal-close-btn" title="Close" aria-label="Close modal">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="excel-modal-body">
+                    <!-- Export Scope -->
+                    <div>
+                        <div class="excel-section-title">
+                            <i class="fa-solid fa-layer-group" style="color:#107c41;"></i>
+                            <span>1. Select Cases Scope</span>
+                        </div>
+                        <div class="excel-options-grid">
+                            <label class="excel-option-card active" id="excelScopeCardFiltered">
+                                <input type="radio" name="excelExportScope" value="filtered" checked>
+                                <div>
+                                    <span class="excel-option-card-label">Date Range / Filtered Cases</span>
+                                    <span class="excel-option-card-desc">All records matching selected date range & filters</span>
+                                </div>
+                            </label>
+
+                            <label class="excel-option-card" id="excelScopeCardSelected">
+                                <input type="radio" name="excelExportScope" value="selected" id="excelScopeSelectedRadio">
+                                <div>
+                                    <span class="excel-option-card-label">Selected Cases <span class="excel-badge-highlight" id="excelSelectedBadge" style="display:none;">0</span></span>
+                                    <span class="excel-option-card-desc" id="excelSelectedDesc">Only cases checked in current table</span>
+                                </div>
+                            </label>
+
+                            <label class="excel-option-card" id="excelScopeCardCurrentPage">
+                                <input type="radio" name="excelExportScope" value="page">
+                                <div>
+                                    <span class="excel-option-card-label">Current Page Only</span>
+                                    <span class="excel-option-card-desc">Cases currently loaded in table view</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Date Range Selection -->
+                    <div id="excelDateRangeSection">
+                        <div class="excel-section-title">
+                            <i class="fa-solid fa-calendar-days" style="color:#107c41;"></i>
+                            <span>2. Date Range</span>
+                        </div>
+                        <div class="excel-date-presets" id="excelDatePresets">
+                            <button type="button" class="excel-preset-chip" data-preset="today">Today</button>
+                            <button type="button" class="excel-preset-chip" data-preset="yesterday">Yesterday</button>
+                            <button type="button" class="excel-preset-chip" data-preset="last7">Last 7 Days</button>
+                            <button type="button" class="excel-preset-chip active" data-preset="thismonth">This Month</button>
+                            <button type="button" class="excel-preset-chip" data-preset="lastmonth">Last Month</button>
+                            <button type="button" class="excel-preset-chip" data-preset="custom">Custom</button>
+                        </div>
+                        <div class="excel-date-inputs">
+                            <div class="excel-input-group">
+                                <label for="excelStartDate">From Date:</label>
+                                <input type="date" id="excelStartDate">
+                            </div>
+                            <div class="excel-input-group">
+                                <label for="excelEndDate">To Date:</label>
+                                <input type="date" id="excelEndDate">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export Content Format -->
+                    <div>
+                        <div class="excel-section-title">
+                            <i class="fa-solid fa-table-list" style="color:#107c41;"></i>
+                            <span>3. Excel Content & Sheets</span>
+                        </div>
+                        <div class="excel-options-grid">
+                            <label class="excel-option-card active" id="excelFormatCardFull">
+                                <input type="radio" name="excelExportFormat" value="full" checked>
+                                <div>
+                                    <span class="excel-option-card-label">Comprehensive MIS (2 Sheets) <span class="excel-badge-highlight">Best</span></span>
+                                    <span class="excel-option-card-desc">Sheet 1: Case Summary + Sheet 2: Test Results & Parameter Values</span>
+                                </div>
+                            </label>
+
+                            <label class="excel-option-card" id="excelFormatCardSummary">
+                                <input type="radio" name="excelExportFormat" value="summary">
+                                <div>
+                                    <span class="excel-option-card-label">Case Summary Only</span>
+                                    <span class="excel-option-card-desc">One row per case with patient, doctor, billing & test names</span>
+                                </div>
+                            </label>
+
+                            <label class="excel-option-card" id="excelFormatCardParameters">
+                                <input type="radio" name="excelExportFormat" value="parameters">
+                                <div>
+                                    <span class="excel-option-card-label">Parameter Results Only</span>
+                                    <span class="excel-option-card-desc">Detailed rows for each test parameter with observed values & ranges</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Additional Options -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer;">
+                            <input type="checkbox" id="excelOptIncludeResults" checked style="accent-color: #107c41; width: 16px; height: 16px;">
+                            <span>Include verified clinical values, units & normal reference ranges</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer;">
+                            <input type="checkbox" id="excelOptAutoFitCols" checked style="accent-color: #107c41; width: 16px; height: 16px;">
+                            <span>Auto-fit column widths (Optimized for Microsoft Excel & Google Sheets)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="excel-modal-footer">
+                    <button type="button" id="excelModalCancelBtn" class="inv-btn-secondary">Cancel</button>
+                    <button type="button" id="excelModalSubmitBtn" class="excel-submit-btn">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Download Excel (.xlsx)</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- ================= INVOICE CUSTOMIZER MODAL ================= -->
