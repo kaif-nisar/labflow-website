@@ -34,6 +34,9 @@ const pannelSchema = new Schema({
     { timestamps: true }
 )
 
+pannelSchema.index({ tenantId: 1, bookingId: 1 });
+pannelSchema.index({ tenantId: 1, "barcodes.barcode": 1 });
+
 const acceptedBarcode = mongoose.model("acceptedBarcode", pannelSchema)
 
 export { acceptedBarcode }

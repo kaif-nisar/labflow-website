@@ -1,4 +1,4 @@
-async function loadfunction() {
+﻿async function loadfunction() {
     function ensureStatusHost() {
         let host = document.getElementById("status-message-host");
         if (host) return host;
@@ -59,19 +59,19 @@ async function loadfunction() {
         englishBody:
             "Your account is already active and running on another computer/laptop. As per your single-institute plan, concurrent login is restricted.",
         englishUpgrade:
-            "UPGRADE YOUR PLAN NOW: Run LabFlowLIS on multiple devices simultaneously for just ₹299/Month per extra device!",
+            "UPGRADE YOUR PLAN NOW: Run LabFlowLIS on multiple devices simultaneously for just â‚¹299/Month per extra device!",
         englishSteps:
-            "How to unlock instantly: Scan the QR Code below, make the payment of ₹299, and click the WhatsApp button to send us the screenshot. We will activate your extra device within 2 minutes!",
+            "How to unlock instantly: Scan the QR Code below, make the payment of â‚¹299, and click the WhatsApp button to send us the screenshot. We will activate your extra device within 2 minutes!",
         hindiTitle:
-            "सॉफ्टवेयर ब्लॉक कर दिया गया है! डिवाइस की सीमा समाप्त",
+            "à¤¸à¥‰à¤«à¥à¤Ÿà¤µà¥‡à¤¯à¤° à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ! à¤¡à¤¿à¤µà¤¾à¤‡à¤¸ à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤",
         hindiBody:
-            "आपका अकाउंट पहले से ही किसी दूसरे कंप्यूटर या मोबाइल पर चल रहा है। नियम के अनुसार, यह प्लान केवल एक ही लैब/संस्थान के उपयोग के लिए है।",
+            "à¤†à¤ªà¤•à¤¾ à¤…à¤•à¤¾à¤‰à¤‚à¤Ÿ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¹à¥€ à¤•à¤¿à¤¸à¥€ à¤¦à¥‚à¤¸à¤°à¥‡ à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤° à¤¯à¤¾ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤ªà¤° à¤šà¤² à¤°à¤¹à¤¾ à¤¹à¥ˆà¥¤ à¤¨à¤¿à¤¯à¤® à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤°, à¤¯à¤¹ à¤ªà¥à¤²à¤¾à¤¨ à¤•à¥‡à¤µà¤² à¤à¤• à¤¹à¥€ à¤²à¥ˆà¤¬/à¤¸à¤‚à¤¸à¥à¤¥à¤¾à¤¨ à¤•à¥‡ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¥‡ à¤²à¤¿à¤ à¤¹à¥ˆà¥¤",
         hindiUpgrade:
-            "तुरंत नया प्लान लें: एक साथ कई कंप्यूटरों पर सॉफ्टवेयर चलाने के लिए अभी अपना प्लान बदलें, मात्र ₹299/महीना प्रति अतिरिक्त कंप्यूटर!",
+            "à¤¤à¥à¤°à¤‚à¤¤ à¤¨à¤¯à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤²à¥‡à¤‚: à¤à¤• à¤¸à¤¾à¤¥ à¤•à¤ˆ à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤°à¥‹à¤‚ à¤ªà¤° à¤¸à¥‰à¤«à¥à¤Ÿà¤µà¥‡à¤¯à¤° à¤šà¤²à¤¾à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤­à¥€ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤¬à¤¦à¤²à¥‡à¤‚, à¤®à¤¾à¤¤à¥à¤° â‚¹299/à¤®à¤¹à¥€à¤¨à¤¾ à¤ªà¥à¤°à¤¤à¤¿ à¤…à¤¤à¤¿à¤°à¤¿à¤•à¥à¤¤ à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤°!",
         hindiSteps:
-            "चालू करने का आसान तरीका: नीचे दिए गए QR कोड को स्कैन करके ₹299 का भुगतान करें, और WhatsApp बटन पर क्लिक करके पेमेंट का स्क्रीनशॉट भेजें। हम 2 मिनट में आपका दूसरा कंप्यूटर चालू कर देंगे!",
+            "à¤šà¤¾à¤²à¥‚ à¤•à¤°à¤¨à¥‡ à¤•à¤¾ à¤†à¤¸à¤¾à¤¨ à¤¤à¤°à¥€à¤•à¤¾: à¤¨à¥€à¤šà¥‡ à¤¦à¤¿à¤ à¤—à¤ QR à¤•à¥‹à¤¡ à¤•à¥‹ à¤¸à¥à¤•à¥ˆà¤¨ à¤•à¤°à¤•à¥‡ â‚¹299 à¤•à¤¾ à¤­à¥à¤—à¤¤à¤¾à¤¨ à¤•à¤°à¥‡à¤‚, à¤”à¤° WhatsApp à¤¬à¤Ÿà¤¨ à¤ªà¤° à¤•à¥à¤²à¤¿à¤• à¤•à¤°à¤•à¥‡ à¤ªà¥‡à¤®à¥‡à¤‚à¤Ÿ à¤•à¤¾ à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤­à¥‡à¤œà¥‡à¤‚à¥¤ à¤¹à¤® 2 à¤®à¤¿à¤¨à¤Ÿ à¤®à¥‡à¤‚ à¤†à¤ªà¤•à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤° à¤šà¤¾à¤²à¥‚ à¤•à¤° à¤¦à¥‡à¤‚à¤—à¥‡!",
         speech:
-            "सावधान! आपकी डिवाइस सीमा समाप्त हो चुकी है। यह सॉफ्टवेयर पहले से ही किसी और कंप्यूटर पर एक्टिव है। अगर आप इसे इस कंप्यूटर पर भी एक साथ चलाना चाहते हैं, तो स्क्रीन पर दिए गए क्यूआर कोड पर दो सौ निन्यानबे रुपये का भुगतान करें, और स्क्रीनशॉट व्हाट्सऐप पर भेजकर इसे तुरंत चालू करवाएं।",
+            "à¤¸à¤¾à¤µà¤§à¤¾à¤¨! à¤†à¤ªà¤•à¥€ à¤¡à¤¿à¤µà¤¾à¤‡à¤¸ à¤¸à¥€à¤®à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤ à¤¯à¤¹ à¤¸à¥‰à¤«à¥à¤Ÿà¤µà¥‡à¤¯à¤° à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¹à¥€ à¤•à¤¿à¤¸à¥€ à¤”à¤° à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤° à¤ªà¤° à¤à¤•à¥à¤Ÿà¤¿à¤µ à¤¹à¥ˆà¥¤ à¤…à¤—à¤° à¤†à¤ª à¤‡à¤¸à¥‡ à¤‡à¤¸ à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤° à¤ªà¤° à¤­à¥€ à¤à¤• à¤¸à¤¾à¤¥ à¤šà¤²à¤¾à¤¨à¤¾ à¤šà¤¾à¤¹à¤¤à¥‡ à¤¹à¥ˆà¤‚, à¤¤à¥‹ à¤¸à¥à¤•à¥à¤°à¥€à¤¨ à¤ªà¤° à¤¦à¤¿à¤ à¤—à¤ à¤•à¥à¤¯à¥‚à¤†à¤° à¤•à¥‹à¤¡ à¤ªà¤° à¤¦à¥‹ à¤¸à¥Œ à¤¨à¤¿à¤¨à¥à¤¯à¤¾à¤¨à¤¬à¥‡ à¤°à¥à¤ªà¤¯à¥‡ à¤•à¤¾ à¤­à¥à¤—à¤¤à¤¾à¤¨ à¤•à¤°à¥‡à¤‚, à¤”à¤° à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤µà¥à¤¹à¤¾à¤Ÿà¥à¤¸à¤à¤ª à¤ªà¤° à¤­à¥‡à¤œà¤•à¤° à¤‡à¤¸à¥‡ à¤¤à¥à¤°à¤‚à¤¤ à¤šà¤¾à¤²à¥‚ à¤•à¤°à¤µà¤¾à¤à¤‚à¥¤",
     };
 
     function injectDeviceLockStyles() {
@@ -285,7 +285,7 @@ async function loadfunction() {
                         <p>${DEVICE_LOCK_MESSAGE.englishSteps}</p>
                     </div>
                     <div class="device-lock-card">
-                        <h2>हिंदी / Hindi</h2>
+                        <h2>à¤¹à¤¿à¤‚à¤¦à¥€ / Hindi</h2>
                         <p>${DEVICE_LOCK_MESSAGE.hindiTitle}</p>
                         <p style="margin-top: 10px;">${DEVICE_LOCK_MESSAGE.hindiBody}</p>
                         <p style="margin-top: 10px;">${DEVICE_LOCK_MESSAGE.hindiUpgrade}</p>
@@ -303,7 +303,7 @@ async function loadfunction() {
                         <h2>WhatsApp Approval</h2>
                         <p>Send the payment screenshot here and we will enable the extra device fast.</p>
                         <a class="device-lock-whatsapp" data-device-lock-whatsapp target="_blank" rel="noreferrer noopener">
-                            WhatsApp पर स्क्रीनशॉट भेजें और चालू करवाएं
+                            WhatsApp à¤ªà¤° à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤­à¥‡à¤œà¥‡à¤‚ à¤”à¤° à¤šà¤¾à¤²à¥‚ à¤•à¤°à¤µà¤¾à¤à¤‚
                         </a>
                         <div class="device-lock-note">
                             If the screen stays blocked, refresh is not enough. Please complete the payment or contact the admin.
@@ -860,7 +860,7 @@ async function loadfunction() {
             if (char === "{" && source[index + 1] === "{") {
                 const endIndex = source.indexOf("}}", index + 2);
                 if (endIndex === -1) {
-                    throw new Error("Formula placeholder बंद नहीं हुआ है।");
+                    throw new Error("Formula placeholder à¤¬à¤‚à¤¦ à¤¨à¤¹à¥€à¤‚ à¤¹à¥à¤† à¤¹à¥ˆà¥¤");
                 }
 
                 const parameterId = source.slice(index + 2, endIndex).trim();
@@ -975,7 +975,7 @@ async function loadfunction() {
         function parseFactor() {
             const token = cursor.peek();
             if (!token) {
-                throw new Error("Formula expression अधूरा है।");
+                throw new Error("Formula expression à¤…à¤§à¥‚à¤°à¤¾ à¤¹à¥ˆà¥¤");
             }
 
             if (token.type === "+") {
@@ -1045,7 +1045,7 @@ async function loadfunction() {
 
         const result = parseExpression();
         if (!cursor.isComplete()) {
-            throw new Error("Formula expression invalid है।");
+            throw new Error("Formula expression invalid à¤¹à¥ˆà¥¤");
         }
         return result;
     }
@@ -2665,9 +2665,9 @@ async function loadfunction() {
         });
     }
 
-    // ✅ CKEditor initialization with proper button setup
+    // âœ… CKEditor initialization with proper button setup
     const editorInstances = new Map();
-    const previousContentMap = new Map(); // ✅ Global map for storing previous content
+    const previousContentMap = new Map(); // âœ… Global map for storing previous content
 
     const initEditor = (uniqueTestId, interpretation) => {
 
@@ -2679,7 +2679,7 @@ async function loadfunction() {
             return;
         }
 
-        // अगर editor पहले से exist करता है तो destroy करें
+        // à¤…à¤—à¤° editor à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ exist à¤•à¤°à¤¤à¤¾ à¤¹à¥ˆ à¤¤à¥‹ destroy à¤•à¤°à¥‡à¤‚
         if (editorInstances.has(uniqueTestId)) {
             editorInstances.get(uniqueTestId).destroy()
                 .then(() => {
@@ -2794,7 +2794,7 @@ async function loadfunction() {
             .then(editor => {
                 editorInstances.set(uniqueTestId, editor);
 
-                // ✅ Store original content in global map
+                // âœ… Store original content in global map
                 if (interpretation) {
                     editor.setData(interpretation);
                     previousContentMap.set(uniqueTestId, interpretation);
@@ -2808,13 +2808,13 @@ async function loadfunction() {
                 editorElement.parentNode.insertBefore(toolbarContainer, editorElement);
                 toolbarContainer.appendChild(editor.ui.view.toolbar.element);
 
-                // ✅ CRITICAL: Button event listeners ko editor ready hone ke BAAD attach karo
+                // âœ… CRITICAL: Button event listeners ko editor ready hone ke BAAD attach karo
                 setupEditorButtons(uniqueTestId);
             })
             .catch(error => console.error(error));
     }
 
-    // ✅ Separate function for button setup (called AFTER editor is ready)
+    // âœ… Separate function for button setup (called AFTER editor is ready)
     function setupEditorButtons(uniqueTestId) {
         const test = { _id: uniqueTestId }; // Get test object reference if needed
         // Get button references
@@ -2823,7 +2823,7 @@ async function loadfunction() {
         const restoreDefaultButton = document.querySelector(`[data-editor-id="${uniqueTestId}"][data-action="restore-default"]`);
         const restorePreviousButton = document.querySelector(`[data-editor-id="${uniqueTestId}"][data-action="restore-previous"]`);
 
-        // ✅ Save as Default
+        // âœ… Save as Default
         if (saveAsDefaultButton) {
             saveAsDefaultButton.addEventListener("click", () => {
                 const userConfirmed = confirm("Are you sure you want to save this template as default?");
@@ -2852,7 +2852,7 @@ async function loadfunction() {
             });
         }
 
-        // ✅ Save Template
+        // âœ… Save Template
         if (saveTemplateButton) {
             saveTemplateButton.addEventListener("click", () => {
                 const popup = document.createElement("div");
@@ -2904,7 +2904,7 @@ async function loadfunction() {
             });
         }
 
-        // ✅ Restore Default
+        // âœ… Restore Default
         if (restoreDefaultButton) {
             restoreDefaultButton.addEventListener("click", () => {
                 const defaultContent = previousContentMap.get(uniqueTestId);
@@ -2917,7 +2917,7 @@ async function loadfunction() {
             });
         }
 
-        // ✅ Restore Previous
+        // âœ… Restore Previous
         if (restorePreviousButton) {
             restorePreviousButton.addEventListener("click", () => {
                 const previousContent = previousContentMap.get(`${uniqueTestId}_previous`);
@@ -2967,7 +2967,7 @@ async function loadfunction() {
         }
     }
 
-    // ✅ Modified fetchTemplates function
+    // âœ… Modified fetchTemplates function
     async function fetchTemplates(uniqueTestId, testId) {
         const apiDataDiv = document.querySelector(`#apiData-${uniqueTestId}`);
 
@@ -2997,7 +2997,7 @@ async function loadfunction() {
         }
     }
 
-    // ✅ Modified addTemplate function with proper event handling
+    // âœ… Modified addTemplate function with proper event handling
     function addTemplate(template, uniqueTestId) {
         const apiDataDiv = document.querySelector(`#apiData-${uniqueTestId}`);
         const templateDiv = document.createElement("div");
@@ -3008,7 +3008,7 @@ async function loadfunction() {
         templateNameSpan.style.cursor = "pointer";
         templateNameSpan.setAttribute("title", "Double click to choose");
 
-        // ✅ Template apply karne par previous content save karo
+        // âœ… Template apply karne par previous content save karo
         templateNameSpan.addEventListener("click", () => {
             const currentContent = getEditorContent(uniqueTestId);
 
@@ -3022,7 +3022,7 @@ async function loadfunction() {
         });
 
         const deleteIcon = document.createElement("span");
-        deleteIcon.textContent = "🗑️";
+        deleteIcon.textContent = "ðŸ—‘ï¸";
         deleteIcon.style.cursor = "pointer";
         deleteIcon.style.color = "red";
         deleteIcon.style.marginLeft = "10px";
@@ -3074,7 +3074,7 @@ async function loadfunction() {
             editorInstances.delete(uniqueTestId);
 
         } catch (error) {
-            console.error(`❌ Error destroying editor ${uniqueTestId}:`, error);
+            console.error(`âŒ Error destroying editor ${uniqueTestId}:`, error);
             // Forcefully delete from map even if destroy fails
             editorInstances.delete(uniqueTestId);
         }
@@ -3170,7 +3170,7 @@ async function loadfunction() {
                     return button;
                 };
 
-                // ✅ Create buttons with data attributes
+                // âœ… Create buttons with data attributes
                 const saveAsDefaultButton = createButton(
                     "Save as Default",
                     "save-as-default-btn",
@@ -3218,7 +3218,7 @@ async function loadfunction() {
                 detailsRow.appendChild(detailsCell);
                 tbody.appendChild(detailsRow);
 
-                // ✅ Initialize editor AND fetch templates
+                // âœ… Initialize editor AND fetch templates
                 setTimeout(() => {
                     initEditor(uniqueTestId, test.interpretation);
 
@@ -3595,10 +3595,10 @@ async function loadfunction() {
 
             const testId = input.getAttribute('data-id');
 
-            // ✅ NEW: Check forRandom attribute
+            // âœ… NEW: Check forRandom attribute
             const forRandom = input.getAttribute('data-for-random');
 
-            // ✅ If forRandom is not true, skip this field
+            // âœ… If forRandom is not true, skip this field
             if (forRandom !== 'true') {
                 return;
             }
@@ -3612,7 +3612,7 @@ async function loadfunction() {
                 return;
             }
 
-            // ✅ NEW: Get lowerRange and upperRange instead of lowerValue and upperValue
+            // âœ… NEW: Get lowerRange and upperRange instead of lowerValue and upperValue
             const lowerRange = parseFloat(input.getAttribute('data-lower-range'));
             const upperRange = parseFloat(input.getAttribute('data-upper-range'));
 
@@ -3821,7 +3821,7 @@ async function loadfunction() {
         // Create a map to group sections by category
         const categoryMap = new Map();
 
-        // 🟢 Step 1: Group sections by category
+        // ðŸŸ¢ Step 1: Group sections by category
         for (const section of sections) {
             const categoryHeading = section.querySelector("h2");
             if (categoryHeading) {
@@ -3845,20 +3845,20 @@ async function loadfunction() {
                     section.insertBefore(h3Tag, tables[0]);
                 }
 
-                // 🟢 Step 2: Sort rows inside all tables
+                // ðŸŸ¢ Step 2: Sort rows inside all tables
                 for (const table of tables) {
                     const tbody = table.querySelector("tbody");
                     if (tbody) {
                         const rows = Array.from(tbody.querySelectorAll(":scope > tr"));
 
-                        // ✅ Sorting rows based on `data-order`
+                        // âœ… Sorting rows based on `data-order`
                         rows.sort((rowA, rowB) => {
                             const orderA = parseInt(rowA.getAttribute("data-order"), 10) || 9999;
                             const orderB = parseInt(rowB.getAttribute("data-order"), 10) || 9999;
                             return orderA - orderB;
                         });
 
-                        // ✅ Clear existing rows and append sorted rows
+                        // âœ… Clear existing rows and append sorted rows
                         tbody.innerHTML = "";
                         for (const row of rows) {
                             tbody.appendChild(row);
@@ -3871,7 +3871,7 @@ async function loadfunction() {
             }
         }
 
-        // 🟢 Step 3: Clear the container and re-add grouped sections
+        // ðŸŸ¢ Step 3: Clear the container and re-add grouped sections
         container.innerHTML = "";
 
         // Sort categories by `data-order`
@@ -3879,7 +3879,7 @@ async function loadfunction() {
             ([, { dataOrder: orderA }], [, { dataOrder: orderB }]) => (orderA || 0) - (orderB || 0)
         );
 
-        // 🟢 Step 4: Append sorted categories and sections
+        // ðŸŸ¢ Step 4: Append sorted categories and sections
         for (const [category, { sections, dataOrder }] of sortedCategories) {
             const groupedSection = document.createElement("div");
             groupedSection.classList.add("grouped-section");
@@ -4110,7 +4110,7 @@ async function loadfunction() {
 
                 if (editorContainer) {
                     const editorId = editorContainer.id;
-                    const uniqueTestId = editorId.replace('editorContent-', ''); // ✅ Extract uniqueTestId
+                    const uniqueTestId = editorId.replace('editorContent-', ''); // âœ… Extract uniqueTestId
                     const matchingData = enteredValuesById.get(editorId);
                     checkbox.checked = matchingData?.pagebreak || false;
 
@@ -4204,31 +4204,109 @@ async function loadfunction() {
 
         function populatelisresult(data) {
             const object = data.data;
+            let populatedCount = 0;
 
-            Object.entries(object).forEach(([Key, value]) => {
-                value.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            function findMachineValue(lisData, input) {
+                if (!lisData || typeof lisData !== "object" || !input) return undefined;
 
-                value.forEach((element) => {
+                const candidates = [
+                    input.getAttribute('data-Shortname'),
+                    input.dataset?.shortname,
+                    input.dataset?.paramName,
+                    input.dataset?.id,
+                    input.dataset?.masterParamKey,
+                    input.closest("tr")?.querySelector(".test-name-cell")?.textContent?.trim(),
+                    input.closest("tr")?.children?.[1]?.textContent?.trim()
+                ].filter(Boolean);
 
-                    for (const row of tablecontainer) {
-                        const input = row.querySelector(".value-input");
+                const cleanStr = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-                        if (input) {
-                            const shortName = input.getAttribute('data-Shortname');
+                // 1. Exact match on any candidate key
+                for (const cand of candidates) {
+                    if (Object.prototype.hasOwnProperty.call(lisData, cand)) {
+                        return lisData[cand];
+                    }
+                }
 
-                            // Find matching entry
-                            if (element.lisData.hasOwnProperty(shortName)) {
-                                input.value = element.lisData[shortName];
-                                if (input.dataset.formulaField === "true") {
-                                    input.dataset.formulaManual = "true";
-                                }
-                                processInput(input);
-                                handleInputChange(input);
+                // 2. Case-insensitive & normalized match
+                const lisEntries = Object.entries(lisData).filter(([k]) => !k.startsWith("_") && k !== "sample_id");
+
+                for (const cand of candidates) {
+                    const normCand = cleanStr(cand);
+                    if (!normCand) continue;
+
+                    for (const [key, val] of lisEntries) {
+                        if (cleanStr(key) === normCand) {
+                            return val;
+                        }
+                    }
+                }
+
+                // 3. Clinical alias matching
+                if (typeof normalizeClinicalName === "function") {
+                    for (const cand of candidates) {
+                        const candClin = normalizeClinicalName(cand);
+                        if (!candClin) continue;
+
+                        for (const [key, val] of lisEntries) {
+                            const keyClin = normalizeClinicalName(key);
+                            if (keyClin && keyClin === candClin) {
+                                return val;
                             }
                         }
                     }
-                })
+                }
+
+                return undefined;
+            }
+
+            Object.entries(object).forEach(([Key, value]) => {
+                if (!Array.isArray(value)) return;
+                value.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+                value.forEach((element) => {
+                    if (!element?.lisData) return;
+
+                    for (const row of tablecontainer) {
+                        const input = row.querySelector(".value-input");
+                        if (!input) continue;
+
+                        const machineVal = findMachineValue(element.lisData, input);
+
+                        if (machineVal !== undefined && machineVal !== null && machineVal !== "") {
+                            input.value = machineVal;
+                            if (input.dataset.formulaField === "true") {
+                                input.dataset.formulaManual = "true";
+                            }
+
+                            // Subtle highlight animation for imported fields
+                            input.style.transition = "background-color 0.4s ease, border-color 0.4s ease";
+                            const origBg = input.style.backgroundColor;
+                            input.style.backgroundColor = "#e8f7ee";
+                            input.style.borderColor = "#2e9b57";
+                            setTimeout(() => {
+                                input.style.backgroundColor = origBg;
+                                input.style.borderColor = "";
+                            }, 1800);
+
+                            processInput(input);
+                            handleInputChange(input);
+                            populatedCount++;
+                        }
+                    }
+                });
             });
+
+            if (typeof syncDifferentialPercentageValidation === "function") {
+                syncDifferentialPercentageValidation();
+            }
+            if (typeof recalculateAllFormulas === "function") {
+                recalculateAllFormulas();
+            }
+
+            if (populatedCount > 0) {
+                showStatusMessage(`LIS: Successfully loaded ${populatedCount} parameter value(s) from analyzer!`, "success", 4000);
+            }
         }
     }
 
@@ -4345,19 +4423,19 @@ async function loadfunction() {
 
         if (editButton) {
             editButton.addEventListener('click', async function () {
-                // ✅ Pehle existing editor ko destroy karo (agar exist karta hai)
+                // âœ… Pehle existing editor ko destroy karo (agar exist karta hai)
                 if (editorInstances.has(editorKey)) {
                     await editorInstances.get(editorKey).destroy();
                     editorInstances.delete(editorKey);
                 }
 
-                // ✅ Purane toolbar ko remove karo
+                // âœ… Purane toolbar ko remove karo
                 const existingToolbar = editorContainer.querySelector('.ck-toolbar-container');
                 if (existingToolbar) {
                     existingToolbar.remove();
                 }
 
-                // ✅ Editor element ko clear karo
+                // âœ… Editor element ko clear karo
                 const editorElement = document.querySelector(`#${editorElementId}`);
                 if (editorElement) {
                     editorElement.innerHTML = '';
@@ -4367,7 +4445,7 @@ async function loadfunction() {
                 displayArea.style.display = 'none';
                 editorContainer.style.display = 'block';
 
-                // ✅ CKEditor initialize karo - safely check first
+                // âœ… CKEditor initialize karo - safely check first
                 if (!window.CKEDITOR || !window.CKEDITOR.DecoupledEditor) {
                     console.error('CKEditor not available');
                     showStatusMessage('Editor not available. Please refresh the page.', 'error');
@@ -4459,23 +4537,23 @@ async function loadfunction() {
                         placeholder: 'Type your content here...'
                     });
 
-                    // ✅ Toolbar ko manually attach karo
+                    // âœ… Toolbar ko manually attach karo
                     const toolbarContainer = document.createElement('div');
                     toolbarContainer.classList.add('ck-toolbar-container');
                     editorContainer.insertBefore(toolbarContainer, editorElement);
                     toolbarContainer.appendChild(editor.ui.view.toolbar.element);
 
-                    // ✅ Editor instance ko store karo
+                    // âœ… Editor instance ko store karo
                     editorInstances.set(editorKey, editor);
 
-                    // ✅ Initial content set karo
+                    // âœ… Initial content set karo
                     if (interpretationText?.innerHTML) {
                         editor.setData(interpretationText.innerHTML);
                     }
 
 
                 } catch (error) {
-                    console.error('❌ Error initializing CKEditor:', error);
+                    console.error('âŒ Error initializing CKEditor:', error);
                 }
             });
 
@@ -4822,9 +4900,9 @@ async function loadfunction() {
 
             if (editorContainer) {
                 const editorId = editorContainer.id;
-                const uniqueTestId = editorId.replace('editorContent-', ''); // ✅ Extract uniqueTestId
+                const uniqueTestId = editorId.replace('editorContent-', ''); // âœ… Extract uniqueTestId
 
-                // ✅ CKEditor se data lena
+                // âœ… CKEditor se data lena
                 const editorContent = getEditorContent(uniqueTestId);
 
                 // Debug
@@ -5160,7 +5238,7 @@ function addRow() {
         newRow = document.createElement('div');
         newRow.className = 'row-container';
         newRow.innerHTML = `
-            <span class="delete-btn" onclick="deleteRow(this)">🗑️</span>
+            <span class="delete-btn" onclick="deleteRow(this)">ðŸ—‘ï¸</span>
             <div class="row-item">
                 <label for="sex">Sex</label>
                 <select name="sex" class="sex">
@@ -5462,7 +5540,7 @@ function populateRows(parameter) {
         rowContainer.classList.add('row-container');
 
         rowContainer.innerHTML = `
-            <span class="delete-btn" onclick="deleteRow(this)">🗑️</span>
+            <span class="delete-btn" onclick="deleteRow(this)">ðŸ—‘ï¸</span>
             <div class="row-item">
                 <label for="sex">Sex</label>
                 <select name="sex" class="sex">

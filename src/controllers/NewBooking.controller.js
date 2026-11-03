@@ -20,6 +20,11 @@ import {
     buildValidatedSelectionSnapshot,
     getDoctorDisplayName,
 } from "../utils/doctorPricing.js";
+import {
+    validateBarcodesForBooking,
+    syncPrePrintedBarcodesForBooking,
+    releasePrePrintedBarcodesForBooking,
+} from "./barcode.controller.js";
 
 const getEffectiveBookingUserId = (req) => (
     req.user.role === "staff" ? req.user.parentUser : req.user._id
@@ -695,17 +700,18 @@ const NewBookingcontroller = asyncHandler(async (req, res) => {
             return res.status(400).json({ message: "At least one test, panel or package is required" });
         }
 
-        // Check for duplicate barcodes
-        for (const element of tableData2) {
-            console.log("This is an element:", element);
+        // Validate sample barcodes (tenant-scoped, excludes cancelled bookings, honors pre-printed pool & void status)
+        const barcodeValidation = await validateBarcodesForBooking({
+            tenantId: tenantId._id,
+            rows: tableData2,
+            currentUser: req.user,
+            excludeBookingIds: barcodeId ? [barcodeId] : [],
+        });
 
-            const isBarcodeIdPresent = await newBooking.findOne({
-                'tableData.barcodeId': element.confirmBarcodeId
-            });
-
-            if (isBarcodeIdPresent) {
-                return res.status(400).json({ message: `${element.confirmBarcodeId} barcode already present` });
-            }
+        if (!barcodeValidation.valid) {
+            return res
+                .status(barcodeValidation.statusCode || 400)
+                .json({ message: barcodeValidation.message });
         }
 
         // Check if booking already exists
@@ -1143,6 +1149,14 @@ const NewBookingcontroller = asyncHandler(async (req, res) => {
 
         const booking = createdBooking[0];
 
+        // Mark any pre-printed pool barcodes used in this booking
+        await syncPrePrintedBarcodesForBooking({
+            tenantId: tenantId._id,
+            bookingDoc: booking,
+            tableData: booking.tableData,
+            actorUser: req.user,
+        });
+
         // Staff activity tracking
         if (req.user.role === 'staff') {
             await User.findByIdAndUpdate(
@@ -1433,6 +1447,15 @@ const cancelBookingController = asyncHandler(async (req, res) => {
         existingBooking.cancelledBy = req.user._id;
         await existingBooking.save();
 
+        // Release any pre-printed pool barcodes & clean up acceptedBarcode entries
+        await releasePrePrintedBarcodesForBooking({
+            tenantId: tenantId._id,
+            bookingDoc: existingBooking,
+            bookingId: existingBooking.bookingId,
+            barcodes: sampleBarcodeId,
+            cleanupAcceptedBarcodes: true,
+        });
+
         // Add activity for staff cancellation
         if (req.user.role === 'staff') {
             await User.findByIdAndUpdate(req.user._id, {
@@ -1678,7 +1701,11 @@ const editbookingbookedtests = async (req, res) => {
             return res.status(404).json({ message: 'Booking has been Cancelled' });
         }
 
-        // Validate barcodes uniqueness (excluding current booking)
+        const previousBarcodeIds = (existingBooking.tableData || [])
+            .map(entry => entry?.barcodeId || entry?.confirmBarcodeId)
+            .filter(Boolean);
+
+        // Validate barcodes uniqueness & pre-printed pool rules (excluding current booking & cancelled bookings)
         const excludedBookingIdsForValidation = [
             ...new Set([
                 existingBooking.bookingId,
@@ -1687,20 +1714,18 @@ const editbookingbookedtests = async (req, res) => {
             ].map(id => String(id || '').trim()).filter(Boolean))
         ];
 
-        for (const element of tableData2) {
-            const barcodeVal = element.confirmBarcodeId || element.barcodeId;
-            if (!barcodeVal) continue;
+        const editBarcodeValidation = await validateBarcodesForBooking({
+            tenantId: tenantId._id,
+            rows: tableData2,
+            currentUser: req.user,
+            excludeBookingDocId: existingBooking._id,
+            excludeBookingIds: excludedBookingIdsForValidation,
+        });
 
-            const isBarcodeIdPresent = await newBooking.findOne({
-                tenantId: tenantId._id,
-                _id: { $ne: existingBooking._id },
-                bookingId: { $nin: excludedBookingIdsForValidation },
-                'tableData.barcodeId': barcodeVal
-            });
-
-            if (isBarcodeIdPresent) {
-                return res.status(400).json({ message: `${barcodeVal} barcode already present` });
-            }
+        if (!editBarcodeValidation.valid) {
+            return res
+                .status(editBarcodeValidation.statusCode || 400)
+                .json({ message: editBarcodeValidation.message });
         }
 
         const effectiveSubFranchiseeId = parsedSubFranchiseeId ?? existingBooking.subFranchiseeId ?? null;
@@ -2178,6 +2203,14 @@ const editbookingbookedtests = async (req, res) => {
             mode: acceptedBarcodeSyncMode
         });
 
+        await syncPrePrintedBarcodesForBooking({
+            tenantId: tenantId._id,
+            bookingDoc: updatedDoc,
+            tableData: updatedDoc.tableData,
+            previousBarcodes: previousBarcodeIds,
+            actorUser: req.user,
+        });
+
         if (req.user.role === 'staff') {
             await User.findByIdAndUpdate(req.user._id, {
                 $push: {
@@ -2225,17 +2258,6 @@ const editBookingBarcodes = async (req, res) => {
             return res.status(400).json({ message: "Invalid input" });
         }
 
-        for (const element of tableData) {
-            const barcodepresent = await newBooking.findOne({
-                tenantId,
-                "tableData.barcodeId": element.barcodeId,
-                _id: { $ne: id }
-            });
-
-            if (barcodepresent) {
-                return res.status(402).json({ message: `${element.barcodeId} already present` });
-            }
-        }
         const booking = await newBooking.findOne(
             buildBookingAccessQuery(req, id, { useDocumentId: true })
         );
@@ -2244,8 +2266,26 @@ const editBookingBarcodes = async (req, res) => {
             return res.status(404).json({ message: "Booking not found" });
         }
 
-        if (booking.status === "cancelled") {
+        if (booking.status === "cancelled" || booking.status === "canceled") {
             return res.status(400).json({ message: "Cancelled booking cannot be updated" });
+        }
+
+        const previousBarcodeIds = (booking.tableData || [])
+            .map((entry) => entry?.barcodeId || entry?.confirmBarcodeId)
+            .filter(Boolean);
+
+        const barcodeValidation = await validateBarcodesForBooking({
+            tenantId,
+            rows: tableData,
+            currentUser: req.user,
+            excludeBookingDocId: booking._id,
+            excludeBookingIds: [booking.bookingId],
+        });
+
+        if (!barcodeValidation.valid) {
+            return res
+                .status(barcodeValidation.statusCode || 400)
+                .json({ message: barcodeValidation.message });
         }
 
         booking.tableData = tableData;
@@ -2265,6 +2305,14 @@ const editBookingBarcodes = async (req, res) => {
                 tableData
             });
         }
+
+        await syncPrePrintedBarcodesForBooking({
+            tenantId,
+            bookingDoc: booking,
+            tableData,
+            previousBarcodes: previousBarcodeIds,
+            actorUser: req.user,
+        });
 
         // अगर staff का parentUser है तो उसे भी notify करें
         if (req.user.role === 'staff') {
@@ -3274,6 +3322,15 @@ const rejectBookingcontroller = async (req, res) => {
         { new: true }
     );
 
+    if (updatedStatus) {
+        await releasePrePrintedBarcodesForBooking({
+            tenantId: req.user.tenantId._id,
+            bookingDoc: updatedStatus,
+            bookingId: updatedStatus.bookingId,
+            cleanupAcceptedBarcodes: true,
+        });
+    }
+
     if (userRole !== "admin") {
         if (!updatedStatus) {
             throw new Error("Booking status not updated");
@@ -3441,6 +3498,14 @@ const deleteBarcode = asyncHandler(async (req, res) => {
     // Update the document with the filtered barcodes
     savedBarcode.barcodes = updatedBarcodes;
     await savedBarcode.save();
+
+    if (req.user?.tenantId?._id) {
+        await releasePrePrintedBarcodesForBooking({
+            tenantId: req.user.tenantId._id,
+            barcodes: [barcodeId],
+            cleanupAcceptedBarcodes: false,
+        });
+    }
 
     // अगर staff का parentUser है तो उसे भी notify करें
     if (req.user.role === 'staff') {
@@ -4071,8 +4136,11 @@ const getallbarcodesController = async (req, res) => {
 
     try {
 
-        // Find barcodes by bookingId
-        const barcodes = await acceptedBarcode.find({});
+        // Find barcodes scoped to current tenant when authenticated
+        const tenantFilter = req.user?.tenantId?._id
+            ? { tenantId: req.user.tenantId._id }
+            : {};
+        const barcodes = await acceptedBarcode.find(tenantFilter);
 
         // Handle case when no data is found
         if (!barcodes) {
@@ -4684,6 +4752,13 @@ const DeleteBookingByParamsController = asyncHandler(async (req, res) => {
         if (!deletedBooking) {
             return res.status(404).json({ message: "Booking not found" });
         }
+
+        await releasePrePrintedBarcodesForBooking({
+            tenantId: tenantId._id,
+            bookingDoc: deletedBooking,
+            bookingId: deletedBooking.bookingId,
+            cleanupAcceptedBarcodes: true,
+        });
 
         // अगर staff का parentUser है तो उसे भी notify करें
         if (req.user.role === 'staff') {

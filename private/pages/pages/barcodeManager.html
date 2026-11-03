@@ -1,0 +1,1051 @@
+<style>
+    .bcs-root {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        color: #0f172a;
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 6px 4px 36px;
+    }
+
+    .bcs-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
+        padding: 18px 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+    }
+
+    .bcs-hero-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .bcs-hero-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 13px;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 21px;
+        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+        flex-shrink: 0;
+    }
+
+    .bcs-hero-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+
+    .bcs-hero-sub {
+        font-size: 13px;
+        color: #475569;
+        margin: 3px 0 0;
+    }
+
+    .bcs-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    @media (max-width: 960px) {
+        .bcs-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 520px) {
+        .bcs-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .bcs-kpi-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 15px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    }
+
+    .bcs-kpi-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .bcs-kpi-val {
+        font-size: 24px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-top: 3px;
+        line-height: 1.1;
+    }
+
+    .bcs-kpi-sub {
+        font-size: 11.5px;
+        color: #64748b;
+        margin-top: 3px;
+    }
+
+    .bcs-kpi-badge {
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        flex-shrink: 0;
+    }
+
+    .bcs-tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        background: #f1f5f9;
+        padding: 6px;
+        border-radius: 12px;
+        margin-bottom: 18px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .bcs-tab-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px;
+        border-radius: 9px;
+        border: none;
+        background: transparent;
+        color: #475569;
+        font-size: 13.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.16s ease;
+    }
+
+    .bcs-tab-btn:hover {
+        color: #0f172a;
+        background: rgba(255, 255, 255, 0.65);
+    }
+
+    .bcs-tab-btn.active {
+        background: #ffffff;
+        color: #2563eb;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    }
+
+    .bcs-panel {
+        display: none;
+    }
+
+    .bcs-panel.active {
+        display: block;
+    }
+
+    .bcs-two-col {
+        display: grid;
+        grid-template-columns: 1.25fr 0.95fr;
+        gap: 18px;
+        align-items: start;
+    }
+
+    @media (max-width: 980px) {
+        .bcs-two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .bcs-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 15px;
+        padding: 20px 22px;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+    }
+
+    .bcs-card-title {
+        font-size: 15.5px;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0 0 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .bcs-card-desc {
+        font-size: 12.5px;
+        color: #64748b;
+        margin: 0 0 16px;
+    }
+
+    .bcs-field {
+        margin-bottom: 15px;
+    }
+
+    .bcs-label {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #334155;
+        margin-bottom: 6px;
+    }
+
+    .bcs-input,
+    .bcs-select {
+        width: 100%;
+        padding: 9px 12px;
+        border-radius: 9px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 13.5px;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .bcs-input:focus,
+    .bcs-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .bcs-pill-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 7px;
+    }
+
+    .bcs-pill {
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.14s ease;
+    }
+
+    .bcs-pill:hover {
+        border-color: #2563eb;
+        color: #2563eb;
+    }
+
+    .bcs-pill.active {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+    }
+
+    .bcs-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-radius: 10px;
+        font-size: 13.5px;
+        font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .bcs-btn-primary {
+        background: #2563eb;
+        color: #ffffff;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
+    }
+
+    .bcs-btn-primary:hover {
+        background: #1d4ed8;
+    }
+
+    .bcs-btn-emerald {
+        background: #059669;
+        color: #ffffff;
+    }
+
+    .bcs-btn-emerald:hover {
+        background: #047857;
+    }
+
+    .bcs-btn-outline {
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #334155;
+    }
+
+    .bcs-btn-outline:hover {
+        border-color: #2563eb;
+        color: #2563eb;
+    }
+
+    .bcs-btn-danger {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #dc2626;
+    }
+
+    .bcs-btn-danger:hover {
+        background: #fee2e2;
+    }
+
+    .bcs-btn-sm {
+        padding: 6px 11px;
+        font-size: 12px;
+        border-radius: 8px;
+    }
+
+    .bcs-preview-stage {
+        min-height: 155px;
+        border-radius: 12px;
+        background: repeating-linear-gradient(
+            45deg,
+            #f1f5f9,
+            #f1f5f9 10px,
+            #e2e8f0 10px,
+            #e2e8f0 20px
+        );
+        border: 1px solid #cbd5e1;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: auto;
+    }
+
+    .bcs-a4-picker {
+        display: grid;
+        gap: 3px;
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        max-height: 175px;
+        overflow-y: auto;
+    }
+
+    .bcs-a4-slot {
+        height: 20px;
+        border-radius: 4px;
+        font-size: 9.5px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 1px solid #cbd5e1;
+        background: #eff6ff;
+        color: #1e40af;
+    }
+
+    .bcs-a4-slot.skipped {
+        background: #f1f5f9;
+        color: #94a3b8;
+        text-decoration: line-through;
+        border-style: dashed;
+    }
+
+    .bcs-a4-slot.start {
+        background: #2563eb;
+        border-color: #1d4ed8;
+        color: #ffffff;
+    }
+
+    .bcs-a4-slot.will-print {
+        background: #dbeafe;
+        border-color: #60a5fa;
+        color: #1e3a8a;
+    }
+
+    .bcs-mode-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    @media (max-width: 640px) {
+        .bcs-mode-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .bcs-mode-card {
+        border: 2px solid #cbd5e1;
+        border-radius: 12px;
+        padding: 11px 13px;
+        background: #f8fafc;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .bcs-mode-card:hover {
+        border-color: #60a5fa;
+    }
+
+    .bcs-mode-card.active {
+        border-color: #2563eb;
+        background: #eff6ff;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+    }
+
+    html[data-theme="dark"] .bcs-mode-card {
+        background: #0f172a;
+        border-color: #334155;
+        color: #f8fafc;
+    }
+
+    html[data-theme="dark"] .bcs-mode-card.active {
+        background: rgba(37, 99, 235, 0.18);
+        border-color: #3b82f6;
+    }
+
+    .bcs-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+    }
+
+    .bcs-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .bcs-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-weight: 700;
+        font-size: 11.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 11px 14px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+
+    .bcs-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    .bcs-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .bcs-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 700;
+    }
+
+    .bcs-status-unused {
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+    }
+
+    .bcs-status-used {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+    }
+
+    .bcs-status-void {
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }
+
+    .bcs-progress-track {
+        width: 140px;
+        height: 7px;
+        background: #e2e8f0;
+        border-radius: 99px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .bcs-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #2563eb, #10b981);
+        border-radius: 99px;
+    }
+
+    .bcs-scan-spotlight {
+        border: 2px solid #2563eb;
+        background: #eff6ff;
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 16px;
+    }
+
+    .bcs-toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        margin-bottom: 8px;
+    }
+
+    .bcs-toast {
+        position: fixed;
+        bottom: 22px;
+        right: 22px;
+        z-index: 99995;
+        padding: 12px 18px;
+        border-radius: 11px;
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+        display: none;
+        align-items: center;
+        gap: 9px;
+    }
+</style>
+
+<div class="bcs-root" id="bcs-app">
+    <!-- Hero Header -->
+    <div class="bcs-hero">
+        <div class="bcs-hero-left">
+            <div class="bcs-hero-icon">
+                <i class="fas fa-barcode"></i>
+            </div>
+            <div>
+                <h1 class="bcs-hero-title">Barcode Studio &amp; Tube Label Center</h1>
+                <p class="bcs-hero-sub">Generate advance pre-printed vacutainer rolls &amp; A4 sheets, track live tube custody, and calibrate thermal/laser printers.</p>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="bcs-btn bcs-btn-outline" id="bcs-jump-scan-btn">
+                <i class="fas fa-qrcode"></i> Scan / Verify Tube
+            </button>
+            <button type="button" class="bcs-btn bcs-btn-outline" id="bcs-refresh-btn">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="bcs-kpi-grid">
+        <div class="bcs-kpi-card">
+            <div>
+                <div class="bcs-kpi-label">Pre-Printed Pool</div>
+                <div class="bcs-kpi-val" id="bcs-kpi-total">0</div>
+                <div class="bcs-kpi-sub" id="bcs-kpi-batches">0 batches generated</div>
+            </div>
+            <div class="bcs-kpi-badge" style="background:#eff6ff;color:#2563eb;">
+                <i class="fas fa-layer-group"></i>
+            </div>
+        </div>
+        <div class="bcs-kpi-card">
+            <div>
+                <div class="bcs-kpi-label">Unused / Ready Tubes</div>
+                <div class="bcs-kpi-val" id="bcs-kpi-unused" style="color:#059669;">0</div>
+                <div class="bcs-kpi-sub">Ready for phlebotomy scan</div>
+            </div>
+            <div class="bcs-kpi-badge" style="background:#ecfdf5;color:#059669;">
+                <i class="fas fa-vial"></i>
+            </div>
+        </div>
+        <div class="bcs-kpi-card">
+            <div>
+                <div class="bcs-kpi-label">Mapped to Patients</div>
+                <div class="bcs-kpi-val" id="bcs-kpi-used" style="color:#2563eb;">0</div>
+                <div class="bcs-kpi-sub">Linked to active bookings</div>
+            </div>
+            <div class="bcs-kpi-badge" style="background:#eff6ff;color:#2563eb;">
+                <i class="fas fa-user-check"></i>
+            </div>
+        </div>
+        <div class="bcs-kpi-card">
+            <div>
+                <div class="bcs-kpi-label">Void / Damaged</div>
+                <div class="bcs-kpi-val" id="bcs-kpi-void" style="color:#dc2626;">0</div>
+                <div class="bcs-kpi-sub">Blocked from accidental use</div>
+            </div>
+            <div class="bcs-kpi-badge" style="background:#fef2f2;color:#dc2626;">
+                <i class="fas fa-ban"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="bcs-tabs" role="tablist">
+        <button type="button" class="bcs-tab-btn active" data-tab="generate">
+            <i class="fas fa-print"></i> 1. Print Advance Barcodes
+        </button>
+        <button type="button" class="bcs-tab-btn" data-tab="batches">
+            <i class="fas fa-history"></i> 2. Batch History &amp; Reprints
+        </button>
+        <button type="button" class="bcs-tab-btn" data-tab="tracker">
+            <i class="fas fa-search"></i> 3. Scan &amp; Track Custody
+        </button>
+        <button type="button" class="bcs-tab-btn" data-tab="settings">
+            <i class="fas fa-sliders-h"></i> 4. Printer &amp; Label Settings
+        </button>
+    </div>
+
+    <!-- TAB 1: GENERATE & PRINT PRE-BARCODES -->
+    <section class="bcs-panel active" id="bcs-panel-generate">
+        <div class="bcs-two-col">
+            <div class="bcs-card">
+                <div style="display:flex;align-items:center;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:9px 12px;border-radius:10px;margin-bottom:12px;">
+                    <i class="fas fa-shield-alt" style="font-size:18px;color:#15803d;flex-shrink:0;"></i>
+                    <div style="line-height:1.35;">
+                        <span style="font-weight:800;font-size:12px;letter-spacing:0.2px;">Database Collision-Free Shield:</span>
+                        <span style="font-size:11.5px;color:#166534;">Har barcode sheet generate hone se pehle aapke database me verify hota hai. Agar koi number already booked hai, to wo sheet par print nahi hoga aur uski jagah agla unique number aayega.</span>
+                    </div>
+                </div>
+
+                <h2 class="bcs-card-title"><i class="fas fa-magic" style="color:#2563eb;"></i> Generate Zero-Waste Pre-Printed Tube Barcodes</h2>
+                <p class="bcs-card-desc">100% full-sheet edge-to-edge packing so not even a single sticker or corner of your A4 sheet is wasted. Print, stick on vacutainers, and scan during booking.</p>
+
+                <!-- Step 1: Visual Printer Mode Selector -->
+                <div class="bcs-field">
+                    <label class="bcs-label">1. Select Your Printer Type</label>
+                    <div class="bcs-mode-grid" id="bcs-printer-mode-cards">
+                        <button type="button" class="bcs-mode-card active" data-mode="a4">
+                            <div style="width:34px;height:34px;border-radius:9px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
+                                <i class="fas fa-th"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:13px;font-weight:800;color:#1e3a8a;">A4 Full Sticker Sheet (Zero Waste)</div>
+                                <div style="font-size:11px;color:#475569;margin-top:2px;">40, 48, 65, 84, 100 or 120 barcodes on <strong>1 single A4 page</strong> (Normal Laser / Inkjet Printer)</div>
+                            </div>
+                        </button>
+                        <button type="button" class="bcs-mode-card" data-mode="thermal">
+                            <div style="width:34px;height:34px;border-radius:9px;background:#475569;color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
+                                <i class="fas fa-scroll"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:13px;font-weight:800;">Thermal Barcode Roll Machine</div>
+                                <div style="font-size:11px;color:#64748b;margin-top:2px;">Dedicated TSC / Zebra / Xprinter 1-Up or 2-Up continuous roll ONLY</div>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Quick Sheet Grid Presets for A4 -->
+                    <div class="bcs-pill-group" id="bcs-quick-a4-presets" style="margin-bottom:8px;">
+                        <button type="button" class="bcs-pill active" data-preset="a4_full_65">65 / Page (5×13 Full)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_full_84">84 / Page (4×21 Slim)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_full_100">100 / Page (5×20 Ultra)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_full_120">120 / Page (6×20 Max)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_full_80">80 / Page (5×16)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_full_48">48 / Page (4×12)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_40">40 / Page (4×10)</button>
+                        <button type="button" class="bcs-pill" data-preset="a4_65">Pre-Cut 65L (Oddy)</button>
+                    </div>
+
+                    <select id="bcs-gen-preset" class="bcs-select"></select>
+                    <div id="bcs-gen-preset-hint" style="font-size:11.5px;color:#047857;font-weight:600;margin-top:4px;"></div>
+                </div>
+
+                <!-- Step 2: Quantity & Copies with Dynamic Full-Sheet Auto-Fill -->
+                <div style="display:grid;grid-template-columns:1fr 135px;gap:12px;">
+                    <div class="bcs-field">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+                            <label class="bcs-label" for="bcs-gen-qty" style="margin:0;">2. Number of Unique Barcodes (1 – 500)</label>
+                            <button type="button" id="bcs-fill-exact-sheet-btn" style="font-size:11.5px;font-weight:800;color:#047857;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:3px 9px;cursor:pointer;">
+                                <i class="fas fa-compress-arrows-alt"></i> Fill Full Sheet (Zero Empty)
+                            </button>
+                        </div>
+                        <input type="number" id="bcs-gen-qty" class="bcs-input" min="1" max="500" value="65">
+                        <div class="bcs-pill-group" id="bcs-qty-pills">
+                            <button type="button" class="bcs-pill active" data-qty="65">1 Full Sheet (65)</button>
+                            <button type="button" class="bcs-pill" data-qty="130">2 Full Sheets (130)</button>
+                            <button type="button" class="bcs-pill" data-qty="195">3 Full Sheets (195)</button>
+                            <button type="button" class="bcs-pill" data-qty="325">5 Full Sheets (325)</button>
+                        </div>
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-gen-copies">Copies / Code</label>
+                        <select id="bcs-gen-copies" class="bcs-select">
+                            <option value="1">1× (Tube Only)</option>
+                            <option value="2">2× (Tube + Vial)</option>
+                            <option value="3">3× (Tube+Vial+TRF)</option>
+                            <option value="4">4× Copies</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- A4 Half-Used Sheet Visual Offset Picker & Cut Lines -->
+                <div class="bcs-field" id="bcs-gen-a4-box" style="background:#f8fafc;border:1px solid #dbeafe;padding:12px;border-radius:11px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                        <label class="bcs-label" style="margin:0;color:#1e40af;">
+                            <i class="fas fa-th"></i> Half-Used A4 Sheet Saver — Start at Sticker #
+                        </label>
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <button type="button" id="bcs-fresh-sheet-btn" style="font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid #93c5fd;background:#fff;color:#1d4ed8;cursor:pointer;">Fresh Sheet (#1)</button>
+                            <button type="button" id="bcs-fill-remaining-btn" style="display:none;font-size:11px;font-weight:800;padding:4px 8px;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;color:#047857;cursor:pointer;">Fill Remaining Slots</button>
+                            <input type="number" id="bcs-gen-start-pos" class="bcs-input" min="1" max="120" value="1" style="width:72px;padding:4px 8px;text-align:center;font-weight:700;">
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:11.5px;color:#334155;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" id="bcs-gen-cutlines" checked>
+                            <span><strong>Show Scissor / Peel Cut Grid Lines</strong> (for Full Gum Sheets)</span>
+                        </label>
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" id="bcs-gen-auto-slot">
+                            <span>Auto-remember next empty slot on half-used sheet</span>
+                        </label>
+                    </div>
+                    <div style="font-size:11px;color:#64748b;margin-bottom:6px;">
+                        Click any cell below if earlier stickers were already peeled off — blue cells show exact stickers that will print:
+                    </div>
+                    <div id="bcs-gen-a4-grid" class="bcs-a4-picker"></div>
+                </div>
+
+                <div class="bcs-field">
+                    <label class="bcs-label">Optional Vacutainer / Sample Cap Tag on Sticker</label>
+                    <input type="text" id="bcs-gen-sample-hint" class="bcs-input" maxlength="32" placeholder="Leave blank for universal barcode, or pick tube type below...">
+                    <div class="bcs-pill-group" id="bcs-sample-pills">
+                        <button type="button" class="bcs-pill active" data-sample="">Universal (Any Tube)</button>
+                        <button type="button" class="bcs-pill" data-sample="EDTA">EDTA • Lavender</button>
+                        <button type="button" class="bcs-pill" data-sample="SERUM">SERUM • Red/SST</button>
+                        <button type="button" class="bcs-pill" data-sample="FLUORIDE">FLUORIDE • Grey</button>
+                        <button type="button" class="bcs-pill" data-sample="CITRATE">CITRATE • Blue</button>
+                        <button type="button" class="bcs-pill" data-sample="URINE">URINE</button>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="bcs-field" id="bcs-assign-center-wrap">
+                        <label class="bcs-label" for="bcs-gen-center">Assign Sheet/Roll to Center</label>
+                        <select id="bcs-gen-center" class="bcs-select">
+                            <option value="">Main Lab / Any Collection Center</option>
+                        </select>
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-gen-notes">Batch Note / Desk Reference</label>
+                        <input type="text" id="bcs-gen-notes" class="bcs-input" maxlength="120" placeholder="e.g. Morning Phlebotomy Sheet #1">
+                    </div>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid #e2e8f0;">
+                    <button type="button" class="bcs-btn bcs-btn-outline" id="bcs-test-one-btn" title="Printer alignment test page with dimension grids to check printer feed and margins (Watermarked Test Only)">
+                        <i class="fas fa-ruler-combined"></i> Test Printer Margins / Alignment
+                    </button>
+                    <button type="button" class="bcs-btn bcs-btn-primary" id="bcs-generate-print-btn">
+                        <i class="fas fa-print"></i> Generate &amp; Print Full Sheet (Verified)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column: Live Full-Sheet Coverage Map + 1:1 Sticker Zoom + Last Batch Card -->
+            <div style="display:flex;flex-direction:column;gap:16px;">
+                <div class="bcs-card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <h3 class="bcs-card-title" style="margin:0;"><i class="fas fa-file-alt" style="color:#059669;"></i> Full Sheet Coverage &amp; Sticker Preview</h3>
+                        <span id="bcs-preview-dims" style="font-size:11.5px;font-weight:700;color:#2563eb;background:#eff6ff;padding:3px 9px;border-radius:99px;">41.2 × 22.5 mm</span>
+                    </div>
+                    <p class="bcs-card-desc" style="margin-bottom:10px;">Live sheet simulation showing how all barcodes pack edge-to-edge on one page with zero wasted paper.</p>
+
+                    <div id="bcs-sheet-map-preview" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:12px;"></div>
+
+                    <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:6px;text-align:center;">1:1 Zoomed Single Sticker Sharpness Preview:</div>
+                    <div class="bcs-preview-stage" id="bcs-gen-live-preview" style="min-height:115px;padding:14px;"></div>
+                    <div id="bcs-gen-summary-line" style="margin-top:10px;font-size:12.5px;color:#0f172a;font-weight:700;text-align:center;"></div>
+                </div>
+
+                <div class="bcs-card" id="bcs-last-batch-card" style="display:none;border-color:#a7f3d0;background:#ecfdf5;">
+                    <div style="font-size:13.5px;font-weight:800;color:#065f46;margin-bottom:4px;">
+                        <i class="fas fa-check-circle"></i> Batch Ready!
+                    </div>
+                    <div id="bcs-last-batch-info" style="font-size:12.5px;color:#047857;margin-bottom:10px;"></div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="bcs-btn bcs-btn-emerald bcs-btn-sm" id="bcs-reprint-last-btn">
+                            <i class="fas fa-redo"></i> Print Again
+                        </button>
+                        <button type="button" class="bcs-btn bcs-btn-outline bcs-btn-sm" id="bcs-tabprint-last-btn">
+                            <i class="fas fa-external-link-alt"></i> Open Print Tab
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bcs-card">
+                    <h3 class="bcs-card-title"><i class="fas fa-route" style="color:#059669;"></i> How Pre-Printed Tube Workflow Works</h3>
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;font-size:12.5px;color:#334155;">
+                        <div style="display:flex;gap:10px;align-items:flex-start;">
+                            <span style="width:22px;height:22px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</span>
+                            <div><strong>Print Roll / A4 Sheet in Advance:</strong> Print 50–200 unique stickers and keep them at phlebotomy counters or send rolls to Franchisee collection centers.</div>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:flex-start;">
+                            <span style="width:22px;height:22px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</span>
+                            <div><strong>Stick on Vacutainer Tube &amp; Scan in Booking:</strong> Paste sticker on EDTA/Serum tube, place cursor in <em>New Booking → Barcode ID</em>, and scan with a USB scanner — it auto-confirms &amp; jumps to the next tube!</div>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:flex-start;">
+                            <span style="width:22px;height:22px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</span>
+                            <div><strong>Need Patient-Named Stickers Instead?</strong> Open <em>All Cases → Print Barcodes</em> or click <em>Submit &amp; Print Barcodes</em> on New Booking to print stickers with Patient Name, Age/Sex &amp; Tests!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 2: BATCH HISTORY & REPRINTS -->
+    <section class="bcs-panel" id="bcs-panel-batches">
+        <div class="bcs-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                <div>
+                    <h2 class="bcs-card-title" style="margin:0;">Generated Pre-Barcode Batches</h2>
+                    <p class="bcs-card-desc" style="margin:2px 0 0;">Reprint an entire roll/sheet or smartly print only the remaining unused barcodes from any batch.</p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="text" id="bcs-batch-search" class="bcs-input" placeholder="Search batch code, barcode, center..." style="width:240px;">
+                    <button type="button" class="bcs-btn bcs-btn-outline bcs-btn-sm" id="bcs-batch-search-btn">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+
+            <div class="bcs-table-wrap">
+                <table class="bcs-table">
+                    <thead>
+                        <tr>
+                            <th>Batch Code</th>
+                            <th>Barcode Range</th>
+                            <th>Qty &amp; Live Usage</th>
+                            <th>Assigned Center</th>
+                            <th>Sample Tag / Note</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bcs-batches-tbody">
+                        <tr><td colspan="7" style="text-align:center;padding:28px;color:#64748b;">Loading batches...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 3: SCAN & TRACK BARCODE CUSTODY -->
+    <section class="bcs-panel" id="bcs-panel-tracker">
+        <div class="bcs-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                <div>
+                    <h2 class="bcs-card-title" style="margin:0;"><i class="fas fa-qrcode" style="color:#2563eb;"></i> Tube Barcode Scanner &amp; Custody Log</h2>
+                    <p class="bcs-card-desc" style="margin:2px 0 0;">Scan any physical vacutainer tube with your USB barcode gun to instantly see its patient, tests, center, or mark damaged stickers VOID.</p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="bcs-btn bcs-btn-danger bcs-btn-sm" id="bcs-bulk-void-btn" style="display:none;">
+                        <i class="fas fa-ban"></i> Void Selected
+                    </button>
+                    <button type="button" class="bcs-btn bcs-btn-outline bcs-btn-sm" id="bcs-export-csv-btn">
+                        <i class="fas fa-file-csv"></i> Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scanner Input Bar -->
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+                <div style="flex:1;min-width:240px;position:relative;">
+                    <input type="text" id="bcs-scan-input" class="bcs-input" placeholder="Scan barcode gun here or type Barcode / Patient / Booking ID & press Enter..." style="padding-left:38px;font-weight:600;">
+                    <i class="fas fa-barcode" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#2563eb;"></i>
+                </div>
+                <select id="bcs-pool-status" class="bcs-select" style="width:170px;">
+                    <option value="">All Statuses</option>
+                    <option value="unused">Unused (Ready)</option>
+                    <option value="used">Used (Mapped)</option>
+                    <option value="void">Void / Damaged</option>
+                </select>
+                <button type="button" class="bcs-btn bcs-btn-primary" id="bcs-scan-btn">
+                    <i class="fas fa-search"></i> Lookup
+                </button>
+                <button type="button" class="bcs-btn bcs-btn-outline" id="bcs-clear-filter-btn" style="display:none;">
+                    Clear Batch Filter
+                </button>
+            </div>
+
+            <!-- Instant Exact Scan Custody Spotlight -->
+            <div id="bcs-scan-spotlight" class="bcs-scan-spotlight" style="display:none;"></div>
+
+            <div class="bcs-table-wrap">
+                <table class="bcs-table">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;"><input type="checkbox" id="bcs-pool-check-all"></th>
+                            <th>Barcode</th>
+                            <th>Status</th>
+                            <th>Batch / Tube Hint</th>
+                            <th>Center</th>
+                            <th>Patient &amp; Booking Mapping</th>
+                            <th>Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bcs-pool-tbody">
+                        <tr><td colspan="8" style="text-align:center;padding:28px;color:#64748b;">Loading barcode pool...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:12.5px;color:#64748b;">
+                <div id="bcs-pool-page-info">Showing 0 barcodes</div>
+                <div style="display:flex;gap:6px;">
+                    <button type="button" class="bcs-btn bcs-btn-outline bcs-btn-sm" id="bcs-pool-prev">Prev</button>
+                    <button type="button" class="bcs-btn bcs-btn-outline bcs-btn-sm" id="bcs-pool-next">Next</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 4: PRINTER CALIBRATION & GLOBAL SETTINGS -->
+    <section class="bcs-panel" id="bcs-panel-settings">
+        <div class="bcs-two-col">
+            <div class="bcs-card">
+                <h2 class="bcs-card-title"><i class="fas fa-cog" style="color:#2563eb;"></i> Barcode Numbering &amp; Default Layout</h2>
+                <p class="bcs-card-desc">Configure Code-128 prefix, digit length, and default fields shown on stickers across all desks.</p>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-set-prefix">Lab Prefix (Optional, Max 6 Chars)</label>
+                        <input type="text" id="bcs-set-prefix" class="bcs-input" maxlength="6" placeholder="e.g. LF or leave blank for pure digits">
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-set-digits">Minimum Numeric Digits (5 – 12)</label>
+                        <input type="number" id="bcs-set-digits" class="bcs-input" min="5" max="12" value="7">
+                    </div>
+                </div>
+
+                <div class="bcs-field">
+                    <label class="bcs-label" for="bcs-set-header">Custom Lab / Header Title on Stickers</label>
+                    <input type="text" id="bcs-set-header" class="bcs-input" maxlength="48" placeholder="Defaults to your Lab Name">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1.4fr 0.6fr;gap:12px;">
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-set-preset">Default Paper / Printer Preset</label>
+                        <select id="bcs-set-preset" class="bcs-select"></select>
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-set-copies">Default Copies</label>
+                        <input type="number" id="bcs-set-copies" class="bcs-input" min="1" max="10" value="1">
+                    </div>
+                </div>
+
+                <div class="bcs-label" style="margin-top:6px;">Sticker Content &amp; Automation Rules</div>
+                <label class="bcs-toggle-row">
+                    <span><strong>Show Patient Name &amp; Age/Gender</strong> on post-booking tube stickers</span>
+                    <input type="checkbox" id="bcs-set-showPatient" checked>
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Show Vacutainer Tube &amp; Cap Colour Guide</strong> (e.g. EDTA•LAV, SERUM•RED)</span>
+                    <input type="checkbox" id="bcs-set-showVac" checked>
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Show Short Test Names</strong> (e.g. CBC, LFT, TSH) on tube sticker</span>
+                    <input type="checkbox" id="bcs-set-showTests" checked>
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Show Collection Date &amp; Time</strong> on tube sticker</span>
+                    <input type="checkbox" id="bcs-set-showDate" checked>
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Show Lab / Center Header Name</strong> on stickers</span>
+                    <input type="checkbox" id="bcs-set-showLab" checked>
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Auto-Open Barcode Print Dialog</strong> right after creating a New Booking</span>
+                    <input type="checkbox" id="bcs-set-autoPrompt">
+                </label>
+                <label class="bcs-toggle-row">
+                    <span><strong>Strict Center Ownership Lock</strong> (Franchisees can only scan pre-barcodes assigned to their center)</span>
+                    <input type="checkbox" id="bcs-set-restrictCenter">
+                </label>
+            </div>
+
+            <div class="bcs-card">
+                <h2 class="bcs-card-title"><i class="fas fa-ruler-combined" style="color:#059669;"></i> Millimeter Printer Calibration</h2>
+                <p class="bcs-card-desc">Fine-tune X/Y alignment if your thermal roll sensor or A4 printer shifts margins slightly.</p>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-cal-top">Top Margin Offset (mm)</label>
+                        <input type="number" step="0.5" min="-15" max="15" id="bcs-cal-top" class="bcs-input" value="0">
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-cal-left">Left Margin Offset (mm)</label>
+                        <input type="number" step="0.5" min="-15" max="15" id="bcs-cal-left" class="bcs-input" value="0">
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-cal-width">Code-128 Bar Density (1.0 – 3.0)</label>
+                        <input type="number" step="0.1" min="1" max="3" id="bcs-cal-width" class="bcs-input" value="1.5">
+                    </div>
+                    <div class="bcs-field">
+                        <label class="bcs-label" for="bcs-cal-height">Barcode Bar Height (mm)</label>
+                        <input type="number" step="0.5" min="6" max="25" id="bcs-cal-height" class="bcs-input" value="10.5">
+                    </div>
+                </div>
+
+                <div class="bcs-field">
+                    <label class="bcs-label" for="bcs-cal-font">Text Font Scale (0.75 – 1.35)</label>
+                    <input type="number" step="0.05" min="0.75" max="1.35" id="bcs-cal-font" class="bcs-input" value="1">
+                </div>
+
+                <div class="bcs-preview-stage" id="bcs-cal-preview" style="margin-bottom:14px;"></div>
+
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                    <button type="button" class="bcs-btn bcs-btn-outline" id="bcs-cal-test-btn">
+                        <i class="fas fa-print"></i> Print Calibration Sticker
+                    </button>
+                    <button type="button" class="bcs-btn bcs-btn-primary" id="bcs-save-settings-btn">
+                        <i class="fas fa-save"></i> Save Barcode Settings
+                    </button>
+                </div>
+                <div id="bcs-settings-perm-note" style="display:none;margin-top:10px;font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:8px;">
+                    Note: Global lab settings are managed by Lab Admin. Your printer &amp; sticker layout choices in the Print Dialog are automatically saved for this browser.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="bcs-toast" id="bcs-toast"></div>
+</div>
+

@@ -4,934 +4,995 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LabFlow Admin</title>
+    <title>LabFlow Admin — Clinical LIS Workspace</title>
+    <meta name="theme-color" content="#0b1426">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+    <!-- Offline Enterprise Fonts & Core Vendor Styles -->
+    <link rel="stylesheet" href="/css/offline-fonts.css">
     <link rel="stylesheet" href="/css/tailwind-offline.css">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/vendor/bootstrap4/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/ckeditor5/ckeditor5.css">
+
+    <!-- Instant Zero-Flash Theme Initializer (Restores saved Dark/Light mode before first paint) -->
+    <script>
+        (function () {
+            try {
+                var uid = localStorage.getItem("lf_last_uid") || "";
+                var saved = (uid && localStorage.getItem("lf_admin_theme_" + uid)) || localStorage.getItem("lf_admin_theme");
+                var theme = saved === "dark" ? "dark" : "light";
+                document.documentElement.setAttribute("data-theme", theme);
+                document.documentElement.style.colorScheme = theme;
+            } catch (e) {
+                document.documentElement.setAttribute("data-theme", "light");
+            }
+        })();
+    </script>
+
+    <!-- Portal Stylesheets (Loaded after Bootstrap/Tailwind to establish clean shell rules) -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="admin.css">
+
+    <!-- ⚠️ Core Vendor Scripts (Must load before page scripts) -->
     <script src="/vendor/chart.js/chart.umd.min.js"></script>
-    <!-- <script src="/vendor/tinymce/tinymce.min.js"
-        referrerpolicy="origin"></script> -->
     <script src="/vendor/jquery/jquery.min.js"></script>
     <script src="/vendor/popper.js/popper.min.js"></script>
     <script src="/vendor/bootstrap4/js/bootstrap.min.js"></script>
     <script src="/vendor/xlsx/xlsx.full.min.js"></script>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="admin.css">
-    <link rel="stylesheet" href="/vendor/ckeditor5/ckeditor5.css">
     <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
-
-    <!-- ⚠️ IMPORTANT: Libraries ko script se PEHLE load karo -->
     <script src="/vendor/jspdf/jspdf.umd.min.js"></script>
     <script src="/vendor/jspdf-autotable/jspdf.plugin.autotable.min.js"></script>
-    <!-- Include SheetJS for Excel export -->
-    <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
-    <!-- Include jsPDF and jsPDF-AutoTable for PDF export -->
-    <style>
-        .navbar {
-            padding: 0rem 10px;
-        }
-
-        .modal-backdrop {
-            z-index: -1;
-        }
-        .modal-dialog {
-            margin-top: 20vh;
-        }
-    </style>
 </head>
 
-<body>
-    <div class="loader" id="loader1">
+<body class="lf-admin-body">
+    <!-- Legacy Loader Hook (Managed by top-progress.js) -->
+    <div class="loader" id="loader1" aria-hidden="true">
         <div class="shape"></div>
         <div class="shape"></div>
         <div class="shape"></div>
         <div class="shape"></div>
     </div>
-    <div class="full-width">
+
+    <div class="lf-app-shell full-width" id="lfAppShell">
+
         <!-- Subscription Expired Modal -->
-        <div id="subscriptionModal" class="modal"
-            style="display:none; z-index:3000000000; align-items: center; justify-content: center; background:rgba(0,0,0,0.7); position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; overflow-y: auto; padding: 20px;">
-            <div class="modal-content" style="max-width:480px; width: 100%; margin: auto; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: none; overflow: hidden; background: #ffffff;">
-                <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #fff5f5; border-bottom: 1px solid #fed7d7;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #fee2e2; color: #dc2626; font-size: 16px;">
+        <div id="subscriptionModal" class="lf-sub-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="subscriptionModalTitle">
+            <div class="lf-sub-modal__card">
+                <div class="lf-sub-modal__header">
+                    <div class="lf-sub-modal__title-wrap">
+                        <span class="lf-sub-modal__icon">
                             <i class="fas fa-exclamation-triangle"></i>
                         </span>
-                        <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #991b1b;">Subscription Expired</h2>
+                        <div>
+                            <h2 id="subscriptionModalTitle" class="lf-sub-modal__title">Subscription Expired</h2>
+                            <p class="lf-sub-modal__subtitle">Renew plan to restore full LIS portal operations</p>
+                        </div>
                     </div>
-                    <button type="button" id="closeSubscriptionModal" aria-label="Close" style="background: transparent; border: none; font-size: 26px; line-height: 1; cursor: pointer; color: #64748b; padding: 0 4px; transition: color 0.15s;" onmouseover="this.style.color='#1e293b'" onmouseout="this.style.color='#64748b'">&times;</button>
+                    <button type="button" id="closeSubscriptionModal" class="lf-sub-modal__close" aria-label="Close">&times;</button>
                 </div>
-                <div class="modal-body" style="padding: 20px; text-align: center;">
-                    <p style="color: #475569; font-size: 14px; margin-bottom: 16px; line-height: 1.5;">
-                        Your subscription has ended. Scan the QR code below to renew and continue using all features.
+                <div class="lf-sub-modal__body">
+                    <p class="lf-sub-modal__desc">
+                        Your laboratory subscription period has ended. Scan the official UPI QR code below to renew and continue uninterrupted access.
                     </p>
-                    <div style="margin: 12px 0 20px 0; text-align: center; background: #f8fafc; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                        <img src="/images/scaner.png" alt="UPI QR Code"
-                            style="max-width: 190px; width: 100%; height: auto; margin: 0 auto 12px auto; display: block; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; padding: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" />
-                        <p style="font-size: 13px; color: #64748b; margin-bottom: 12px; font-weight: 500;">
-                            Scan UPI QR to pay, then upload payment screenshot:
+                    <div class="lf-sub-modal__qr-box">
+                        <img src="/images/scaner.png" alt="UPI QR Code" class="lf-sub-modal__qr-img" />
+                        <p class="lf-sub-modal__qr-caption">
+                            Scan UPI QR to complete payment, then upload confirmation screenshot:
                         </p>
-                        <form id="upiForm" style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
-                            <input type="file" id="upiScreenshot" accept="image/*" required
-                                style="font-size: 13px; width: 100%; max-width: 280px; padding: 6px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #fff;" />
-                            <button type="submit"
-                                style="background: #2563eb; color: white; padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.2);">
-                                <i class="fas fa-upload"></i> Upload Screenshot
+                        <form id="upiForm" class="lf-sub-modal__form">
+                            <input type="file" id="upiScreenshot" accept="image/*" required class="lf-sub-modal__file" />
+                            <button type="submit" class="lf-sub-modal__upload-btn">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload Payment Proof
                             </button>
                         </form>
-                        <div id="upiStatus" style="margin-top: 10px; font-size: 13px; font-weight: 500;"></div>
+                        <div id="upiStatus" class="lf-sub-modal__status"></div>
                     </div>
-                    <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">
-                        Or contact SuperAdmin for manual activation if paid via other methods.
+                    <p class="lf-sub-modal__footnote">
+                        Need manual activation or paid via NEFT/IMPS? Contact SuperAdmin Support.
                     </p>
                 </div>
-                <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-                    <button type="button" id="modalLogoutBtn" style="background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-sign-out-alt"></i> Logout
+                <div class="lf-sub-modal__footer">
+                    <button type="button" id="modalLogoutBtn" class="lf-sub-modal__btn lf-sub-modal__btn--danger">
+                        <i class="fas fa-sign-out-alt"></i> Sign Out
                     </button>
-                    <button type="button" id="modalCloseBtn" style="background: #64748b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500;">
-                        Close / Remind Later
+                    <button type="button" id="modalCloseBtn" class="lf-sub-modal__btn lf-sub-modal__btn--muted">
+                        Remind Later
                     </button>
                 </div>
-            </div>
-        </div>
-        <div id="mobileMessage"
-            class="fixed inset-0 z-1000050 w-full h-full border-gray-300 flex items-center justify-center bg-white bg-opacity-95 backdrop-blur-sm p-4 hidden md:hidden">
-            <div class="bg-white border border-gray-300 shadow-lg rounded-lg max-w-md w-full p-6 text-center">
-                <img src="/images/logoLabFlow.svg" alt="LabFlow logo" class="w-16 h-16 mx-auto mb-4 opacity-80">
-                <h2 class="text-xl font-semibold text-gray-800 mb-2">Desktop Version Only</h2>
-                <p class="text-gray-600 mb-3">
-                    Please visit this website on a <strong>laptop or desktop</strong> for the best experience.
-                    We're currently working on our mobile version.
-                </p>
-                <p class="text-sm text-gray-400">Thank you for your patience!</p>
             </div>
         </div>
 
-        <!-- Nav bar Start here -->
-        <div class="logo-div">
-            <a href="#" data-page="dashboard" class="nav-item">
-                <div class="logo">
-                    <img id="logo" src="/images/logoLabFlow.svg" width="190px" style="padding: 10px; height: 68px;">
+        <!-- Mobile / Tablet Drawer Backdrop -->
+        <div class="lf-sidebar-backdrop" id="lfSidebarBackdrop" aria-hidden="true"></div>
+
+        <!-- =====================================================================
+             LEFT NAVIGATION SIDEBAR (Enterprise Clinical Dark Rail)
+             ===================================================================== -->
+        <aside class="left-navbar" id="left-navbar" aria-label="Primary Sidebar Navigation">
+            <!-- Brand Header Docked at Top of Sidebar -->
+            <div class="logo-div">
+                <a href="#" data-page="dashboard" class="nav-item lf-brand-link" title="Go to Dashboard">
+                    <div class="logo">
+                        <img id="logo" src="/images/logoLabFlow.svg" alt="LabFlow Logo" data-fallback-type="logo">
+                    </div>
+                </a>
+                <button type="button" class="lf-sidebar-mobile-close" id="lfSidebarCloseBtn" aria-label="Close navigation menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Scrollable Sidebar Body -->
+            <div class="toggle" id="toggle">
+                <!-- Tenant / User Identity Card -->
+                <div class="left-panel">
+                    <div class="lf-workspace-badge">
+                        <div class="lf-workspace-badge__icon">
+                            <i class="fa-solid fa-shield-heart"></i>
+                        </div>
+                        <div class="lf-workspace-badge__meta">
+                            <p class="name_text">Administrator</p>
+                            <div class="lf-workspace-badge__role-row">
+                                <span class="lf-status-dot"></span>
+                                <p class="name_text nt1">(ADMIN)</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </a>
-        </div>
-        <div class="top-navbar" id="top-navbar">
-            <div class="navbar">
+
+                <!-- Quick Menu Filter -->
+                <div class="lf-sidebar-search">
+                    <i class="fa-solid fa-magnifying-glass lf-sidebar-search__icon"></i>
+                    <input
+                        type="search"
+                        id="lfSidebarFilter"
+                        class="lf-sidebar-search__input"
+                        placeholder="Filter navigation..."
+                        autocomplete="off"
+                        aria-label="Filter sidebar navigation"
+                    />
+                    <kbd class="lf-sidebar-search__kbd">/</kbd>
+                </div>
+
+                <!-- Primary Navigation Tree -->
+                <ul class="panel_list" id="lfPanelList">
+                    <!-- CORE OVERVIEW -->
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="dashboard" data-page-title="Dashboard">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-chart-pie"></i>
+                            </span>
+                            <span class="dash_text dash">Dashboard</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="allcases" data-page-title="All Cases">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-folder-open"></i>
+                            </span>
+                            <span class="dash_text dash">All Cases</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord sidebar-copilot-item">
+                        <a href="#" class="nav-item sidebar-copilot-link" data-page="aiCopilot" data-page-title="AI Copilot" title="LabFlow AI Copilot">
+                            <span class="dash_icon">
+                                <i class="fa-solid fa-brain"></i>
+                            </span>
+                            <span class="dash_text">AI Copilot</span>
+                            <span class="sidebar-copilot-badge">AI</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="expense" data-page-title="Expenses">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-wallet"></i>
+                            </span>
+                            <span class="dash_text dash">Expense</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="budgetCategory" data-page-title="Budget Categories">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-layer-group"></i>
+                            </span>
+                            <span class="dash_text dash">Budget Category</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="refferDashboard" data-page-title="Subscription & Remaining Days">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </span>
+                            <span class="dash_text dash">Remaining Days</span>
+                        </a>
+                    </li>
+
+                    <!-- SECTION: BOOKING -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">BOOKING</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('manageBooking')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-calendar-check"></i>
+                            </span>
+                            <span class="dash_text dash highlight">Manage Booking</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="manageBooking">
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="new_booking" data-page-title="New Booking">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-plus"></i></span>
+                                    <span class="dash_text text_v">New Booking</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="barcodeManager" data-page-title="Barcode Studio">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-barcode"></i></span>
+                                    <span class="dash_text text_v">Print Barcodes</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="cancel_booking" data-page-title="Cancel Booking">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-ban"></i></span>
+                                    <span class="dash_text text_v">Cancel Booking</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="cancelled" data-page-title="Cancelled Bookings">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-file-circle-xmark"></i></span>
+                                    <span class="dash_text text_v">Cancelled Bookings</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord lf-mobile-only-group forhide" id="vk">
+                        <p class="m_dash" onclick="toggleSubItems('subItem001')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-vials"></i>
+                            </span>
+                            <span class="dash_text dash">Samples &amp; Orders</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem lf-mobile-only-sub forhide" id="subItem001">
+                        <li class="m_dashbord Dash forhide">
+                            <a href="#" data-page="samples" data-page-title="Samples" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-vial"></i></span>
+                                    <span class="dash_text text_v">Samples</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash forhide">
+                            <a href="#" data-page="Allorders" data-page-title="Orders" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-box-open"></i></span>
+                                    <span class="dash_text text_v">Orders</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord" id="testdatabase">
+                        <p class="m_dash" onclick="toggleSubItems('subItem')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-microscope"></i>
+                            </span>
+                            <span class="dash_text dash highlight">Test Database</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItem">
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="test" data-page-title="Test Directory">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-flask"></i></span>
+                                    <span class="dash_text text_v">Add Test</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="addTestDocument" data-page-title="Test Documents">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-file-medical"></i></span>
+                                    <span class="dash_text text_v">Add Document</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="testPackage" data-page-title="Test Packages">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-cubes"></i></span>
+                                    <span class="dash_text text_v">Test Packages</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="testPanels" data-page-title="Test Panels">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-table-cells-large"></i></span>
+                                    <span class="dash_text text_v">Test Panels</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="category" data-page-title="Test Categories">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-tags"></i></span>
+                                    <span class="dash_text text_v">Category</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" class="hove dash nav-item" data-page="formulaBuilder" data-page-title="Formula Builder">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-square-root-variable"></i></span>
+                                    <span class="dash_text text_v">Formula Builder</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems2')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>
+                            </span>
+                            <span class="dash_text dash highlight">Generate Bill</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems2">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="generatebill" data-page-title="Generate New Bill" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-receipt"></i></span>
+                                    <span class="dash_text text_v">New Bill</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <!-- SECTION: EXPENSE & LEDGER -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">Expense</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <a href="#" class="m_dash nav-item" data-page="fullLedger" data-page-title="Track Ledger">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-book-open"></i>
+                            </span>
+                            <span class="dash_text dash">Track Ledger</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems8')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-money-bill-transfer"></i>
+                            </span>
+                            <span class="dash_text dash">Expense</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems8">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="addexpense" data-page-title="Add Expense" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-circle-plus"></i></span>
+                                    <span class="dash_text text_v">Add Expense</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="expense" data-page-title="View Expenses" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-chart-column"></i></span>
+                                    <span class="dash_text text_v">View Expense</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <!-- SECTION: MANAGE -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">Manage</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems5')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-user-doctor"></i>
+                            </span>
+                            <span class="dash_text dash">Manage Doctors</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems5">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Add_doctor" data-page-title="Add Doctor" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-user-plus"></i></span>
+                                    <span class="dash_text text_v">Add Doctor</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="List_doctor" data-page-title="Doctor Directory" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-address-book"></i></span>
+                                    <span class="dash_text text_v">List Doctor</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord forhide">
+                        <p class="m_dash" onclick="toggleSubItems('subItems6')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-flask-vial"></i>
+                            </span>
+                            <span class="dash_text dash">Manage Lab</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems6">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Add_lab" data-page-title="Add Partner Lab" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-plus"></i></span>
+                                    <span class="dash_text text_v">Add Lab</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="List_lab" data-page-title="Partner Labs" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-building-shield"></i></span>
+                                    <span class="dash_text text_v">List Lab</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord forhide">
+                        <p class="m_dash" onclick="toggleSubItems('subItems7')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-boxes-stacked"></i>
+                            </span>
+                            <span class="dash_text dash">Manage Inventory</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem forhide" id="subItems7">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="inventory" data-page-title="Inventory Management" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-warehouse"></i></span>
+                                    <span class="dash_text text_v">Inventory</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Addproduct" data-page-title="Add Inventory Product" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-box"></i></span>
+                                    <span class="dash_text text_v">Add Product</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <!-- SECTION: MY FRANCHISEE -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">MY FRANCHISEE</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems-b')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-network-wired"></i>
+                            </span>
+                            <span class="dash_text dash">My Franchisee</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems-b">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Add_franchisse" data-page-title="Add Franchisee" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-store"></i></span>
+                                    <span class="dash_text text_v">Add Franchisee</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="List_franchisse" data-page-title="Franchisee Network" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-list-check"></i></span>
+                                    <span class="dash_text text_v">List Franchisee</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Accounts" data-page-title="Franchisee Accounts" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-scale-balanced"></i></span>
+                                    <span class="dash_text text_v">Accounts</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems-c')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-hand-holding-dollar"></i>
+                            </span>
+                            <span class="dash_text dash">Franchisee Price</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems-c">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Assign_price" data-page-title="Assign Franchisee Pricing" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-tag"></i></span>
+                                    <span class="dash_text text_v">Assign Pricing</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Bulk_pricing" data-page-title="Bulk Pricing" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-file-import"></i></span>
+                                    <span class="dash_text text_v">Bulk Pricing</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems-d')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-coins"></i>
+                            </span>
+                            <span class="dash_text dash">Franchisee Credits</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems-d">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Assign_credit" data-page-title="Assign Credits" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-credit-card"></i></span>
+                                    <span class="dash_text text_v">Assign Credit</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="assignTarget" data-page-title="Assign Targets" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-bullseye"></i></span>
+                                    <span class="dash_text text_v">Assign Target</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Credit_history" data-page-title="Credit History" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                                    <span class="dash_text text_v">Credit History</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <!-- SECTION: STAFF -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">STAFF</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <p class="m_dash" onclick="toggleSubItems('subItems-e')">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-users-gear"></i>
+                            </span>
+                            <span class="dash_text dash">My Staff</span>
+                            <span class="icu toggle-symbol"><i class="fa-solid fa-chevron-right"></i></span>
+                        </p>
+                    </li>
+                    <div class="subItem" id="subItems-e">
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="Add_staff" data-page-title="Manage Staff" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-user-check"></i></span>
+                                    <span class="dash_text text_v">Add Staff</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li class="m_dashbord Dash">
+                            <a href="#" data-page="staffActivity" data-page-title="Staff Activity Monitor" class="hove dash nav-item">
+                                <div class="contar">
+                                    <span class="dash_icon icon_v"><i class="fa-solid fa-wave-square"></i></span>
+                                    <span class="dash_text text_v">Staff Activity</span>
+                                </div>
+                            </a>
+                        </li>
+                    </div>
+
+                    <!-- SECTION: SETTINGS -->
+                    <div class="booking bookf">
+                        <div class="booking-inner">
+                            <span class="book_po">SETTINGS</span>
+                            <div class="hr-line"></div>
+                        </div>
+                    </div>
+
+                    <li class="m_dashbord">
+                        <a href="#" data-page="Update_profile" data-page-title="Profile & Lab Branding" class="m_dash nav-item">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-sliders"></i>
+                            </span>
+                            <span class="dash_text dash">Update Profile</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" data-page="machineConnector" data-page-title="Machine Connector" class="m_dash nav-item">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-microscope"></i>
+                            </span>
+                            <span class="dash_text dash">Machine Connector</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord">
+                        <a href="#" data-page="update_password" data-page-title="Security & Password" class="m_dash nav-item">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-shield-halved"></i>
+                            </span>
+                            <span class="dash_text dash">Change Password</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord lf-mobile-utility-item">
+                        <a href="#" class="m_dash" id="lfMobileThemeBtn" role="button" tabindex="0">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-moon" id="lfMobileThemeIcon"></i>
+                            </span>
+                            <span class="dash_text dash" id="lfMobileThemeLabel">Dark Mode</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord lf-mobile-utility-item">
+                        <a href="#" data-page="addvideo" data-page-title="Training Videos" class="m_dash nav-item">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-circle-play"></i>
+                            </span>
+                            <span class="dash_text dash">Training Videos</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord lf-mobile-utility-item">
+                        <a href="#" class="m_dash" id="lfMobileHelpBtn" role="button" tabindex="0">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-headset"></i>
+                            </span>
+                            <span class="dash_text dash">Help &amp; Support</span>
+                        </a>
+                    </li>
+
+                    <li class="m_dashbord lf-logout-item">
+                        <a class="m_dash" id="logoutButton" role="button" tabindex="0">
+                            <span class="dash dash_icon">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </span>
+                            <span class="dash_text dash">LogOut</span>
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="lf-sidebar-empty" id="lfSidebarEmpty" hidden>
+                    <i class="fa-regular fa-compass"></i>
+                    <span>No matching menu items</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- =====================================================================
+             TOP APPLICATION HEADER BAR
+             ===================================================================== -->
+        <header class="top-navbar" id="top-navbar">
+            <div class="lf-topbar-inner">
+                <!-- Left Zone: Sidebar Toggle + Compact Logo + Active Route Breadcrumb -->
+                <div class="lf-topbar-left">
+                    <button
+                        type="button"
+                        class="toggle-div"
+                        id="toggle-div"
+                        onclick="toggleSidebar()"
+                        title="Toggle Sidebar (Ctrl+B)"
+                        aria-label="Toggle Sidebar"
+                    >
+                        <i class="fa-solid fa-bars-staggered"></i>
+                    </button>
+
+                    <a href="#" data-page="dashboard" class="nav-item lf-topbar-brand" id="lfTopbarBrand" title="LabFlow Dashboard">
+                        <img id="topbarLogo" src="/images/logoLabFlow.svg" alt="LabFlow" data-fallback-type="logo" />
+                    </a>
+
+                    <div class="lf-breadcrumb" id="lfBreadcrumb" aria-live="polite">
+                        <span class="lf-breadcrumb__section" id="lfBreadcrumbSection">Workspace</span>
+                        <i class="fa-solid fa-chevron-right lf-breadcrumb__sep"></i>
+                        <span class="lf-breadcrumb__current" id="lfBreadcrumbCurrent">Dashboard</span>
+                    </div>
+                </div>
+
+                <!-- Center Zone: Primary Quick-Switch Segmented Navigation -->
                 <div class="inner-nav">
-                    <div class="options-div">
+                    <nav class="options-div" aria-label="Quick Workspace Navigation">
                         <ul>
                             <li>
-                                <a href="#" data-page="dashboard" class="nav-item">
-                                    <div class="dashboard-div">
-                                        Dashboard
-                                    </div>
+                                <a href="#" data-page="dashboard" data-page-title="Dashboard" class="nav-item lf-quick-pill">
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                    <span>Dashboard</span>
                                 </a>
                             </li>
                             <li>
-                                <a href="#" data-page="allcases" class="nav-item">
-                                    <div class="cases">
-                                        Cases
-                                    </div>
+                                <a href="#" data-page="allcases" data-page-title="All Cases" class="nav-item lf-quick-pill">
+                                    <i class="fa-solid fa-folder-open"></i>
+                                    <span>Cases</span>
                                 </a>
                             </li>
                             <li>
-                                <a href="#" data-page="new_booking" class="nav-item">
-                                    <div class="cases">
-                                        Booking
-                                    </div>
+                                <a href="#" data-page="new_booking" data-page-title="New Booking" class="nav-item lf-quick-pill">
+                                    <i class="fa-solid fa-calendar-plus"></i>
+                                    <span>Booking</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" data-page="barcodeManager" data-page-title="Barcode Studio" class="nav-item lf-quick-pill" title="Pre-Printed & Sample Tube Barcodes">
+                                    <i class="fa-solid fa-barcode"></i>
+                                    <span>Barcodes</span>
                                 </a>
                             </li>
                             <li class="nav-copilot-wrapper">
-                                <a href="#" data-page="aiCopilot" class="nav-item nav-copilot-btn" title="Open LabFlow AI Copilot">
+                                <a href="#" data-page="aiCopilot" data-page-title="AI Copilot" class="nav-item nav-copilot-btn" title="Open LabFlow AI Copilot">
                                     <span class="nav-copilot-icon"><i class="fa-solid fa-brain"></i></span>
                                     <span>AI Copilot</span>
                                     <span class="nav-copilot-badge">PRO</span>
                                 </a>
                             </li>
                             <li class="forhide">
-                                <a href="#" data-page="Allorders" class="nav-item">
-                                    <div class="cases">
-                                        orders
-                                    </div>
+                                <a href="#" data-page="Allorders" data-page-title="Orders" class="nav-item lf-quick-pill">
+                                    <i class="fa-solid fa-box-open"></i>
+                                    <span>Orders</span>
                                 </a>
                             </li>
-
                             <li class="forhide">
-                                <a href="#" data-page="samples" class="nav-item">
-                                    <div class="samples-div">
-                                        Samples
-                                    </div>
+                                <a href="#" data-page="samples" data-page-title="Samples" class="nav-item lf-quick-pill">
+                                    <i class="fa-solid fa-vials"></i>
+                                    <span>Samples</span>
                                 </a>
                             </li>
                         </ul>
-                    </div>
-                    <a href="#" onclick="loadPage('addvideo')">
-                        <button
-                            class="ml-4 video-btn px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center">
-                            <i class="fas fa-play mr-2"></i>
-                            Videos
-                        </button>
-                    </a>
-                    <div class="help-div">
-                        <i class="fa-solid fa-headphones"></i>
-                        <span>Help</span>
-                    </div>
-                    <div class="help-popup fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 hidden"
-                        id="helpPopup">
-                        <div
-                            class="help-popup-content absolute top-20 right-20 bg-white rounded-lg shadow-2xl max-w-sm w-full p-6 border border-gray-200 transform transition-all scale-95">
-                            <h3 class="text-xl font-semibold text-blue-600 mb-4 flex items-center gap-2">
-                                <i class="fa-solid fa-headphones text-blue-500"></i>
-                                Need Help?
-                            </h3>
-                            <p class="text-gray-700 mb-2"><strong>Email:</strong> qodex786@gmail.com</p>
-                            <p class="text-gray-700"><strong>Phone:</strong> +91-9520976242</p>
-                        </div>
-                    </div>
-                    <div class="alert-div">
-                        <span id="toggleNotifications" aria-expanded="false" aria-controls="notificationContainer"
-                            aria-label="Toggle notifications panel">
-                            <i class="fa-regular fa-bell"></i>
-                            <span id="messageshint"></span>
-                        </span>
+                    </nav>
+                </div>
 
-                        <div id="notificationContainer" role="region" aria-live="polite" aria-atomic="false"
-                            tabindex="0">
-                            <div class="notification" role="alert">
-                                <strong>No messages yet</strong>
+                <!-- Right Zone: Command Palette, Videos, Help, Fullscreen, Notifications, Profile -->
+                <div class="lf-topbar-right">
+                    <!-- Quick Jump Command Palette Trigger -->
+                    <button type="button" class="lf-cmd-trigger" id="lfCmdTrigger" title="Quick Jump to any page (Ctrl+K)">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span class="lf-cmd-trigger__label">Quick Jump...</span>
+                        <kbd class="lf-cmd-trigger__kbd">Ctrl K</kbd>
+                    </button>
+
+                    <!-- Tutorials / Videos -->
+                    <button type="button" class="lf-action-pill video-btn" onclick="loadPage('addvideo')" title="Training & Tutorial Videos">
+                        <i class="fas fa-circle-play"></i>
+                        <span class="lf-action-pill__text">Videos</span>
+                    </button>
+
+                    <!-- Support / Help -->
+                    <div class="lf-popover-anchor">
+                        <button type="button" class="help-div" id="helpTriggerBtn" title="Customer Support & Help">
+                            <i class="fa-solid fa-headset"></i>
+                            <span class="lf-action-pill__text">Help</span>
+                        </button>
+                        <div class="help-popup" id="helpPopup" role="dialog" aria-label="Customer Support">
+                            <div class="lf-help-card">
+                                <div class="lf-help-card__head">
+                                    <div class="lf-help-card__icon">
+                                        <i class="fa-solid fa-headset"></i>
+                                    </div>
+                                    <div>
+                                        <h3>LabFlow Support Desk</h3>
+                                        <p>Direct priority assistance for your lab</p>
+                                    </div>
+                                    <button type="button" class="lf-popover-close" id="closeHelpBtn" aria-label="Close help">&times;</button>
+                                </div>
+                                <div class="lf-help-card__items">
+                                    <a href="mailto:qodex786@gmail.com" class="lf-help-card__item">
+                                        <span class="lf-help-card__item-icon"><i class="fa-regular fa-envelope"></i></span>
+                                        <span>
+                                            <small>Email Support</small>
+                                            <strong>qodex786@gmail.com</strong>
+                                        </span>
+                                    </a>
+                                    <a href="tel:+919520976242" class="lf-help-card__item">
+                                        <span class="lf-help-card__item-icon"><i class="fa-solid fa-phone-volume"></i></span>
+                                        <span>
+                                            <small>Helpline / WhatsApp</small>
+                                            <strong>+91-9520976242</strong>
+                                        </span>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <!-- Navbar User Image -->
-                    <div class="user-avatar" id="userAvatar">
-                        <img src="/images/default-avatar.svg" alt="User Avatar" id="userAvatarImg" />
-                    </div>
 
-                    <!-- Popup -->
-                    <div class="user-popup" id="userPopup">
-                        <div class="user-info">
-                            <img src="/images/default-avatar.svg" alt="User Avatar Large" id="popupAvatar" />
-                            <p id="userName">John Doe</p>
-                            <p id="userEmail">john@example.com</p>
+                    <!-- Theme Mode Toggle (Light / Dark) -->
+                    <button
+                        type="button"
+                        class="lf-icon-btn lf-theme-toggle"
+                        id="lfThemeToggleBtn"
+                        title="Switch to Dark Mode"
+                        aria-label="Toggle Dark or Light Mode"
+                        aria-pressed="false"
+                    >
+                        <span class="lf-theme-toggle__icons" aria-hidden="true">
+                            <i class="fa-solid fa-sun lf-theme-icon--sun"></i>
+                            <i class="fa-solid fa-moon lf-theme-icon--moon"></i>
+                        </span>
+                    </button>
+
+                    <!-- Fullscreen Toggle -->
+                    <button type="button" class="lf-icon-btn lf-hide-sm" id="lfFullscreenBtn" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">
+                        <i class="fa-solid fa-expand"></i>
+                    </button>
+
+                    <!-- Notifications -->
+                    <div class="alert-div lf-popover-anchor">
+                        <button
+                            type="button"
+                            class="lf-icon-btn"
+                            id="toggleNotifications"
+                            aria-expanded="false"
+                            aria-controls="notificationContainer"
+                            aria-label="Toggle notifications panel"
+                            title="Notifications"
+                        >
+                            <i class="fa-regular fa-bell"></i>
+                            <span id="messageshint"></span>
+                        </button>
+
+                        <div id="notificationContainer" role="region" aria-live="polite" aria-atomic="false" tabindex="-1">
+                            <div class="lf-notif-empty notification" role="status">
+                                <i class="fa-regular fa-bell-slash"></i>
+                                <strong>All caught up</strong>
+                                <span>No unread case notifications right now.</span>
+                            </div>
                         </div>
-                        <ul class="user-actions">
-                            <a onclick="loadPage('Update_profile')">
-                                <li><i class="fas fa-cog"></i> Settings</li>
-                            </a>
-                            <li id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</li>
-                        </ul>
                     </div>
 
-                </div>
-                <div class="toggle-div" id="toggle-div" onclick="toggleSidebar()"><i class="fa-solid fa-sliders"></i>
-                </div>
+                    <!-- User Profile Chip & Dropdown -->
+                    <div class="lf-profile-anchor lf-popover-anchor">
+                        <div class="user-avatar" id="userAvatar" role="button" tabindex="0" aria-haspopup="true" title="Account & Settings">
+                            <img src="/images/default-avatar.svg" alt="User Avatar" id="userAvatarImg" data-fallback-type="avatar" />
+                            <span class="lf-avatar-status"></span>
+                        </div>
 
+                        <div class="user-popup" id="userPopup" role="menu">
+                            <div class="user-info">
+                                <img src="/images/default-avatar.svg" alt="User Avatar Large" id="popupAvatar" data-fallback-type="avatar" />
+                                <p id="userName" class="lf-user-popup__name">Lab Administrator</p>
+                                <p id="userEmail" class="lf-user-popup__email">admin@labflow.in</p>
+                            </div>
+                            <div class="lf-theme-menu-box" role="group" aria-label="Appearance Theme">
+                                <span class="lf-theme-menu-box__label">
+                                    <i class="fa-solid fa-circle-half-stroke"></i> Appearance
+                                </span>
+                                <div class="lf-theme-segmented">
+                                    <button type="button" class="lf-theme-seg-btn is-active" data-theme-choice="light">
+                                        <i class="fa-solid fa-sun"></i> Light
+                                    </button>
+                                    <button type="button" class="lf-theme-seg-btn" data-theme-choice="dark">
+                                        <i class="fa-solid fa-moon"></i> Dark
+                                    </button>
+                                </div>
+                            </div>
+                            <ul class="user-actions">
+                                <li onclick="loadPage('Update_profile')">
+                                    <i class="fas fa-sliders"></i>
+                                    <span>Profile &amp; Branding</span>
+                                </li>
+                                <li onclick="loadPage('update_password')">
+                                    <i class="fas fa-shield-halved"></i>
+                                    <span>Change Password</span>
+                                </li>
+                                <li id="logoutBtn" class="lf-user-actions__logout">
+                                    <i class="fas fa-right-from-bracket"></i>
+                                    <span>Sign Out</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <!-- slide navigation  -->
+        </header>
+
+        <!-- =====================================================================
+             COMMAND PALETTE MODAL (Ctrl+K / Cmd+K Instant SPA Navigation)
+             ===================================================================== -->
+        <div class="lf-cmd-overlay" id="lfCommandModal" hidden role="dialog" aria-modal="true" aria-label="Quick Jump Command Palette">
+            <div class="lf-cmd-dialog">
+                <div class="lf-cmd-search">
+                    <i class="fa-solid fa-magnifying-glass lf-cmd-search__icon"></i>
+                    <input
+                        type="text"
+                        id="lfCmdInput"
+                        class="lf-cmd-search__input"
+                        placeholder="Jump to page, module, or workflow (e.g. New Booking, Cases, Formula Builder)..."
+                        autocomplete="off"
+                    />
+                    <button type="button" class="lf-cmd-search__esc" id="lfCmdCloseBtn">ESC</button>
+                </div>
+                <div class="lf-cmd-results" id="lfCmdResults" role="listbox"></div>
+                <div class="lf-cmd-footer">
+                    <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> Navigate</span>
+                    <span><kbd>&#9166;</kbd> Open Page</span>
+                    <span><kbd>Ctrl</kbd> + <kbd>B</kbd> Toggle Sidebar</span>
+                </div>
+            </div>
         </div>
-        <nav class="left-navbar" id="left-navbar">
 
-            <!-- New Section for toggle left side page      -->
-            <div class="toggle" id="toggle">
-                <div class="left-panel">
-                    <div class="">
-                        <p class="name_text"></p>
-                        <p class="name_text nt1">(ADMIN)</p>
-                    </div>
-                </div>
-                <ul class="panel_list">
-                    <li class="m_dashbord">
-                        <a class="m_dash nav-item" d="hove" data-page="dashboard" data-page-title="Dashboard">
-                            <span class="dash dash_icon">
-                                <i class="fa-solid fa-house"></i>
-                            </span>
-                            <span class="dash_text dash">
-                                Dashboard
-                            </span>
-                        </a>
-                    </li>
-                    <li class="m_dashbord sidebar-copilot-item">
-                        <a class="nav-item sidebar-copilot-link" d="hove" data-page="aiCopilot" data-page-title="AI Copilot" title="LabFlow AI Copilot">
-                            <span class="dash_icon">
-                                <i class="fa-solid fa-brain"></i>
-                            </span>
-                            <span class="dash_text">
-                                AI Copilot
-                            </span>
-                            <span class="sidebar-copilot-badge">AI</span>
-                        </a>
-                    </li>
-                    <!-- <li class="m_dashbord">
-                    <a class="m_dash nav-item" d="hove" data-page="analytics" data-page-title="Add Test">
-                        <span class="dash dash_icon">
-                            <i class="fa-solid fa-magnifying-glass-chart"></i>
-                        </span>
-                        <span class="dash_text dash">
-                            Analytics
-                        </span>
-                    </a>
-                </li> -->
-                    <!-- <li class="m_dashbord">
-                    <a onclick="loadContent('\\dashboard\\analytics.html')" class="m_dash">
-                        <span class="dash dash_icon">
-                            <i class="fa-solid fa-magnifying-glass-chart"></i>
-                        </span>
-                        <span class="dash_text dash">
-                            Analytics
-                        </span>
-                    </a>
-                </li> -->
-                    <li class="m_dashbord">
-                        <a class="m_dash nav-item" d="hove" data-page="expense" data-page-title="expense">
-                            <span class="dash dash_icon">
-                                <i class="fa-solid fa-money-bill-transfer"></i>
-                            </span>
-                            <span class="dash_text dash">
-                                Expense
-                            </span>
-                        </a>
-                    </li>
-                    <li class="m_dashbord">
-                        <a class="m_dash nav-item" d="hove" data-page="budgetCategory" data-page-title="category">
-                            <span class="dash dash_icon">
-                                <i class="fa-solid fa-money-bill-transfer"></i>
-                            </span>
-                            <span class="dash_text dash">
-                                Budget Category
-                            </span>
-                        </a>
-                    </li>
-                    <li class="m_dashbord">
-                        <a class="m_dash nav-item" d="hove" data-page="refferDashboard" data-page-title="Add Test">
-                            <span class="dash dash_icon">
-                                <i class="fa-solid fa-house"></i>
-                            </span>
-                            <span class="dash_text dash">
-                                Remaining Days
-                            </span>
-                        </a>
-                    </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">BOOKING</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('manageBooking')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-money-bill-1"></i>
-                    </span>
-                    <span class="dash_text dash highlight">
-                        Manage Booking
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="manageBooking">
-                <li class="m_dashbord">
-                    <a class="m_dash nav-item" d="hove" data-page="new_booking" data-page-title="Add Test">
-                        <span class="dash dash_icon">
-                            <i class="fa-solid fa-book"></i>
-                        </span>
-                        <span class="dash_text dash">
-                            New booking
-                        </span>
-                    </a>
-                </li>
-                <li class="m_dashbord">
-                    <a class="m_dash nav-item" d="hove" data-page="cancel_booking" data-page-title="cancel booking">
-                        <span class="dash dash_icon">
-                            <i class="fa-solid fa-book"></i>
-                        </span>
-                        <span class="dash_text dash">
-                            Cancel booking
-                        </span>
-                    </a>
-                </li>
-                <li class="m_dashbord">
-                    <a class="m_dash nav-item" d="hove" data-page="cancelled" data-page-title="cancelled bookings">
-                        <span class="dash dash_icon">
-                            <i class="fa-solid fa-book"></i>
-                        </span>
-                        <span class="dash_text dash">
-                            Cancelled bookings
-                        </span>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord" id="vk">
-                <p class="m_dash" onclick="toggleSubItems('subItem001')">
-                    <span class="dash dash_icon">
-                        <i class="fa-brands fa-creative-commons-nd"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Samples
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItem001">
-                <li id="vk">
-                    <a href="#" data-page="allcases" class="nav-item">
-                        <div class="cases">
-                            Cases
-                        </div>
-                    </a>
-                </li>
-                <li id="vk">
-                    <a href="#" data-page="samples" class="nav-item">
-                        <div class="samples-div">
-                            Samples
-                        </div>
-                    </a>
-                </li>
-                <li id="vk">
-                    <a href="#" data-page="Allorders" class="nav-item">
-                        <div class="samples-div">
-                            Orders
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord" id="testdatabase">
-                <p class="m_dash" onclick="toggleSubItems('subItem')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-database"></i>
-                    </span>
-                    <span class="dash_text dash highlight">
-                        Test Database
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItem">
-                <!-- Sub Section inside div -->
-
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="test" data-page-title="Add Test">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Test
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="addTestDocument" data-page-title="Add Test">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Document
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="testPackage" data-page-title="Add Test">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Test Packages
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="testPanels" data-page-title="Add Test">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Test Panels
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="category" data-page-title="Add Test">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                category
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a class="hove dash nav-item" id="hove" data-page="formulaBuilder"
-                        data-page-title="Formula Builder">
-
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Formula Builder
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems2')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-money-bill-1"></i>
-                    </span>
-                    <span class="dash_text dash highlight">
-                        Generate Bill
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems2">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="generatebill" class="hove dash nav-item" id="hove">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                New Bill
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">Expense</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <a class="m_dash nav-item" d="hove" data-page="fullLedger" data-page-title="Trek Ledger">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-house"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Track Ledger
-                    </span>
-                </a>
-            </li>
-            <li class="m_dashbord">
-                <p class="m_dash nav-item" onclick="toggleSubItems('subItems8')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-money-bill-transfer"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Expense
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems8">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="addexpense" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add expense
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="expense" class="hove dash nav-item" id="hove" data-page-title="List doctor">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                View Expense
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">Manage</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems5')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-user-nurse"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Manage Doctors
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems5">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Add_doctor" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Doctor
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="List_doctor" class="hove dash nav-item" id="hove"
-                        data-page-title="List doctor">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                List Doctor
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord forhide">
-                <p class="m_dash" onclick="toggleSubItems('subItems6')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-flask-vial"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Manage Lab
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems6">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Add_lab" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Lab
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="List_lab" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                List Lab
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord forhide">
-                <p class="m_dash" onclick="toggleSubItems('subItems7')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-cubes-stacked"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Manage Inventory
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem forhide" id="subItems7">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="inventory" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Inventory
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Addproduct" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add product
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">MY FRANCHISEE</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems-b')">
-                    <span class="dash dash_icon">
-                        <i class="fa-sharp fa-solid fa-microchip"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        My Franchisee
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems-b">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Add_franchisse" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Franchisee
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="List_franchisse" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                List Franchisee
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Accounts" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Accounts
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems-c')" data-page-title="">
-                    <span class="dash dash_icon">
-                        <i class="fa-sharp fa-solid fa-microchip"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Franchisee Price
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems-c">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Assign_price" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Assign Pricing
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Bulk_pricing" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Bulk Pricing
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems-d')">
-                    <span class="dash dash_icon">
-                        <i class="fa-sharp fa-solid fa-microchip"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Franchisee Credits
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems-d">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Assign_credit" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Assign Credit
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="assignTarget" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Assign Target
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Credit_history" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Credit History
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">STAFF</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <p class="m_dash" onclick="toggleSubItems('subItems-e')">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-people-roof"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        My Staff
-                    </span>
-                    <span class="icu toggle-symbol">&#9654;</span>
-                </p>
-            </li>
-            <div class="subItem" id="subItems-e">
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="Add_staff" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Add Staff
-                            </span>
-                        </div>
-                    </a>
-                </li>
-                <!-- <li class="m_dashbord Dash">
-                    <a href="#" data-page="List_staff" class="hove dash nav-item" id="hove" data-page-title="">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                List Staff
-                            </span>
-                        </div>
-                    </a>
-                </li> -->
-                <li class="m_dashbord Dash">
-                    <a href="#" data-page="staffActivity" class="hove dash nav-item" id="hove">
-                        <div class="contar">
-                            <span class="dash_icon icon_v">
-                                <i class="fa-solid fa-chevron-right"></i>
-                            </span>
-                            <span class="dash_text text_v">
-                                Staff Activity
-                            </span>
-                        </div>
-                    </a>
-                </li>
-            </div>
-            <div class="booking bookf">
-                <div class="booking-inner">
-                    <span class="book_po">SETTINGS</span>
-                    <div class="hr-line"></div>
-                </div>
-            </div>
-            <li class="m_dashbord">
-                <a href="#" data-page="Update_profile" class="m_dash nav-item" data-page-title="">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-gear"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Update Profile
-                    </span>
-                </a>
-            </li>
-            <li class="m_dashbord">
-                <a href="#" data-page="update_password" class="m_dash nav-item" data-page-title="">
-                    <span class="dash dash_icon">
-                        <i class="fa-solid fa-gear"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        Change Password
-                    </span>
-                </a>
-            </li>
-            <li class="m_dashbord">
-                <a class="m_dash" id="logoutButton">
-                    <span class="dash dash_icon">
-                        <i class="fa-sharp fa-solid fa-power-off"></i>
-                    </span>
-                    <span class="dash_text dash">
-                        LogOut
-                    </span>
-                </a>
-            </li>
-            </ul>
-    </div>
-    </nav>
-
-    <div class="content-box" id="content-box">
-        <div class="inner-box" id="inner-box"></div>
-        <!-- Content render hoga -->
-    </div>
+        <!-- =====================================================================
+             MAIN SPA DYNAMIC WORKSPACE
+             ===================================================================== -->
+        <main class="content-box" id="content-box">
+            <div class="inner-box" id="inner-box"></div>
+        </main>
 
     </div>
+
+    <script src="/vendor/jsbarcode/JsBarcode.all.min.js"></script>
+    <script src="/js/barcodePrintEngine.js?v=2"></script>
     <script src="/js/top-progress.js"></script>
     <script src="admin.js"></script>
-
 </body>
 
 </html>

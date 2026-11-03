@@ -6,6 +6,8 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import { unitdb } from "../models/category.model.js";
 import { User } from "../models/user.model.js";
+import { SuperAdmin } from "../models/superAdmin.model.js";
+import { Staff } from "../models/staff.model.js";
 import { Tenant } from "../models/tenant.model.js";
 import { registerRefreshToken } from "../utils/refreshTokenRegistry.js";
 import {
@@ -1969,6 +1971,53 @@ const setOverdraft = asyncHandler(async (req, res) => {
   }
 });
 
+const getThemePreference = asyncHandler(async (req, res) => {
+  const theme = req.user?.themePreference === "dark" ? "dark" : "light";
+  return res.status(200).json({
+    success: true,
+    themePreference: theme,
+  });
+});
+
+const updateThemePreference = asyncHandler(async (req, res) => {
+  const rawTheme = String(req.body?.themePreference || req.body?.theme || "")
+    .trim()
+    .toLowerCase();
+
+  if (rawTheme !== "light" && rawTheme !== "dark") {
+    throw new ApiError(400, "Invalid theme preference. Use 'light' or 'dark'.");
+  }
+
+  const userIdToUpdate = req.user?._id;
+  if (!userIdToUpdate) {
+    throw new ApiError(401, "Unauthorized user session");
+  }
+
+  if (req.user?.role === "superAdmin") {
+    await SuperAdmin.updateOne(
+      { _id: userIdToUpdate },
+      { $set: { themePreference: rawTheme } }
+    );
+  } else {
+    const userResult = await User.updateOne(
+      { _id: userIdToUpdate },
+      { $set: { themePreference: rawTheme } }
+    );
+    if (!userResult?.matchedCount) {
+      await Staff.updateOne(
+        { _id: userIdToUpdate },
+        { $set: { themePreference: rawTheme } }
+      );
+    }
+  }
+
+  return res.status(200).json({
+    success: true,
+    themePreference: rawTheme,
+    message: `Theme preference saved as ${rawTheme}`,
+  });
+});
+
 export {
   registerUser,
   loginUser,
@@ -1995,5 +2044,7 @@ export {
   deleteAdminAndTenant,
   getDashboardData,
   addBookingWalletAmount,
-  franchisee
+  franchisee,
+  getThemePreference,
+  updateThemePreference
 };

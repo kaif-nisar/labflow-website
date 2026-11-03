@@ -113,7 +113,9 @@ import {
   superFranchiseeUpdate,
   deleteAdminAndTenant,
   addBookingWalletAmount,
-  franchisee
+  franchisee,
+  getThemePreference,
+  updateThemePreference
 } from "../controllers/user.controller.js";
 import { sendOtp, verifyOtp } from "../controllers/otp.controller.js";
 import {
@@ -151,7 +153,20 @@ import {
   assignSingleTestPrice,
   getBusinessAnalytics,
 } from "../controllers/commission.controller.js";
-import { barcodegeneratecontroller } from "../controllers/barcode.controller.js";
+import {
+  barcodegeneratecontroller,
+  getBarcodeSettingsController,
+  updateBarcodeSettingsController,
+  generatePrePrintedBatchController,
+  generateAutoBookingBarcodesController,
+  pickUnusedPreBarcodesController,
+  validateBarcodeLiveController,
+  getBarcodeBatchesController,
+  getBatchBarcodesController,
+  getBarcodePoolController,
+  toggleVoidBarcodesController,
+  getBookingLabelsDataController,
+} from "../controllers/barcode.controller.js";
 import { generateTrfSlipController } from "../controllers/trf.controller.js";
 import {
   deleteFormula,
@@ -315,6 +330,17 @@ import {
 } from "../controllers/testsValuesEntered.controller.js"
 import { allTestdetails, defaultResultsGet } from "../controllers/fetchtests.controller.js"
 import { getresult, getbarcoderesult } from "../controllers/lisresult.controller.js"
+import {
+    createMachineConnector,
+    listMachineConnectors,
+    getMachineConnectorById,
+    updateMachineConnector,
+    deleteMachineConnector,
+    toggleMachineConnector,
+    ingestMachineData,
+    testMachineConnection,
+    getRecentMachineData
+} from "../controllers/machineConnector.controller.js"
 import { addvideo, getAllVideos, deletevideo } from "../controllers/videos.controller.js";
 import { subscribe } from "../controllers/sunscribe.controller.js";
 import {saveTestTemplate, getTemplatesByTestId, deleteTemplateByName} from "../controllers/testTemplate.controller.js"
@@ -1037,6 +1063,21 @@ router.route("/adding-pdf-data").post(verifyJWT, savingPdfDatacontroller)
 // // getting template
 router.route("/generate-barcode").post(verifyJWT,barcodegeneratecontroller)
 
+// Barcode Studio & Tube Label Management (Pre-Printed + On-Demand)
+router
+  .route("/barcodes/settings")
+  .get(verifyJWT, getBarcodeSettingsController)
+  .put(verifyJWT, updateBarcodeSettingsController);
+router.route("/barcodes/generate-batch").post(verifyJWT, generatePrePrintedBatchController);
+router.route("/barcodes/next-auto").post(verifyJWT, generateAutoBookingBarcodesController);
+router.route("/barcodes/pick-unused").post(verifyJWT, pickUnusedPreBarcodesController);
+router.route("/barcodes/validate").post(verifyJWT, validateBarcodeLiveController);
+router.route("/barcodes/batches").get(verifyJWT, getBarcodeBatchesController);
+router.route("/barcodes/batches/:batchId").get(verifyJWT, getBatchBarcodesController);
+router.route("/barcodes/pool").get(verifyJWT, getBarcodePoolController);
+router.route("/barcodes/void").post(verifyJWT, toggleVoidBarcodesController);
+router.route("/barcodes/booking-labels").post(verifyJWT, getBookingLabelsDataController);
+
 // // getting template
 router.route("/getting-pdf-data").post(verifyJWT, checkStaffPermission("canManageTest"), getCustomizationByReportId)
 
@@ -1242,6 +1283,30 @@ router.route("/findbookingId").get(verifyJWT, findbookingId);
 router.route("/editBookingBarcodes").post(verifyJWT, editBookingBarcodes);
 router.route("/get-result").post(getresult);
 router.route("/getbarcoderesult").post(getbarcoderesult);
+
+// ─── Machine Connector Routes ─────────────────────────────────────────────────
+// Public ingest endpoint — no JWT required (machine pushes data directly)
+router.route("/machine-connectors/ingest/:connectorId").post(ingestMachineData);
+
+// Protected CRUD endpoints (lab admin / staff only)
+router.route("/machine-connectors")
+    .get(verifyJWT, checkStaffPermission("canManageTest"), listMachineConnectors)
+    .post(verifyJWT, checkStaffPermission("canManageTest"), createMachineConnector);
+
+router.route("/machine-connectors/:id")
+    .get(verifyJWT, checkStaffPermission("canManageTest"), getMachineConnectorById)
+    .put(verifyJWT, checkStaffPermission("canManageTest"), updateMachineConnector)
+    .delete(verifyJWT, checkStaffPermission("canManageTest"), deleteMachineConnector);
+
+router.route("/machine-connectors/:id/toggle")
+    .patch(verifyJWT, checkStaffPermission("canManageTest"), toggleMachineConnector);
+
+router.route("/machine-connectors/:id/test-connection")
+    .post(verifyJWT, checkStaffPermission("canManageTest"), testMachineConnection);
+
+router.route("/machine-connectors/:id/recent-data")
+    .get(verifyJWT, checkStaffPermission("canViewReports"), getRecentMachineData);
+// ─────────────────────────────────────────────────────────────────────────────
 router.route("/getAllInvoices").get(verifyJWT, getAllInvoices);
 router.route("/handleRequest").post(handleRequest);
 router.route("/addvideo").post(verifySuperAdmin, addvideo);
@@ -1263,5 +1328,13 @@ router.route("/delete-tests").post(verifyJWT, checkStaffPermission("Edit Tests")
 router.route("/delete-panels").post(verifyJWT, checkStaffPermission("Edit Tests"), deletePanelsController);
 router.route("/delete-packages").post(verifyJWT, checkStaffPermission("Edit Tests"), deletePackagesController);
 router.route("/delete-categories").post(verifyJWT, checkStaffPermission("Edit Tests"), deleteCategoriesController);
+
+// Persistent User UI Theme Preference (Light / Dark Mode)
+router
+  .route("/theme-preference")
+  .get(verifyJWT, getThemePreference)
+  .patch(verifyJWT, updateThemePreference)
+  .post(verifyJWT, updateThemePreference)
+  .put(verifyJWT, updateThemePreference);
 
 export default router;

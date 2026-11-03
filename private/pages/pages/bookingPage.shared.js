@@ -453,6 +453,9 @@
             existingSampleBarcodes: new Map(),
             currentGroupMode: 'create',
             groupSelectionId: '',
+            fastScanMode: localStorage.getItem('lf_fast_scan_mode') !== 'false',
+            liveBarcodeValidation: new Map(),
+            autoPromptAfterBooking: false,
         };
 
         function syncIdentityState() {
@@ -1066,6 +1069,364 @@
             return String(Math.floor(100000 + (Math.random() * 900000)));
         }
 
+        function ensureBarcodeEngine() {
+            if (window.LabFlowBarcode && window.LabFlowBarcode.__version === 2) {
+                return Promise.resolve(window.LabFlowBarcode);
+            }
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = '/js/barcodePrintEngine.js?v=2';
+                script.onload = () => resolve(window.LabFlowBarcode);
+                script.onerror = () => reject(new Error('Barcode print engine could not be loaded.'));
+                document.head.appendChild(script);
+            });
+        }
+
+        let liveValidateTimer = null;
+        function scheduleLiveBarcodeValidation() {
+            if (liveValidateTimer) clearTimeout(liveValidateTimer);
+            liveValidateTimer = setTimeout(() => {
+                runLiveBarcodeValidation();
+            }, 260);
+        }
+
+        async function runLiveBarcodeValidation() {
+            if (!refs.tableBody) return;
+            syncRowsFromDom();
+            const codes = [];
+            state.rowState.forEach((row) => {
+                const c = String(row.barcodeId || row.confirmBarcodeId || '').trim();
+                if (c) codes.push(c);
+            });
+            if (codes.length === 0) return;
+
+            try {
+                const excludeIds = [];
+                if (isEditMode && state.booking?.bookingId) excludeIds.push(state.booking.bookingId);
+                if (refs.bookingId?.value) excludeIds.push(refs.bookingId.value.trim());
+
+                const res = await fetch(`${BASE}/api/v1/user/barcodes/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        barcodes: codes,
+                        excludeBookingDocId: isEditMode ? toId(state.booking?._id) : null,
+                        excludeBookingIds: excludeIds,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data?.results) return;
+
+                Object.entries(data.results).forEach(([code, info]) => {
+                    state.liveBarcodeValidation.set(code, info);
+                });
+
+                Array.from(refs.tableBody.querySelectorAll('tr[data-sample-type]')).forEach((tr) => {
+                    const bInput = tr.querySelector('input[name="barcodeId"]');
+                    const cInput = tr.querySelector('input[name="confirmBarcodeId"]');
+                    const badgeEl = tr.querySelector('.lf-row-bc-status');
+                    if (!bInput || !badgeEl) return;
+                    const val = bInput.value.trim();
+                    if (!val) {
+                        badgeEl.innerHTML = '';
+                        bInput.style.borderColor = '';
+                        if (cInput) cInput.style.borderColor = '';
+                        return;
+                    }
+                    const info = state.liveBarcodeValidation.get(val);
+                    if (!info) return;
+                    if (!info.valid) {
+                        badgeEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#dc2626;margin-top:2px;"><i class="fas fa-times-circle"></i> ${escapeHtml(info.message || info.label)}</span>`;
+                        bInput.style.borderColor = '#dc2626';
+                        if (cInput) cInput.style.borderColor = '#dc2626';
+                    } else if (info.state === 'unused_pool') {
+                        badgeEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#059669;margin-top:2px;"><i class="fas fa-check-circle"></i> ${escapeHtml(info.label)}</span>`;
+                        bInput.style.borderColor = '#10b981';
+                        if (cInput) cInput.style.borderColor = '#10b981';
+                    } else {
+                        badgeEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#0284c7;margin-top:2px;"><i class="fas fa-check"></i> Available</span>`;
+                        bInput.style.borderColor = '';
+                        if (cInput) cInput.style.borderColor = '';
+                    }
+                });
+            } catch (_err) {
+                // Non-blocking live check
+            }
+        }
+
+        async function allocateServerAutoBarcodesForRows(targetSampleType = null) {
+            const targetRows = Array.from(state.rowState.values()).filter((r) => {
+                if (r.readOnly) return false;
+                if (targetSampleType) return r.sampleType === targetSampleType;
+                return true;
+            });
+            if (targetRows.length === 0) {
+                showMessage('Sabhi sample rows locked hain ya koi test select nahi hua hai.', 'error');
+                return;
+            }
+            try {
+                const res = await fetch(`${BASE}/api/v1/user/barcodes/next-auto`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ count: targetRows.length }),
+                });
+                const data = await res.json();
+                if (!res.ok || !Array.isArray(data?.barcodes) || data.barcodes.length === 0) {
+                    throw new Error(data?.message || 'Auto barcode generate nahi ho saka.');
+                }
+                targetRows.forEach((row, idx) => {
+                    const code = data.barcodes[idx] || generateSampleBarcode();
+                    row.barcodeId = code;
+                    row.confirmBarcodeId = code;
+                });
+                renderRows();
+                scheduleLiveBarcodeValidation();
+            } catch (err) {
+                showMessage(err.message || 'Auto barcode generate nahi ho saka.', 'error');
+            }
+        }
+
+        async function pickPrePrintedBarcodesForRows() {
+            syncRowsFromDom();
+            const targetRows = Array.from(state.rowState.values()).filter((r) => !r.readOnly);
+            if (targetRows.length === 0) {
+                showMessage('Pehle kam se kam ek test select kariye.', 'error');
+                return;
+            }
+            const alreadyInDom = Array.from(state.rowState.values())
+                .filter((r) => r.readOnly && r.barcodeId)
+                .map((r) => r.barcodeId);
+
+            try {
+                const res = await fetch(`${BASE}/api/v1/user/barcodes/pick-unused`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        count: targetRows.length,
+                        excludeBarcodes: alreadyInDom,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data?.success) {
+                    throw new Error(data?.message || 'Unused pre-barcode fetch nahi ho saka.');
+                }
+                if (!Array.isArray(data.barcodes) || data.barcodes.length === 0) {
+                    showMessage(data.message || 'Pool me unused pre-printed barcode nahi hai. Print Barcodes Studio se batch generate karein.', 'error');
+                    return;
+                }
+                targetRows.forEach((row, idx) => {
+                    if (data.barcodes[idx]) {
+                        row.barcodeId = data.barcodes[idx];
+                        row.confirmBarcodeId = data.barcodes[idx];
+                    }
+                });
+                renderRows();
+                scheduleLiveBarcodeValidation();
+                if (data.barcodes.length < targetRows.length) {
+                    showMessage(`Sirf ${data.barcodes.length} unused pre-barcode pool me mile. Baki rows ke liye Auto-Generate ya naya batch print karein.`, 'error');
+                }
+            } catch (err) {
+                showMessage(err.message || 'Pre-printed barcode pick nahi ho saka.', 'error');
+            }
+        }
+
+        async function openDraftOrSavedBookingBarcodeModal() {
+            syncRowsFromDom();
+            if (state.rowState.size === 0) {
+                showMessage('Print karne ke liye pehle test aur barcode select karein.', 'error');
+                return;
+            }
+            try {
+                const engine = await ensureBarcodeEngine();
+                const fields = getFormCommonFields();
+                const genderShort = fields.gender ? String(fields.gender).trim().charAt(0).toUpperCase() : '';
+                const ageGender = [fields.year, genderShort].filter(Boolean).join('/');
+                const rawLabels = [];
+
+                Array.from(state.rowState.values()).forEach((row, idx) => {
+                    const code = String(row.barcodeId || row.confirmBarcodeId || '').trim();
+                    if (!code) return;
+                    rawLabels.push({
+                        id: `draft_${idx}_${code}`,
+                        labelType: 'patient_tube',
+                        bookingId: fields.bookingId || '',
+                        barcode: code,
+                        patientName: fields.patientName || 'Walk-in Patient',
+                        ageGender,
+                        sampleType: row.sampleType,
+                        vacutainer: engine.resolveVacutainerMeta(row.sampleType),
+                        testsText: getUniqueStrings(row.testNames).join(', '),
+                        dateTimeText: [fields.date, fields.time].filter(Boolean).join(' '),
+                    });
+                });
+
+                if (rawLabels.length === 0) {
+                    showMessage('Pehle sample rows me Barcode ID enter ya Auto-Generate karein.', 'error');
+                    return;
+                }
+
+                await engine.openBookingPrintModal({
+                    title: isEditMode ? `Print Tube Barcodes — #${fields.bookingId}` : 'Preview & Print Tube Barcodes',
+                    rawLabels,
+                });
+            } catch (err) {
+                showMessage(err.message || 'Barcode print dialog open nahi ho saka.', 'error');
+            }
+        }
+
+        function injectSmartBarcodeToolbar() {
+            const detailsSection = refs.tableBody?.closest('.details-section');
+            if (!detailsSection || detailsSection.querySelector('#lf-booking-barcode-bar')) return;
+
+            if (!document.getElementById('lf-booking-barcode-styles')) {
+                const st = document.createElement('style');
+                st.id = 'lf-booking-barcode-styles';
+                st.textContent = `
+                    .lf-bk-bc-bar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 6px;
+                        flex-wrap: wrap;
+                        padding: 8px 10px;
+                        margin-bottom: 10px;
+                        border-radius: 8px;
+                        background: #eff6ff;
+                        border: 1px solid #bfdbfe;
+                    }
+                    .lf-bk-bc-btn {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 5px;
+                        padding: 5px 9px;
+                        border-radius: 6px;
+                        font-size: 11.5px;
+                        font-weight: 700;
+                        border: 1px solid #cbd5e1;
+                        background: #ffffff;
+                        color: #1e293b;
+                        cursor: pointer;
+                        transition: all 0.14s ease;
+                    }
+                    .lf-bk-bc-btn:hover {
+                        border-color: #2563eb;
+                        color: #2563eb;
+                    }
+                    .lf-bk-bc-btn.primary {
+                        background: #2563eb;
+                        border-color: #2563eb;
+                        color: #ffffff;
+                    }
+                    .lf-bk-bc-btn.emerald {
+                        background: #059669;
+                        border-color: #059669;
+                        color: #ffffff;
+                    }
+                    .lf-submit-row-wrap {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                        margin-top: 8px;
+                    }
+                    .lf-submit-print-btn {
+                        padding: 11px 20px;
+                        border-radius: 8px;
+                        border: 1px solid #059669;
+                        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                        color: #ffffff;
+                        font-weight: 700;
+                        font-size: 0.95rem;
+                        cursor: pointer;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-shadow: 0 4px 12px rgba(5, 150, 105, 0.22);
+                    }
+                    .lf-submit-print-btn:hover {
+                        filter: brightness(1.05);
+                    }
+                `;
+                document.head.appendChild(st);
+            }
+
+            const bar = document.createElement('div');
+            bar.id = 'lf-booking-barcode-bar';
+            bar.className = 'lf-bk-bc-bar';
+            bar.innerHTML = `
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e40af;cursor:pointer;margin:0;" title="USB Barcode Gun: Scan once into Barcode ID to auto-confirm & jump straight to next sample tube">
+                    <input type="checkbox" id="lf-fast-scan-chk" ${state.fastScanMode ? 'checked' : ''} style="width:14px;height:14px;margin:0;">
+                    <span><i class="fas fa-bolt"></i> 1-Scan Fast Gun</span>
+                </label>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <button type="button" class="lf-bk-bc-btn emerald" id="lf-pick-prebarcode-btn" title="Fill with next unused barcode from your Pre-Printed Pool">
+                        <i class="fas fa-tag"></i> Pick Pre-Barcode
+                    </button>
+                    <button type="button" class="lf-bk-bc-btn primary" id="lf-auto-seq-btn" title="Auto-generate unique sequential barcodes">
+                        <i class="fas fa-magic"></i> Auto-Generate
+                    </button>
+                    <button type="button" class="lf-bk-bc-btn" id="lf-print-draft-btn" title="Print sample tube stickers for this patient">
+                        <i class="fas fa-print"></i> Print Labels
+                    </button>
+                    <button type="button" class="lf-bk-bc-btn" id="lf-open-studio-btn" title="Open Bulk Pre-Printed Barcode Studio">
+                        <i class="fas fa-barcode"></i> Studio
+                    </button>
+                </div>
+            `;
+
+            const tableEl = detailsSection.querySelector('table');
+            if (tableEl) {
+                detailsSection.insertBefore(bar, tableEl);
+            } else {
+                detailsSection.prepend(bar);
+            }
+
+            bar.querySelector('#lf-fast-scan-chk')?.addEventListener('change', (e) => {
+                state.fastScanMode = e.target.checked;
+                try {
+                    localStorage.setItem('lf_fast_scan_mode', String(state.fastScanMode));
+                } catch (_e) {}
+            });
+            bar.querySelector('#lf-pick-prebarcode-btn')?.addEventListener('click', pickPrePrintedBarcodesForRows);
+            bar.querySelector('#lf-auto-seq-btn')?.addEventListener('click', () => allocateServerAutoBarcodesForRows(null));
+            bar.querySelector('#lf-print-draft-btn')?.addEventListener('click', openDraftOrSavedBookingBarcodeModal);
+            bar.querySelector('#lf-open-studio-btn')?.addEventListener('click', () => {
+                if (typeof window.loadPage === 'function') {
+                    window.loadPage('barcodeManager');
+                }
+            });
+
+            // Add "Submit & Print Barcodes" button beside #submit-btn
+            if (refs.submitBtn && !document.getElementById('submit-and-print-btn')) {
+                const submitPrintBtn = document.createElement('button');
+                submitPrintBtn.type = 'button';
+                submitPrintBtn.id = 'submit-and-print-btn';
+                submitPrintBtn.className = 'lf-submit-print-btn';
+                submitPrintBtn.innerHTML = `<i class="fas fa-print"></i> ${isEditMode ? 'Update & Print Barcodes' : 'Submit & Print Barcodes'}`;
+                refs.submitBtn.insertAdjacentElement('afterend', submitPrintBtn);
+                refs.submitBtn.style.marginRight = '10px';
+
+                submitPrintBtn.addEventListener('click', () => {
+                    if (isEditMode) {
+                        submitEditedBooking({ printAfterSave: true });
+                    } else {
+                        submitNewBooking({ printAfterSave: true });
+                    }
+                });
+            }
+
+            // Load tenant autoPromptAfterBooking preference non-blockingly
+            ensureBarcodeEngine()
+                .then((eng) => eng.fetchSettings(false))
+                .then((res) => {
+                    state.autoPromptAfterBooking = Boolean(res?.settings?.autoPromptAfterBooking);
+                })
+                .catch(() => {});
+        }
+
         function rebuildRowsFromSelection() {
             const previousRows = cloneItemsMap(state.rowState);
             const nextRows = new Map();
@@ -1164,34 +1525,62 @@
                     ? 'background-color:#3333331c;cursor:not-allowed;'
                     : '';
 
+                const vacMeta = window.LabFlowBarcode?.resolveVacutainerMeta
+                    ? window.LabFlowBarcode.resolveVacutainerMeta(row.sampleType)
+                    : null;
+                const capBadgeHtml = vacMeta
+                    ? `<div style="margin-top:3px;"><span style="display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;background:${vacMeta.hex}18;color:${vacMeta.hex};border:1px solid ${vacMeta.hex}44;">${escapeHtml(vacMeta.code)} • ${escapeHtml(vacMeta.cap)}</span></div>`
+                    : '';
+
                 tr.innerHTML = `
                     <td>${index}</td>
-                    <td>${escapeHtml(row.sampleType)}</td>
                     <td>
-                        <input type="text" name="barcodeId" value="${escapeHtml(barcodeValue)}" ${row.readOnly ? 'readonly' : ''} style="${inputStyle}">
-                        <br>
-                        <input type="text" name="confirmBarcodeId" value="${escapeHtml(confirmValue)}" ${row.readOnly ? 'readonly' : ''} style="${inputStyle}">
+                        <div style="font-weight:700;">${escapeHtml(row.sampleType)}</div>
+                        ${capBadgeHtml}
+                    </td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <input type="text" name="barcodeId" placeholder="Scan or Enter Barcode" value="${escapeHtml(barcodeValue)}" ${row.readOnly ? 'readonly' : ''} style="margin-bottom:4px;${inputStyle}">
+                            ${!row.readOnly ? `<button type="button" class="lf-row-auto-btn" title="Auto-generate unique barcode for this tube" style="height:34px;padding:0 8px;margin-bottom:4px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#2563eb;cursor:pointer;flex-shrink:0;"><i class="fas fa-magic"></i></button>` : ''}
+                        </div>
+                        <input type="text" name="confirmBarcodeId" placeholder="Confirm Barcode" value="${escapeHtml(confirmValue)}" ${row.readOnly ? 'readonly' : ''} style="margin-bottom:2px;${inputStyle}">
+                        <div class="lf-row-bc-status"></div>
                     </td>
                     <td>${escapeHtml(Array.from(new Set(row.testNames || [])).join(', '))}</td>
                 `;
 
                 const barcodeInput = tr.querySelector('input[name="barcodeId"]');
                 const confirmInput = tr.querySelector('input[name="confirmBarcodeId"]');
+                const autoRowBtn = tr.querySelector('.lf-row-auto-btn');
 
                 const syncRow = () => {
                     fillBarcodePair(barcodeInput, confirmInput);
                     row.barcodeId = barcodeInput.value.trim();
                     row.confirmBarcodeId = confirmInput.value.trim();
+                    scheduleLiveBarcodeValidation();
                 };
 
                 if (!row.readOnly) {
                     barcodeInput.addEventListener('blur', syncRow);
                     confirmInput.addEventListener('blur', syncRow);
+                    barcodeInput.addEventListener('input', () => {
+                        if (state.fastScanMode) {
+                            confirmInput.value = barcodeInput.value.trim();
+                            row.confirmBarcodeId = confirmInput.value;
+                        }
+                        row.barcodeId = barcodeInput.value.trim();
+                        scheduleLiveBarcodeValidation();
+                    });
+                    autoRowBtn?.addEventListener('click', () => {
+                        allocateServerAutoBarcodesForRows(row.sampleType);
+                    });
                 }
 
                 refs.tableBody.appendChild(tr);
                 index += 1;
             });
+
+            scheduleLiveBarcodeValidation();
         }
 
         function scoreSearchMatch(item, query) {
@@ -1821,7 +2210,8 @@
                 formData.append('file', refs.fileInput.files[0]);
             }
         }
-        async function submitNewBooking() {
+        async function submitNewBooking(submitOpts = {}) {
+            const shouldPrint = Boolean(submitOpts?.printAfterSave || state.autoPromptAfterBooking);
             hideMessage();
 
             if (!refs.patientName?.value.trim()) {
@@ -1858,11 +2248,29 @@
                 }
 
                 showMessage(data.message || 'Booking successfully create ho gayi.', 'success');
-                setTimeout(() => {
+                const savedBookingId = data?.data?.bookingId || data?.bookingId || getFormCommonFields().bookingId;
+
+                const goNext = () => {
                     if (typeof window.loadPage === 'function') {
-                        window.loadPage('allcases');
+                        const pathLower = String(window.location.pathname || '').toLowerCase();
+                        if (pathLower.includes('franchisee')) {
+                            window.loadPage('test_booking');
+                        } else {
+                            window.loadPage('allcases');
+                        }
                     }
-                }, 500);
+                };
+
+                if (shouldPrint && savedBookingId) {
+                    const engine = await ensureBarcodeEngine();
+                    await engine.openBookingPrintModal({
+                        title: `Print Tube Barcodes — #${savedBookingId}`,
+                        bookingIds: [savedBookingId],
+                        onClose: goNext,
+                    });
+                } else {
+                    setTimeout(goNext, 500);
+                }
             } catch (error) {
                 showMessage(error.message || 'Booking create karte waqt error aaya.', 'error');
             } finally {
@@ -1870,7 +2278,8 @@
             }
         }
 
-        async function submitEditedBooking() {
+        async function submitEditedBooking(submitOpts = {}) {
+            const shouldPrint = Boolean(submitOpts?.printAfterSave);
             hideMessage();
 
             if (!refs.patientName?.value.trim()) {
@@ -1925,11 +2334,26 @@
                 }
 
                 showMessage(data.message || 'Booking successfully update ho gayi.', 'success');
-                setTimeout(() => {
+                const goAfterEdit = () => {
                     if (typeof window.loadPage === 'function') {
-                        window.loadPage('allcases');
+                        const pathLower = String(window.location.pathname || '').toLowerCase();
+                        if (pathLower.includes('franchisee')) {
+                            window.loadPage('test_booking');
+                        } else {
+                            window.loadPage('allcases');
+                        }
                     }
-                }, 700);
+                };
+                if (shouldPrint && (finalBookingId || state.booking?.bookingId)) {
+                    const engine = await ensureBarcodeEngine();
+                    await engine.openBookingPrintModal({
+                        title: `Print Tube Barcodes — #${finalBookingId || state.booking.bookingId}`,
+                        bookingIds: [finalBookingId || state.booking.bookingId],
+                        onClose: goAfterEdit,
+                    });
+                } else {
+                    setTimeout(goAfterEdit, 700);
+                }
             } catch (error) {
                 showMessage(error.message || 'Booking edit karte waqt error aaya.', 'error');
             } finally {
@@ -2647,6 +3071,7 @@
                 }
             });
 
+            injectSmartBarcodeToolbar();
             setupEnterKeyNavigation();
         }
 
@@ -2666,6 +3091,31 @@
                 }
 
                 if (tagName === 'TEXTAREA' && event.shiftKey) {
+                    return;
+                }
+
+                // 1-Scan Fast Gun Mode: scanning into Barcode ID auto-confirms & jumps directly to next tube's Barcode ID
+                if (state.fastScanMode && target.name === 'barcodeId' && !event.shiftKey) {
+                    event.preventDefault();
+                    const rowEl = target.closest('tr');
+                    const confirmEl = rowEl?.querySelector('input[name="confirmBarcodeId"]');
+                    if (confirmEl && !confirmEl.readOnly) {
+                        confirmEl.value = target.value.trim();
+                    }
+                    syncRowsFromDom();
+                    scheduleLiveBarcodeValidation();
+
+                    const allBarcodeInputs = Array.from(
+                        (refs.tableBody || document).querySelectorAll('input[name="barcodeId"]:not([readonly]):not([disabled])')
+                    );
+                    const curIdx = allBarcodeInputs.indexOf(target);
+                    const nextTubeInput = curIdx >= 0 ? allBarcodeInputs[curIdx + 1] : null;
+                    if (nextTubeInput) {
+                        nextTubeInput.focus();
+                        nextTubeInput.select?.();
+                    } else if (refs.submitBtn && !refs.submitBtn.disabled) {
+                        refs.submitBtn.focus();
+                    }
                     return;
                 }
 

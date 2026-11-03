@@ -68,6 +68,11 @@ const superAdminSchema = new Schema({
         enum: ["superAdmin", "staff"],
         index: true, // For role-based queries
     },
+    themePreference: {
+        type: String,
+        enum: ["light", "dark"],
+        default: "light",
+    },
     parentRole: {
         type: String,
         default: null,

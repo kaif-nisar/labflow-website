@@ -663,9 +663,18 @@ async function bookingload() {
                         successMessage.style.height = '0rem';
                         loadPage('allcases');
                     }, 500);
+                    if (window.__lfSubFranPrintAfterSave && window.LabFlowBarcode?.openBookingPrintModal) {
+                        window.__lfSubFranPrintAfterSave = false;
+                        await window.LabFlowBarcode.openBookingPrintModal({
+                            title: `Print Tube Barcodes — #${bookingid}`,
+                            bookingIds: [bookingid],
+                            onClose: () => loadPage('test_booking_copy'),
+                        });
+                        return;
+                    }
                     console.log("Test booked successfully")
                 } else {
-                    alert(data)
+                    alert(data?.message || (typeof data === 'string' ? data : 'Booking failed'))
                     console.error("Error:", data);
                 }
             } catch (error) {
@@ -837,6 +846,117 @@ async function bookingload() {
         }
     }
     await initialization();
+
+    (function setupSubFranchiseeBarcodeToolbar() {
+        const tableBodyEl = document.getElementById('tableBody');
+        const detailsSec = tableBodyEl?.closest('.details-section');
+        if (!detailsSec || detailsSec.querySelector('#lf-subfran-bc-bar')) return;
+
+        const bar = document.createElement('div');
+        bar.id = 'lf-subfran-bc-bar';
+        bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:8px 10px;margin-bottom:10px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;';
+        bar.innerHTML = `
+            <span style="font-size:11.5px;font-weight:700;color:#1e40af;"><i class="fas fa-bolt"></i> 1-Scan Gun Ready</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <button type="button" id="lf-sf-pick-btn" style="padding:5px 9px;border-radius:6px;font-size:11.5px;font-weight:700;border:1px solid #059669;background:#059669;color:#fff;cursor:pointer;">
+                    <i class="fas fa-tag"></i> Pick Pre-Barcode
+                </button>
+                <button type="button" id="lf-sf-auto-btn" style="padding:5px 9px;border-radius:6px;font-size:11.5px;font-weight:700;border:1px solid #2563eb;background:#2563eb;color:#fff;cursor:pointer;">
+                    <i class="fas fa-magic"></i> Auto-Generate
+                </button>
+                <button type="button" id="lf-sf-studio-btn" style="padding:5px 9px;border-radius:6px;font-size:11.5px;font-weight:700;border:1px solid #cbd5e1;background:#fff;color:#1e293b;cursor:pointer;">
+                    <i class="fas fa-barcode"></i> Studio
+                </button>
+            </div>
+        `;
+        const tbl = detailsSec.querySelector('table');
+        if (tbl) detailsSec.insertBefore(bar, tbl);
+        else detailsSec.prepend(bar);
+
+        tableBodyEl.addEventListener('input', (e) => {
+            if (e.target?.name === 'barcodeId') {
+                const c = e.target.closest('tr')?.querySelector('input[name="confirmBarcodeId"]');
+                if (c) c.value = e.target.value.trim();
+            }
+        });
+        tableBodyEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target?.name === 'barcodeId') {
+                e.preventDefault();
+                const c = e.target.closest('tr')?.querySelector('input[name="confirmBarcodeId"]');
+                if (c) c.value = e.target.value.trim();
+                const all = Array.from(tableBodyEl.querySelectorAll('input[name="barcodeId"]'));
+                const nxt = all[all.indexOf(e.target) + 1];
+                if (nxt) nxt.focus();
+                else document.getElementById('submit-btn')?.focus();
+            }
+        });
+
+        bar.querySelector('#lf-sf-pick-btn')?.addEventListener('click', async () => {
+            const rows = Array.from(tableBodyEl.querySelectorAll('tr')).filter((r) => r.querySelector('input[name="barcodeId"]'));
+            if (!rows.length) {
+                alert('Please select at least one test first.');
+                return;
+            }
+            const res = await fetch(`${BASE_URL}/api/v1/user/barcodes/pick-unused`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ count: rows.length }),
+            });
+            const d = await res.json();
+            if (!d?.barcodes?.length) {
+                alert(d?.message || 'No unused pre-barcodes in pool. Generate a batch in Print Barcodes Studio.');
+                return;
+            }
+            rows.forEach((r, idx) => {
+                if (d.barcodes[idx]) {
+                    r.querySelector('input[name="barcodeId"]').value = d.barcodes[idx];
+                    r.querySelector('input[name="confirmBarcodeId"]').value = d.barcodes[idx];
+                }
+            });
+        });
+
+        bar.querySelector('#lf-sf-auto-btn')?.addEventListener('click', async () => {
+            const rows = Array.from(tableBodyEl.querySelectorAll('tr')).filter((r) => r.querySelector('input[name="barcodeId"]'));
+            if (!rows.length) {
+                alert('Please select at least one test first.');
+                return;
+            }
+            const res = await fetch(`${BASE_URL}/api/v1/user/barcodes/next-auto`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ count: rows.length }),
+            });
+            const d = await res.json();
+            if (Array.isArray(d?.barcodes)) {
+                rows.forEach((r, idx) => {
+                    if (d.barcodes[idx]) {
+                        r.querySelector('input[name="barcodeId"]').value = d.barcodes[idx];
+                        r.querySelector('input[name="confirmBarcodeId"]').value = d.barcodes[idx];
+                    }
+                });
+            }
+        });
+
+        bar.querySelector('#lf-sf-studio-btn')?.addEventListener('click', () => {
+            if (typeof loadPage === 'function') loadPage('barcodeManager');
+        });
+
+        const submitBtnEl = document.getElementById('submit-btn');
+        if (submitBtnEl && !document.getElementById('sf-submit-print-btn')) {
+            const spBtn = document.createElement('button');
+            spBtn.type = 'button';
+            spBtn.id = 'sf-submit-print-btn';
+            spBtn.style.cssText = 'margin-left:10px;padding:10px 18px;border-radius:8px;border:1px solid #059669;background:#059669;color:#fff;font-weight:700;cursor:pointer;';
+            spBtn.innerHTML = '<i class="fas fa-print"></i> Submit & Print Barcodes';
+            submitBtnEl.insertAdjacentElement('afterend', spBtn);
+            spBtn.addEventListener('click', () => {
+                window.__lfSubFranPrintAfterSave = true;
+                submitBtnEl.click();
+            });
+        }
+    })();
 
 
 

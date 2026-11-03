@@ -895,7 +895,11 @@ Connect_DB()
     .then(async () => {
         await cleanupCustomizationsOnStartup();
 
-        const server = app.listen(process.env.PORT || 3000, () => {
+        const PORT = Number(process.env.PORT) || 3000;
+        let portRetryCount = 0;
+        const MAX_PORT_RETRIES = process.env.NODE_ENV === 'production' ? 2 : 8;
+
+        const server = app.listen(PORT, () => {
             console.log(`✅ Server is running on port ${process.env.PORT || 3000}`);
             console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🛡️  Security Features: Active`);
@@ -911,8 +915,30 @@ Connect_DB()
         server.keepAliveTimeout = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT_MS || '65000', 10);
         server.headersTimeout = Number.parseInt(process.env.HEADERS_TIMEOUT_MS || '66000', 10);
 
+        server.on('error', (err) => {
+            if (err && err.code === 'EADDRINUSE' && portRetryCount < MAX_PORT_RETRIES) {
+                portRetryCount += 1;
+                console.warn(`⚠️ Port ${PORT} busy (attempt ${portRetryCount}/${MAX_PORT_RETRIES}), retrying in 750ms...`);
+                setTimeout(() => {
+                    try {
+                        server.close();
+                    } catch (_) {}
+                    server.listen(PORT);
+                }, 750);
+                return;
+            }
+            console.error(`❌ Server listen error on port ${PORT}:`, err?.message || err);
+            process.exit(1);
+        });
+
         const gracefulShutdown = () => {
             console.log('🛑 Received shutdown signal, closing server gracefully...');
+            if (typeof server.closeIdleConnections === 'function') {
+                server.closeIdleConnections();
+            }
+            if (process.env.NODE_ENV !== 'production' && typeof server.closeAllConnections === 'function') {
+                server.closeAllConnections();
+            }
             server.close(() => {
                 console.log('✅ Server closed');
                 process.exit(0);
@@ -926,6 +952,13 @@ Connect_DB()
 
         process.on('SIGTERM', gracefulShutdown);
         process.on('SIGINT', gracefulShutdown);
+        process.once('SIGUSR2', () => {
+            if (typeof server.closeIdleConnections === 'function') server.closeIdleConnections();
+            if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+            server.close(() => {
+                process.kill(process.pid, 'SIGUSR2');
+            });
+        });
     })
     .catch((err) => {
         console.error("❌ MongoDB connection failed:", err);

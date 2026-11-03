@@ -55,6 +55,7 @@ const canWriteDuringSubscriptionLock = (path) => {
     "/api/v1/user/getDoctorsSign",
     "/api/v1/user/templates",
     "/api/v1/user/adding-pdf-data",
+    "/api/v1/user/theme-preference",
     "/api/v1/user/logout",
   ];
 

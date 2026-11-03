@@ -135,7 +135,12 @@ async function fetchBookings(startDate = '', endDate = '', franchiseeId = '') {
             <td class="p-3 border">${booking.patientName}</td>
             <td class="p-3 border">${formatGenderAge(booking)}</td>
             <td class="p-3 border text-sm">${tests}</td>
-            <td class="p-3 border font-mono text-sm">${sampleId || 'N/A'}</td>
+            <td class="p-3 border font-mono text-sm">
+              <div>${Array.isArray(booking.tableData) ? Array.from(new Set(booking.tableData.map(t => t.barcodeId).filter(Boolean))).join(', ') || 'N/A' : (sampleId || 'N/A')}</div>
+              <button type="button" class="lf-row-print-barcodes" data-booking-id="${booking.bookingId}" style="margin-top:5px;display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;font-family:sans-serif;font-size:11.5px;font-weight:700;cursor:pointer;" title="Print Sample Tube Barcode Stickers">
+                <i class="fas fa-barcode"></i> Print Labels
+              </button>
+            </td>
             <td class="p-3 border font-bold">${booking.status}</td>
           `;
 
@@ -211,6 +216,63 @@ async function subfranchisee() {
 // ============= Event Listeners =============
 
 // Search button click handler
+async function openFranchiseeBookingBarcodes(bookingIds) {
+  const cleanIds = Array.from(new Set((bookingIds || []).map(id => String(id || '').trim()).filter(Boolean)));
+  if (!cleanIds.length) return;
+  const ensureScript = (src) => new Promise((resolve) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve(true);
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  if (typeof window.JsBarcode !== 'function') await ensureScript('/vendor/jsbarcode/JsBarcode.all.min.js');
+  if (!window.LabFlowBarcode || window.LabFlowBarcode.__version !== 2) await ensureScript('/js/barcodePrintEngine.js?v=2');
+  if (window.LabFlowBarcode && typeof window.LabFlowBarcode.openBookingPrintModal === 'function') {
+    window.LabFlowBarcode.openBookingPrintModal({
+      title: cleanIds.length === 1 ? `Print Sample Tube Labels — #${cleanIds[0]}` : `Bulk Print Tube Labels (${cleanIds.length} Bookings)`,
+      bookingIds: cleanIds
+    });
+  }
+}
+
+(function bindFranchiseeBarcodeActions() {
+  const tableContainer = document.querySelector('.table-container');
+  if (tableContainer && !tableContainer.dataset.lfBarcodeBound) {
+    tableContainer.dataset.lfBarcodeBound = '1';
+    tableContainer.addEventListener('click', function (e) {
+      const btn = e.target.closest('.lf-row-print-barcodes');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const bId = btn.getAttribute('data-booking-id');
+      if (bId) openFranchiseeBookingBarcodes([bId]);
+    });
+  }
+  const searchBtn = document.querySelector('#search-button');
+  if (searchBtn && searchBtn.parentElement && !document.getElementById('lf-bulk-print-fran-btn')) {
+    const bulkBtn = document.createElement('button');
+    bulkBtn.type = 'button';
+    bulkBtn.id = 'lf-bulk-print-fran-btn';
+    bulkBtn.className = 'h-10 bg-indigo-600 text-white w-full md:w-auto px-4 rounded hover:bg-indigo-700 flex items-center justify-center gap-2 transition-colors';
+    bulkBtn.style.cssText = 'background:#4f46e5;color:#fff;padding:0 14px;height:40px;border-radius:6px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:none;cursor:pointer;white-space:nowrap;';
+    bulkBtn.innerHTML = '<i class="fas fa-barcode"></i> Print All Barcodes';
+    bulkBtn.addEventListener('click', function () {
+      const ids = Array.from(document.querySelectorAll('.table-container tbody tr'))
+        .filter(r => r.style.display !== 'none')
+        .map(r => r.querySelector('.lf-row-print-barcodes')?.getAttribute('data-booking-id'))
+        .filter(Boolean);
+      if (!ids.length) {
+        alert('No bookings visible to print barcodes.');
+        return;
+      }
+      openFranchiseeBookingBarcodes(ids);
+    });
+    searchBtn.insertAdjacentElement('afterend', bulkBtn);
+  }
+})();
+
 document.querySelector('#search-button').addEventListener('click', function () {
   const startDate = document.getElementById('start-date').value;
   const endDate = document.getElementById('end-date').value;

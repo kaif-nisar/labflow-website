@@ -163,6 +163,11 @@ const userSchema = new Schema(
         "staff",
       ],
     },
+    themePreference: {
+      type: String,
+      enum: ["light", "dark"],
+      default: "light",
+    },
     password: {
       type: String,
       required: [true, "password is required"],

@@ -679,6 +679,12 @@ async function allcases() {
             }
         }
 
+        // Update Print Barcodes button label
+        const printBarcodesLabel = document.getElementById('printCasesBarcodesLabel');
+        if (printBarcodesLabel) {
+            printBarcodesLabel.textContent = selectedCount > 0 ? `Print Barcodes (${selectedCount})` : 'Print Barcodes';
+        }
+
         // Update Excel Export button label & modal badge
         const exportLabel = document.getElementById('exportCasesExcelLabel');
         if (exportLabel && !isExportingExcel) {
@@ -689,6 +695,74 @@ async function allcases() {
             excelSelectedBadge.textContent = `${selectedCount} selected`;
             excelSelectedBadge.style.display = selectedCount > 0 ? 'inline-flex' : 'none';
         }
+    }
+
+    async function ensureBarcodeEngineReady() {
+        if (window.LabFlowBarcode && typeof window.LabFlowBarcode.openBookingPrintModal === "function") {
+            return true;
+        }
+        const loadScript = (src) => new Promise((resolve) => {
+            if (document.querySelector(`script[src="${src}"]`)) {
+                resolve(true);
+                return;
+            }
+            const s = document.createElement("script");
+            s.src = src;
+            s.onload = () => resolve(true);
+            s.onerror = () => resolve(false);
+            document.head.appendChild(s);
+        });
+        if (typeof window.JsBarcode !== "function") {
+            await loadScript("/vendor/jsbarcode/JsBarcode.all.min.js");
+        }
+        await loadScript("/js/barcodePrintEngine.js?v=2");
+        return Boolean(window.LabFlowBarcode && typeof window.LabFlowBarcode.openBookingPrintModal === "function");
+    }
+
+    async function openBarcodeModalForBookings(bookingIds, title) {
+        const cleanIds = Array.from(new Set((bookingIds || []).map(id => String(id || "").trim()).filter(Boolean)));
+        if (!cleanIds.length) {
+            showAppToast("No bookings available to print tube barcodes.", "error");
+            return;
+        }
+        const ready = await ensureBarcodeEngineReady();
+        if (!ready) {
+            showAppToast("Barcode Print Engine could not be loaded.", "error");
+            return;
+        }
+        window.LabFlowBarcode.openBookingPrintModal({
+            title: title || (cleanIds.length === 1 ? `Print Sample Tube Labels — #${cleanIds[0]}` : `Bulk Print Tube Labels (${cleanIds.length} Cases)`),
+            bookingIds: cleanIds
+        });
+    }
+
+    async function openBulkPrintBarcodesFromToolbar() {
+        const checkedBoxes = document.querySelectorAll("#tbody .case-checkbox:checked");
+        if (checkedBoxes.length > 0) {
+            const selectedIds = Array.from(checkedBoxes)
+                .map(cb => cb.getAttribute("data-booking-id") || cb.closest("tr")?.getAttribute("data-booking-id") || "")
+                .filter(Boolean);
+            await openBarcodeModalForBookings(selectedIds, `Print Tube Barcodes (${selectedIds.length} Selected Cases)`);
+            return;
+        }
+
+        // If no report checkboxes are checked (e.g. pending cases), load all active cases on the current page
+        const visibleRows = Array.from(document.querySelectorAll("#tbody tr[data-booking-id]"))
+            .filter(r => r.style.display !== "none");
+        const pageIds = visibleRows
+            .filter(r => {
+                const status = String(r.getAttribute("data-status") || "").toLowerCase();
+                return status !== "cancelled" && status !== "canceled";
+            })
+            .map(r => r.getAttribute("data-booking-id"))
+            .filter(Boolean);
+
+        if (!pageIds.length) {
+            showAppToast("No active cases found in current view to print barcodes.", "error");
+            return;
+        }
+
+        await openBarcodeModalForBookings(pageIds, `Print Sample Tube Barcodes (${pageIds.length} Cases in Current View)`);
     }
 
     function openEditBookingPage(booking, row) {
@@ -1032,6 +1106,10 @@ async function allcases() {
                 <span>Generate TRF</span>
                 <span class="pdf-badge">PDF</span>
             </button>
+            <button type="button" class="action-btn print-barcodes-btn" data-action="print-barcodes">
+                <i class="fa-solid fa-barcode" style="color:#4f46e5;"></i>
+                <span>Print Barcodes</span>
+            </button>
             ${downloadAction}
             <div class="dropdown-divider"></div>
             <button type="button" class="action-btn edit-booking" data-action="edit-booking">
@@ -1071,6 +1149,8 @@ async function allcases() {
                 openInvoiceCustomizerModal(booking);
             } else if (action === "generate-trf") {
                 handleGenerateTRF(bookingId);
+            } else if (action === "print-barcodes") {
+                await openBarcodeModalForBookings([bookingId], `Print Sample Tube Labels — #${bookingId}`);
             } else if (action === "edit-booking") {
                 openEditBookingPage(booking, row);
             } else if (action === "hold") {
@@ -1090,13 +1170,13 @@ async function allcases() {
                     ? '<i class="fa-solid fa-circle-check barcode-icon barcode-icon-success"></i>'
                     : '<i class="fa-solid fa-circle-xmark barcode-icon barcode-icon-failed"></i>';
 
-                return `<span class="barcode-pill" title="${detail.isLisPresent ? "LIS data available" : "LIS data not available"}">${icon}${detail.barcode}</span>`;
+                return `<span class="barcode-pill barcode-pill-printable" data-print-barcode="${escapeHtml(detail.barcode)}" title="${detail.isLisPresent ? "LIS data available — Click to print tube barcode" : "Click to print sample tube barcode"}">${icon}${escapeHtml(detail.barcode)}<i class="fa-solid fa-print barcode-print-mini"></i></span>`;
             }).join("");
         }
 
         if (Array.isArray(booking.acceptedbarcode) && booking.acceptedbarcode.length > 0) {
             return booking.acceptedbarcode
-                .map((barcode) => `<span class="barcode-pill" title="${barcode}">${barcode}</span>`)
+                .map((barcode) => `<span class="barcode-pill barcode-pill-printable" data-print-barcode="${escapeHtml(barcode)}" title="Click to print sample tube barcode (${escapeHtml(barcode)})">${escapeHtml(barcode)}<i class="fa-solid fa-print barcode-print-mini"></i></span>`)
                 .join("");
         }
 
@@ -1238,6 +1318,19 @@ async function allcases() {
             // Handle checkbox click
             if (e.target.classList.contains("case-checkbox")) {
                 updateCasesSelectionState();
+                return;
+            }
+
+            // Handle clicking on Barcode pill to print sample tube stickers
+            const barcodePill = e.target.closest(".barcode-pill-printable");
+            if (barcodePill) {
+                e.preventDefault();
+                e.stopPropagation();
+                const rowForBarcode = barcodePill.closest("tr");
+                const bId = rowForBarcode ? rowForBarcode.getAttribute("data-booking-id") : "";
+                if (bId) {
+                    await openBarcodeModalForBookings([bId], `Print Sample Tube Labels — #${bId}`);
+                }
                 return;
             }
 
@@ -3387,6 +3480,13 @@ async function allcases() {
                 const value = btn.getAttribute("data-value");
                 setLetterheadPreference(value);
             });
+        }
+
+        // Print Barcodes Trigger
+        const printBarcodesBtn = document.getElementById("printCasesBarcodesBtn");
+        if (printBarcodesBtn && !printBarcodesBtn.dataset.listenerBound) {
+            printBarcodesBtn.dataset.listenerBound = "true";
+            printBarcodesBtn.addEventListener("click", openBulkPrintBarcodesFromToolbar);
         }
 
         // Excel Export Trigger & Modal Event Listeners

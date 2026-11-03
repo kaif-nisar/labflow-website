@@ -46,6 +46,11 @@ const staffSchema = new Schema({
         type: String,
         default: "staff"
     },
+    themePreference: {
+        type: String,
+        enum: ["light", "dark"],
+        default: "light"
+    },
     parentRole: {
         type: String,
         enum: ["superAdmin", "admin", "franchisee","superFranchisee", "subFranchisee", "staff"],
