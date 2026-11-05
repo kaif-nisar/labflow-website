@@ -2184,11 +2184,11 @@
     }
 
     function getRegisteredOnValue() {
-        return formatDateTimeLocal(booking.createdAt || booking.date, booking.createdAt ? "" : booking.time);
+        return booking.registeredOn || formatDateTimeLocal(booking.createdAt || booking.date, booking.createdAt ? "" : booking.time);
     }
 
     function getCollectedOnValue() {
-        return formatDateTimeLocal(booking.date, booking.time);
+        return booking.collectedOn || formatDateTimeLocal(booking.date, booking.time);
     }
 
     // Function to apply logic to each abnormal input field 
@@ -4354,7 +4354,7 @@
                 </div>
                 <div class="registered-div2">
                     <div class="registeration-tag2">Reported on:</div>
-                    <input name="DateTime" type="datetime-local" id="reportedOn" name="reportedOn">
+                    <input name="DateTime" type="datetime-local" id="reportedOn" name="reportedOn" value="${booking.reportedOn || ''}">
                 </div>
             </div>
             <div class="barcode-div2">
@@ -4818,9 +4818,18 @@
         delete booking.createdAt;
         delete booking.tableData;
 
-        const collectedOn = document.getElementById('collectedOn').value;
-        const receivedOn = document.getElementById('receivedOn').value;
-        const reportedOn = document.getElementById('reportedOn').value;
+        const registeredOn = document.getElementById('registeredOn')?.value || "";
+        const collectedOn = document.getElementById('collectedOn')?.value || "";
+        const receivedOn = document.getElementById('receivedOn')?.value || "";
+        const reportedOn = document.getElementById('reportedOn')?.value || "";
+
+        booking.registeredOn = registeredOn;
+        booking.collectedOn = collectedOn;
+        booking.receivedOn = receivedOn;
+        booking.reportedOn = reportedOn;
+        try {
+            localStorage.setItem("booking", JSON.stringify(booking));
+        } catch (e) {}
         const categorized = document.getElementById('check1').checked;
         const moredetails = document.getElementById('moredetails').value;
         const completionMeta = extractedData.completionMeta;
@@ -4841,6 +4850,7 @@
                     reportData: extractedData.allTableData,
                     reg_id: booking.bookingId,
                     booking,
+                    registeredOn,
                     collectedOn, receivedOn, reportedOn, categorized, moredetails,
                     uniquetestArray: uniquetestArray2,
                     isdocumented,

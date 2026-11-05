@@ -1473,6 +1473,8 @@
 
             const headings = document.createElement("div");
             headings.classList.add("headings");
+            headings.style.textAlign = "center";
+            headings.style.width = "100%";
 
             const deleteH2Button = document.createElement("span");
             deleteH2Button.innerHTML = `<i class="fa-sharp fa-solid fa-xmark" title="Delete Entire category section"></i>`;
@@ -1480,6 +1482,8 @@
 
             const categoryHeading = document.createElement("h3");
             categoryHeading.classList.add("category-heading");
+            categoryHeading.style.textAlign = "center";
+            categoryHeading.style.width = "100%";
             categoryHeading.textContent = categoryData.category;
             categoryHeading.appendChild(deleteH2Button);
             headings.appendChild(categoryHeading);
@@ -1493,6 +1497,8 @@
                 if (!categoryData.title.includes('Unknown Title')) {
                     titleHeading = document.createElement("h4");
                     titleHeading.classList.add("table-heading");
+                    titleHeading.style.textAlign = "center";
+                    titleHeading.style.width = "100%";
                     titleHeading.textContent = categoryData.title;
                     titleHeading.appendChild(deleteH3Button);
                     headings.appendChild(titleHeading);

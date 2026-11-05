@@ -4342,6 +4342,25 @@ const getBookingcontroller = async (req, res) => {
             return res.status(404).json({ message: "Booking not found or cancelled" });
         }
 
+        try {
+            const tenantId = req.user.tenantId?._id || req.user.tenantId;
+            const linkedReport = await reports.findOne(
+                { bookingId: booking.bookingId, ...(tenantId ? { tenantId } : {}) },
+                { categorizedPDF: 1, registeredOn: 1, collectedOn: 1, receivedOn: 1, reportedOn: 1 }
+            ).lean();
+            if (linkedReport) {
+                const bookingObj = booking.toObject ? booking.toObject() : { ...booking };
+                if (!bookingObj.registeredOn && linkedReport.registeredOn) bookingObj.registeredOn = linkedReport.registeredOn;
+                if (!bookingObj.collectedOn && linkedReport.collectedOn) bookingObj.collectedOn = linkedReport.collectedOn;
+                if (!bookingObj.receivedOn && linkedReport.receivedOn) bookingObj.receivedOn = linkedReport.receivedOn;
+                if (!bookingObj.reportedOn && linkedReport.reportedOn) bookingObj.reportedOn = linkedReport.reportedOn;
+                if (typeof bookingObj.categorizedPDF !== "boolean" && typeof linkedReport.categorizedPDF === "boolean") {
+                    bookingObj.categorizedPDF = linkedReport.categorizedPDF;
+                }
+                return res.status(200).json(bookingObj);
+            }
+        } catch (e) {}
+
         return res.status(200).json(booking);
     } catch (error) {
         console.error("Error fetching booking:", error);

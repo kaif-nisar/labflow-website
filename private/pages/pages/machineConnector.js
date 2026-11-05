@@ -130,14 +130,31 @@
     };
 
     // ── Utility helpers ──────────────────────────────────────────────────────
-    function toast(msg, type = "success", ms = 3200) {
-        const host = document.getElementById("toastHost");
-        if (!host) return;
+    function toast(msg, type = "success", ms = 3400) {
+        if (typeof window.showStatusMessage === "function") {
+            window.showStatusMessage(msg, type, ms);
+            return;
+        }
+        let host = document.getElementById("toastHost");
+        if (!host) {
+            host = document.createElement("div");
+            host.id = "toastHost";
+            document.body.appendChild(host);
+        }
         const el = document.createElement("div");
         el.className = `toast toast-${type}`;
         el.textContent = msg;
         host.appendChild(el);
         setTimeout(() => el.remove(), ms);
+    }
+
+    function getAuthHeaders(extraHeaders = {}) {
+        const headers = { ...extraHeaders };
+        const token = localStorage.getItem("token") || localStorage.getItem("accessToken");
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+        return headers;
     }
 
     function fmt(d) {
@@ -169,23 +186,23 @@
     // ── Machine instruction cards ────────────────────────────────────────────
     const INSTRUCTIONS = [
         {
-            title: "🔬 Sysmex XP-100 / XN-Series (Hematology)",
+            title: "🔬 Sysmex XP-100 / XP-300 / XN-Series (Hematology)",
             color: "#1565c0", bg: "#e3f2fd",
             steps: [
                 "On the analyzer, go to <strong>[Setting] → [Output Setting] → [Host Computer]</strong>.",
                 "Enable <strong>[Connect to Host Computer]</strong> and select <strong>[TCP/IP Connection]</strong>.",
-                "Enter the <strong>LabFlowLIS server IP address</strong> and the <strong>port number</strong> you configured (e.g. 5000).",
+                "Enter the <strong>LabFlowLIS server IP address</strong> and the <strong>port number</strong> (e.g. 5000).",
                 "Set <strong>Communication Format</strong> to <strong>ASTM</strong> and <strong>ASTM Rev</strong> to <code>1381-02</code>.",
-                "Click Save. The machine will push results to LabFlowLIS automatically after each run.",
+                "Click Save. The machine will push results to LabFlowLIS automatically after each test run.",
                 "In LabFlowLIS, select Quick Preset: <strong>Sysmex XP / XN</strong> to automatically populate all 18 parameter mappings."
             ]
         },
         {
-            title: "🧬 Mindray BC-5150 / BC-5380 (Hematology)",
+            title: "🧬 Mindray BC-5150 / BC-5000 / BC-5380 (Hematology)",
             color: "#1b5e20", bg: "#e8f5e9",
             steps: [
-                "On the BC-5150 touchscreen, go to <strong>Settings → LIS Communication</strong>.",
-                "Assign a <strong>static IP</strong> to the analyzer (e.g. <code>192.168.1.50</code>) matching your network.",
+                "On the BC-5150 touchscreen, go to <strong>Settings / Setup → LIS Communication</strong>.",
+                "Assign a <strong>static IP</strong> to the analyzer (e.g. <code>192.168.1.50</code>) matching your local network.",
                 "Set <strong>Server Port</strong> to <code>5100</code> (or matching port configured in LabFlowLIS).",
                 "Set <strong>Protocol</strong> to <strong>ASTM</strong>.",
                 "In LabFlowLIS Machine Connector: Connection Type = TCP/IP, Mode = Server, Port = 5100.",
@@ -193,10 +210,10 @@
             ]
         },
         {
-            title: "⚗️ Erba Chem 5 / Mannheim XL (Biochemistry)",
+            title: "⚗️ Erba Chem 5 / Chem 7 / Mannheim XL (Biochemistry)",
             color: "#4a148c", bg: "#f3e5f5",
             steps: [
-                "Older Erba Chem analyzers use <strong>RS-232 Serial (DB9 cable)</strong>. Connect via USB-to-Serial adapter or RS-232 to Ethernet converter.",
+                "Older Erba Chem analyzers use <strong>RS-232 Serial (DB9 cable)</strong>. Connect via USB-to-RS232 converter cable or RS-232 to Ethernet converter.",
                 "If using an <strong>Ethernet converter</strong> (Moxa NPort / USR-TCP232): Set converter to TCP Server mode on a free port (e.g. <code>4001</code>).",
                 "In LabFlowLIS: Connection Type = Serial/RS-232. Baud Rate = <code>9600</code>, Data Bits = <code>8</code>, Parity = <code>None</code>, Stop Bits = <code>1</code>.",
                 "Or use File Watch: Erba Chem can export results as text files to a directory; configure Watch Directory in LabFlowLIS.",
@@ -241,18 +258,47 @@
     let connectors = [];
     let editingId = null;
 
-    // ── DOM refs ─────────────────────────────────────────────────────────────
-    const machineModal     = document.getElementById("machineModal");
-    const detailModal      = document.getElementById("detailModal");
-    const simulatorModal   = document.getElementById("simulatorModal");
-    const machineForm      = document.getElementById("machineForm");
-    const connectorsList   = document.getElementById("connectorsList");
-    const presetSelect     = document.getElementById("fPresetSelect");
+    // ── STACKING CONTEXT FIX: Teleport Modals directly to document.body ───────
+    // This ensures modals escape any parent overflow / isolation:isolate / sidebar z-index
+    function ensureModalOnBody(id) {
+        let el = document.getElementById(id);
+        if (el && el.parentElement !== document.body) {
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function initModalsOnBody() {
+        ["machineModal", "detailModal", "simulatorModal"].forEach(id => {
+            ensureModalOnBody(id);
+        });
+    }
+
+    // ── SPA Page Cleanup (Invoked automatically when leaving page) ─────────────
+    window.cleanupCurrentPage = function () {
+        ["machineModal", "detailModal", "simulatorModal"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.parentElement === document.body) {
+                el.remove();
+            }
+        });
+        document.body.style.overflow = "";
+    };
+
+    // ── DOM refs & Init ───────────────────────────────────────────────────────
+    initModalsOnBody();
+
+    const machineForm    = document.getElementById("machineForm");
+    const connectorsList = document.getElementById("connectorsList");
+    const presetSelect   = document.getElementById("fPresetSelect");
 
     // ── Fetch all connectors ─────────────────────────────────────────────────
     async function loadConnectors() {
         try {
-            const res  = await fetch(API, { credentials: "include" });
+            const res = await fetch(API, {
+                credentials: "include",
+                headers: getAuthHeaders()
+            });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);
             connectors = Array.isArray(data.data) ? data.data : [];
@@ -266,15 +312,22 @@
 
     // ── Render stats bar ─────────────────────────────────────────────────────
     function renderStats() {
-        document.getElementById("statTotal").textContent    = connectors.length;
-        document.getElementById("statActive").textContent   = connectors.filter(c => c.isActive).length;
-        document.getElementById("statDisabled").textContent = connectors.filter(c => !c.isActive).length;
+        const totalEl = document.getElementById("statTotal");
+        const activeEl = document.getElementById("statActive");
+        const disabledEl = document.getElementById("statDisabled");
+        const countEl = document.getElementById("statDataCount");
+
+        if (totalEl) totalEl.textContent = connectors.length;
+        if (activeEl) activeEl.textContent = connectors.filter(c => c.isActive).length;
+        if (disabledEl) disabledEl.textContent = connectors.filter(c => !c.isActive).length;
         const total = connectors.reduce((s, c) => s + (c.lastDataReceivedCount || 0), 0);
-        document.getElementById("statDataCount").textContent = total.toLocaleString("en-IN");
+        if (countEl) countEl.textContent = total.toLocaleString("en-IN");
     }
 
     // ── Render connector cards ───────────────────────────────────────────────
     function renderConnectors() {
+        if (!connectorsList) return;
+
         if (connectors.length === 0) {
             connectorsList.innerHTML = `
                 <div class="empty-state" style="grid-column:1/-1">
@@ -367,76 +420,107 @@
     }
 
     // ── Presets Handler ──────────────────────────────────────────────────────
-    presetSelect.addEventListener("change", () => {
-        const key = presetSelect.value;
-        if (!key || !PRESETS[key]) return;
-        const presetMappings = PRESETS[key];
-        renderParamMappingRows(presetMappings);
-        toast(`Loaded ${presetMappings.length} preset mappings!`, "info");
-    });
+    if (presetSelect) {
+        presetSelect.addEventListener("change", () => {
+            const key = presetSelect.value;
+            if (!key || !PRESETS[key]) return;
+            const presetMappings = PRESETS[key];
+            renderParamMappingRows(presetMappings);
+            toast(`Loaded ${presetMappings.length} preset mappings!`, "info");
+        });
+    }
 
     // ── Open Add modal ───────────────────────────────────────────────────────
-    document.getElementById("openAddModal").addEventListener("click", () => {
+    document.getElementById("openAddModal")?.addEventListener("click", () => {
         editingId = null;
-        document.getElementById("modalTitle").innerHTML = '<i class="fa-solid fa-plug"></i> Add Machine Connector';
+        const modal = ensureModalOnBody("machineModal");
+        const title = document.getElementById("modalTitle");
+        if (title) title.innerHTML = '<i class="fa-solid fa-plug"></i> Add Machine Connector';
         resetForm();
-        machineModal.classList.add("open");
+        if (modal) {
+            modal.classList.add("open");
+            document.body.style.overflow = "hidden";
+        }
     });
 
-    function closeModal() { machineModal.classList.remove("open"); }
-    document.getElementById("closeModal").addEventListener("click", closeModal);
-    document.getElementById("cancelModal").addEventListener("click", closeModal);
-    machineModal.addEventListener("click", e => { if (e.target === machineModal) closeModal(); });
+    function closeMachineModal() {
+        const modal = document.getElementById("machineModal");
+        if (modal) modal.classList.remove("open");
+        document.body.style.overflow = "";
+    }
+
+    document.getElementById("closeModal")?.addEventListener("click", closeMachineModal);
+    document.getElementById("cancelModal")?.addEventListener("click", closeMachineModal);
+    document.getElementById("machineModal")?.addEventListener("click", e => {
+        if (e.target.id === "machineModal") closeMachineModal();
+    });
 
     // ── Open Edit modal ──────────────────────────────────────────────────────
     function openEdit(c) {
         editingId = String(c._id);
-        document.getElementById("modalTitle").innerHTML = '<i class="fa-solid fa-pen"></i> Edit Machine Connector';
-        document.getElementById("fMachineName").value    = c.machineName || "";
-        document.getElementById("fMachineType").value    = c.machineType || "";
-        document.getElementById("fManufacturer").value   = c.manufacturer || "";
-        document.getElementById("fModelNumber").value    = c.modelNumber || "";
-        document.getElementById("fConnectionType").value = c.connectionType || "tcpip";
-        document.getElementById("fProtocol").value       = c.protocol || "astm_e1394";
-        document.getElementById("fSampleIdField").value  = c.sampleIdField || "sample_id";
-        document.getElementById("fTcpHost").value        = c.tcpHost || "";
-        document.getElementById("fTcpPort").value        = c.tcpPort || "";
-        document.getElementById("fTcpMode").value        = c.tcpMode || "server";
-        document.getElementById("fSerialPort").value     = c.serialPort || "";
-        document.getElementById("fBaudRate").value       = c.baudRate || 9600;
-        document.getElementById("fDataBits").value       = c.dataBits || 8;
-        document.getElementById("fStopBits").value       = c.stopBits || 1;
-        document.getElementById("fParity").value         = c.parity || "none";
-        document.getElementById("fWatchDir").value       = c.watchDirectory || "";
-        document.getElementById("fFilePattern").value    = c.filePattern || "*.txt";
-        document.getElementById("fNotes").value          = c.notes || "";
-        presetSelect.value = "";
+        const modal = ensureModalOnBody("machineModal");
+        const title = document.getElementById("modalTitle");
+        if (title) title.innerHTML = '<i class="fa-solid fa-pen"></i> Edit Machine Connector';
+
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val;
+        };
+
+        setVal("fMachineName", c.machineName || "");
+        setVal("fMachineType", c.machineType || "");
+        setVal("fManufacturer", c.manufacturer || "");
+        setVal("fModelNumber", c.modelNumber || "");
+        setVal("fConnectionType", c.connectionType || "tcpip");
+        setVal("fProtocol", c.protocol || "astm_e1394");
+        setVal("fSampleIdField", c.sampleIdField || "sample_id");
+        setVal("fTcpHost", c.tcpHost || "");
+        setVal("fTcpPort", c.tcpPort || "");
+        setVal("fTcpMode", c.tcpMode || "server");
+        setVal("fSerialPort", c.serialPort || "");
+        setVal("fBaudRate", c.baudRate || 9600);
+        setVal("fDataBits", c.dataBits || 8);
+        setVal("fStopBits", c.stopBits || 1);
+        setVal("fParity", c.parity || "none");
+        setVal("fWatchDir", c.watchDirectory || "");
+        setVal("fFilePattern", c.filePattern || "*.txt");
+        setVal("fNotes", c.notes || "");
+
+        if (presetSelect) presetSelect.value = "";
         updateConnectionPanels();
         renderParamMappingRows(Array.isArray(c.paramMappings) ? c.paramMappings : []);
-        machineModal.classList.add("open");
+
+        if (modal) {
+            modal.classList.add("open");
+            document.body.style.overflow = "hidden";
+        }
     }
 
     function resetForm() {
-        machineForm.reset();
-        presetSelect.value = "";
-        document.getElementById("fSampleIdField").value = "sample_id";
-        document.getElementById("fFilePattern").value   = "*.txt";
+        if (machineForm) machineForm.reset();
+        if (presetSelect) presetSelect.value = "";
+        const sid = document.getElementById("fSampleIdField");
+        const fp = document.getElementById("fFilePattern");
+        if (sid) sid.value = "sample_id";
+        if (fp) fp.value = "*.txt";
         updateConnectionPanels();
         renderParamMappingRows([]);
     }
 
     // ── Connection type panel switching ──────────────────────────────────────
-    document.getElementById("fConnectionType").addEventListener("change", updateConnectionPanels);
+    document.getElementById("fConnectionType")?.addEventListener("change", updateConnectionPanels);
     function updateConnectionPanels() {
-        const val = document.getElementById("fConnectionType").value;
-        document.getElementById("panelTcp").classList.toggle("show",    val === "tcpip");
-        document.getElementById("panelSerial").classList.toggle("show", val === "serial_rs232");
-        document.getElementById("panelFile").classList.toggle("show",   val === "file_watch");
+        const val = document.getElementById("fConnectionType")?.value || "tcpip";
+        document.getElementById("panelTcp")?.classList.toggle("show", val === "tcpip");
+        document.getElementById("panelSerial")?.classList.toggle("show", val === "serial_rs232");
+        document.getElementById("panelFile")?.classList.toggle("show", val === "file_watch");
     }
 
     // ── Param mapping rows ───────────────────────────────────────────────────
     function renderParamMappingRows(mappings = []) {
         const container = document.getElementById("paramMappingRows");
+        if (!container) return;
+
         container.innerHTML = `
             <table class="param-table">
                 <thead><tr><th>Machine Key (e.g. WBC)</th><th>Test Short Name (e.g. TLC)</th><th>Unit</th><th></th></tr></thead>
@@ -448,19 +532,23 @@
 
     function addParamRow(data = {}) {
         let tbody = document.getElementById("paramTbody");
-        if (!tbody) renderParamMappingRows([]);
-        tbody = document.getElementById("paramTbody");
+        if (!tbody) {
+            renderParamMappingRows([]);
+            tbody = document.getElementById("paramTbody");
+        }
+        if (!tbody) return;
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td><input type="text" class="pm-key"  placeholder="e.g. WBC"  value="${escHtml(data.machineKey || "")}" /></td>
             <td><input type="text" class="pm-name" placeholder="e.g. TLC"  value="${escHtml(data.testShortName || "")}" /></td>
             <td><input type="text" class="pm-unit" placeholder="e.g. 10³/µL" value="${escHtml(data.unit || "")}" style="max-width:100px" /></td>
             <td><button type="button" class="del-row-btn" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>`;
-        tr.querySelector(".del-row-btn").addEventListener("click", () => tr.remove());
+        tr.querySelector(".del-row-btn")?.addEventListener("click", () => tr.remove());
         tbody.appendChild(tr);
     }
 
-    document.getElementById("addParamRow").addEventListener("click", () => addParamRow());
+    document.getElementById("addParamRow")?.addEventListener("click", () => addParamRow());
 
     function collectParamMappings() {
         const rows = document.querySelectorAll("#paramTbody tr");
@@ -475,32 +563,34 @@
     }
 
     // ── Form submit (create / update) ────────────────────────────────────────
-    machineForm.addEventListener("submit", async (e) => {
+    machineForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const btn = document.getElementById("saveConnectorBtn");
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+        }
 
         const payload = {
-            machineName:    document.getElementById("fMachineName").value.trim(),
-            machineType:    document.getElementById("fMachineType").value,
-            manufacturer:   document.getElementById("fManufacturer").value.trim(),
-            modelNumber:    document.getElementById("fModelNumber").value.trim(),
-            connectionType: document.getElementById("fConnectionType").value,
-            protocol:       document.getElementById("fProtocol").value,
-            sampleIdField:  document.getElementById("fSampleIdField").value.trim() || "sample_id",
-            tcpHost:        document.getElementById("fTcpHost").value.trim(),
-            tcpPort:        document.getElementById("fTcpPort").value ? Number(document.getElementById("fTcpPort").value) : null,
-            tcpMode:        document.getElementById("fTcpMode").value,
-            serialPort:     document.getElementById("fSerialPort").value.trim(),
-            baudRate:       Number(document.getElementById("fBaudRate").value),
-            dataBits:       Number(document.getElementById("fDataBits").value),
-            stopBits:       Number(document.getElementById("fStopBits").value),
-            parity:         document.getElementById("fParity").value,
-            watchDirectory: document.getElementById("fWatchDir").value.trim(),
-            filePattern:    document.getElementById("fFilePattern").value.trim(),
+            machineName:    document.getElementById("fMachineName")?.value.trim() || "",
+            machineType:    document.getElementById("fMachineType")?.value || "",
+            manufacturer:   document.getElementById("fManufacturer")?.value.trim() || "",
+            modelNumber:    document.getElementById("fModelNumber")?.value.trim() || "",
+            connectionType: document.getElementById("fConnectionType")?.value || "tcpip",
+            protocol:       document.getElementById("fProtocol")?.value || "astm_e1394",
+            sampleIdField:  document.getElementById("fSampleIdField")?.value.trim() || "sample_id",
+            tcpHost:        document.getElementById("fTcpHost")?.value.trim() || "",
+            tcpPort:        document.getElementById("fTcpPort")?.value ? Number(document.getElementById("fTcpPort").value) : null,
+            tcpMode:        document.getElementById("fTcpMode")?.value || "server",
+            serialPort:     document.getElementById("fSerialPort")?.value.trim() || "",
+            baudRate:       Number(document.getElementById("fBaudRate")?.value || 9600),
+            dataBits:       Number(document.getElementById("fDataBits")?.value || 8),
+            stopBits:       Number(document.getElementById("fStopBits")?.value || 1),
+            parity:         document.getElementById("fParity")?.value || "none",
+            watchDirectory: document.getElementById("fWatchDir")?.value.trim() || "",
+            filePattern:    document.getElementById("fFilePattern")?.value.trim() || "*.txt",
             paramMappings:  collectParamMappings(),
-            notes:          document.getElementById("fNotes").value.trim()
+            notes:          document.getElementById("fNotes")?.value.trim() || ""
         };
 
         try {
@@ -509,27 +599,33 @@
             const res    = await fetch(url, {
                 method,
                 credentials: "include",
-                headers: { "Content-Type": "application/json" },
+                headers: getAuthHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);
 
             toast(data.message, "success");
-            closeModal();
+            closeMachineModal();
             await loadConnectors();
         } catch (err) {
             toast("Save failed: " + err.message, "error");
         } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Machine';
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Machine';
+            }
         }
     });
 
     // ── Toggle enable/disable ────────────────────────────────────────────────
     async function toggleConnector(id, currentlyActive) {
         try {
-            const res  = await fetch(`${API}/${id}/toggle`, { method: "PATCH", credentials: "include" });
+            const res = await fetch(`${API}/${id}/toggle`, {
+                method: "PATCH",
+                credentials: "include",
+                headers: getAuthHeaders()
+            });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);
             toast(data.message, currentlyActive ? "warn" : "success");
@@ -543,7 +639,11 @@
     async function deleteConnector(id, name) {
         if (!confirm(`Delete machine connector "${name}"? This cannot be undone.`)) return;
         try {
-            const res  = await fetch(`${API}/${id}`, { method: "DELETE", credentials: "include" });
+            const res = await fetch(`${API}/${id}`, {
+                method: "DELETE",
+                credentials: "include",
+                headers: getAuthHeaders()
+            });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);
             toast("Deleted successfully", "success");
@@ -555,67 +655,89 @@
 
     // ── Detail modal ─────────────────────────────────────────────────────────
     async function openDetail(id) {
-        detailModal.classList.add("open");
-        document.getElementById("detailModalBody").innerHTML = `<p style="text-align:center;padding:30px"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</p>`;
+        const modal = ensureModalOnBody("detailModal");
+        if (modal) {
+            modal.classList.add("open");
+            document.body.style.overflow = "hidden";
+        }
+        const bodyEl = document.getElementById("detailModalBody");
+        if (bodyEl) bodyEl.innerHTML = `<p style="text-align:center;padding:30px"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</p>`;
 
         try {
-            const res  = await fetch(`${API}/${id}/test-connection`, { method: "POST", credentials: "include" });
+            const res = await fetch(`${API}/${id}/test-connection`, {
+                method: "POST",
+                credentials: "include",
+                headers: getAuthHeaders({ "Content-Type": "application/json" })
+            });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);
 
             const d = data.data;
-            document.getElementById("detailModalTitle").innerHTML = `<i class="fa-solid fa-circle-info"></i> ${escHtml(d.machineName)}`;
+            const titleEl = document.getElementById("detailModalTitle");
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${escHtml(d.machineName)}`;
 
-            const proto  = { astm_e1394: "ASTM E1394", hl7_v2: "HL7 v2.x", json_rest: "JSON REST", csv_flat: "CSV Flat", custom: "Custom" }[d.protocol] || d.protocol;
-            const connT  = { tcpip: "TCP/IP", serial_rs232: "RS-232 Serial", file_watch: "File Watch" }[d.connectionType] || d.connectionType;
+            const proto = { astm_e1394: "ASTM E1394", hl7_v2: "HL7 v2.x", json_rest: "JSON REST", csv_flat: "CSV Flat", custom: "Custom" }[d.protocol] || d.protocol;
+            const connT = { tcpip: "TCP/IP", serial_rs232: "RS-232 Serial", file_watch: "File Watch" }[d.connectionType] || d.connectionType;
 
-            document.getElementById("detailModalBody").innerHTML = `
-                <div style="margin-bottom:18px">
-                    <h3 style="font-size:14px;color:var(--muted);margin-bottom:8px">INGEST URL — Configure your machine / middleware to POST results to:</h3>
-                    <div class="ingest-url-box">
-                        <span id="ingestUrlText">${escHtml(d.ingestUrl)}</span>
-                        <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('ingestUrlText').textContent);window.showStatusMessage?.('Copied!','success')">
-                            <i class="fa-solid fa-copy"></i> Copy
-                        </button>
+            if (bodyEl) {
+                bodyEl.innerHTML = `
+                    <div style="margin-bottom:18px">
+                        <h3 style="font-size:14px;color:var(--muted);margin-bottom:8px">INGEST URL — Configure your machine / bridge agent to POST results to:</h3>
+                        <div class="ingest-url-box">
+                            <span id="ingestUrlText">${escHtml(d.ingestUrl)}</span>
+                            <button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('ingestUrlText').textContent);window.showStatusMessage?window.showStatusMessage('Copied!','success'):alert('Copied!')">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <p style="font-size:12px;color:var(--muted);margin-top:6px">
+                            This URL accepts <strong>POST</strong> requests with JSON body, raw ASTM, or HL7 text.
+                        </p>
                     </div>
-                    <p style="font-size:12px;color:var(--muted);margin-top:6px">
-                        This URL accepts <strong>POST</strong> requests with JSON body. Include your <strong>sample_id</strong> field and all test result fields.
-                    </p>
-                </div>
 
-                <div class="form-grid" style="margin-bottom:16px">
-                    <div><div class="form-hint">Connection Type</div><div style="font-weight:700">${connT}</div></div>
-                    <div><div class="form-hint">Protocol</div><div style="font-weight:700">${proto}</div></div>
-                    <div><div class="form-hint">Sample ID Field</div><div style="font-weight:700"><code>${escHtml(d.sampleIdField)}</code></div></div>
-                    ${d.tcpPort ? `<div><div class="form-hint">TCP Port</div><div style="font-weight:700">${d.tcpPort}</div></div>` : ""}
-                    <div><div class="form-hint">Last Data Received</div><div style="font-weight:700">${fmt(d.lastDataReceivedAt)}</div></div>
-                    <div><div class="form-hint">Status</div><div><span class="badge ${STATUS_META[d.connectionStatus || "unknown"].cls}">${STATUS_META[d.connectionStatus || "unknown"].label}</span></div></div>
-                </div>
+                    <div class="form-grid" style="margin-bottom:16px">
+                        <div><div class="form-hint">Connection Type</div><div style="font-weight:700">${connT}</div></div>
+                        <div><div class="form-hint">Protocol</div><div style="font-weight:700">${proto}</div></div>
+                        <div><div class="form-hint">Sample ID Field</div><div style="font-weight:700"><code>${escHtml(d.sampleIdField)}</code></div></div>
+                        ${d.tcpPort ? `<div><div class="form-hint">TCP Port</div><div style="font-weight:700">${d.tcpPort}</div></div>` : ""}
+                        <div><div class="form-hint">Last Data Received</div><div style="font-weight:700">${fmt(d.lastDataReceivedAt)}</div></div>
+                        <div><div class="form-hint">Status</div><div><span class="badge ${STATUS_META[d.connectionStatus || "unknown"].cls}">${STATUS_META[d.connectionStatus || "unknown"].label}</span></div></div>
+                    </div>
 
-                ${d.paramMappings && d.paramMappings.length ? `
-                <h3 style="font-size:13px;font-weight:800;margin-bottom:8px">Parameter Mappings</h3>
-                <table class="param-table">
-                    <thead><tr><th>Machine Key</th><th>Test Short Name</th><th>Unit</th></tr></thead>
-                    <tbody>${d.paramMappings.map(m => `<tr><td><code>${escHtml(m.machineKey)}</code></td><td><code>${escHtml(m.testShortName)}</code></td><td>${escHtml(m.unit || "—")}</td></tr>`).join("")}</tbody>
-                </table>` : `<p style="font-size:13px;color:var(--muted)">No parameter mappings configured. Click <strong>Edit</strong> on the card to add them.</p>`}
+                    ${d.paramMappings && d.paramMappings.length ? `
+                    <h3 style="font-size:13px;font-weight:800;margin-bottom:8px">Parameter Mappings (${d.paramMappings.length})</h3>
+                    <table class="param-table">
+                        <thead><tr><th>Machine Key</th><th>Test Short Name</th><th>Unit</th></tr></thead>
+                        <tbody>${d.paramMappings.map(m => `<tr><td><code>${escHtml(m.machineKey)}</code></td><td><code>${escHtml(m.testShortName)}</code></td><td>${escHtml(m.unit || "—")}</td></tr>`).join("")}</tbody>
+                    </table>` : `<p style="font-size:13px;color:var(--muted)">No parameter mappings configured. Click <strong>Edit</strong> on the card to add them.</p>`}
 
-                <div style="margin-top:20px;padding:14px;background:var(--info-bg);border-radius:8px;border:1px solid #90caf9">
-                    <h4 style="font-size:13px;font-weight:800;color:var(--info);margin-bottom:6px"><i class="fa-solid fa-lightbulb"></i> How to send data to LabFlowLIS</h4>
-                    <p style="font-size:12.5px;color:var(--text);line-height:1.7">
-                        POST a JSON object to the Ingest URL above. The JSON must include the <strong>sample_id</strong> field (matching the patient's barcode) and any result fields using your configured machine keys.<br/><br/>
-                        <strong>Example:</strong><br/>
-                        <code style="background:#e3f2fd;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:4px">
-                            { "sample_id": "BAR12345", "WBC": "7.4", "HGB": "13.2", "PLT": "215" }
-                        </code>
-                    </p>
-                </div>`;
+                    <div style="margin-top:20px;padding:14px;background:var(--info-bg);border-radius:8px;border:1px solid #90caf9">
+                        <h4 style="font-size:13px;font-weight:800;color:var(--info);margin-bottom:6px"><i class="fa-solid fa-lightbulb"></i> How to send data to LabFlowLIS</h4>
+                        <p style="font-size:12.5px;color:var(--text);line-height:1.7">
+                            POST a JSON object to the Ingest URL above. The JSON must include the <strong>sample_id</strong> field (matching the patient barcode) and result fields using your configured machine keys.<br/><br/>
+                            <strong>Example:</strong><br/>
+                            <code style="background:#e3f2fd;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:4px">
+                                { "sample_id": "BAR12345", "WBC": "7.4", "HGB": "13.2", "PLT": "215" }
+                            </code>
+                        </p>
+                    </div>`;
+            }
         } catch (err) {
-            document.getElementById("detailModalBody").innerHTML = `<p style="color:var(--danger);text-align:center;padding:20px"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(err.message)}</p>`;
+            if (bodyEl) {
+                bodyEl.innerHTML = `<p style="color:var(--danger);text-align:center;padding:20px"><i class="fa-solid fa-triangle-exclamation"></i> ${escHtml(err.message)}</p>`;
+            }
         }
     }
 
-    document.getElementById("closeDetailModal").addEventListener("click", () => detailModal.classList.remove("open"));
-    detailModal.addEventListener("click", e => { if (e.target === detailModal) detailModal.classList.remove("open"); });
+    function closeDetailModal() {
+        const modal = document.getElementById("detailModal");
+        if (modal) modal.classList.remove("open");
+        document.body.style.overflow = "";
+    }
+
+    document.getElementById("closeDetailModal")?.addEventListener("click", closeDetailModal);
+    document.getElementById("detailModal")?.addEventListener("click", e => {
+        if (e.target.id === "detailModal") closeDetailModal();
+    });
 
     // ── Simulator Modal ──────────────────────────────────────────────────────
     const simConnectorSelect = document.getElementById("simConnectorSelect");
@@ -625,47 +747,65 @@
     const sendMockDataBtn    = document.getElementById("sendMockDataBtn");
 
     function populateSimulatorConnectors() {
-        if (!simConnectorSelect) return;
-        simConnectorSelect.innerHTML = '<option value="">— Generic API (/get-result) —</option>' +
+        const select = document.getElementById("simConnectorSelect");
+        if (!select) return;
+        select.innerHTML = '<option value="">— Generic API (/get-result) —</option>' +
             connectors.map(c => `<option value="${c._id}">${escHtml(c.machineName)} (${c.machineType})</option>`).join("");
     }
 
     function updateSimulatorJson() {
-        const tplKey = simPayloadTemplate.value;
+        const tplKey = document.getElementById("simPayloadTemplate")?.value || "cbc";
         const base = SIM_TEMPLATES[tplKey] || SIM_TEMPLATES.cbc;
-        const sampleId = simSampleId.value.trim() || "SAMPLE12345";
+        const sampleId = document.getElementById("simSampleId")?.value.trim() || "SAMPLE12345";
         const full = { sample_id: sampleId, ...base };
-        simPayloadJson.value = JSON.stringify(full, null, 2);
+        const jsonEl = document.getElementById("simPayloadJson");
+        if (jsonEl) jsonEl.value = JSON.stringify(full, null, 2);
     }
 
-    simPayloadTemplate.addEventListener("change", updateSimulatorJson);
-    simSampleId.addEventListener("input", updateSimulatorJson);
+    document.getElementById("simPayloadTemplate")?.addEventListener("change", updateSimulatorJson);
+    document.getElementById("simSampleId")?.addEventListener("input", updateSimulatorJson);
 
-    document.getElementById("openTestSimulatorBtn").addEventListener("click", () => {
+    document.getElementById("openTestSimulatorBtn")?.addEventListener("click", () => {
+        const modal = ensureModalOnBody("simulatorModal");
         populateSimulatorConnectors();
-        if (!simSampleId.value) simSampleId.value = "SAMPLE101";
+        const sInput = document.getElementById("simSampleId");
+        if (sInput && !sInput.value) sInput.value = "SAMPLE101";
         updateSimulatorJson();
-        simulatorModal.classList.add("open");
+        if (modal) {
+            modal.classList.add("open");
+            document.body.style.overflow = "hidden";
+        }
     });
 
-    function closeSimulator() { simulatorModal.classList.remove("open"); }
-    document.getElementById("closeSimulatorModal").addEventListener("click", closeSimulator);
-    document.getElementById("cancelSimulatorModal").addEventListener("click", closeSimulator);
-    simulatorModal.addEventListener("click", e => { if (e.target === simulatorModal) closeSimulator(); });
+    function closeSimulator() {
+        const modal = document.getElementById("simulatorModal");
+        if (modal) modal.classList.remove("open");
+        document.body.style.overflow = "";
+    }
 
-    sendMockDataBtn.addEventListener("click", async () => {
+    document.getElementById("closeSimulatorModal")?.addEventListener("click", closeSimulator);
+    document.getElementById("cancelSimulatorModal")?.addEventListener("click", closeSimulator);
+    document.getElementById("simulatorModal")?.addEventListener("click", e => {
+        if (e.target.id === "simulatorModal") closeSimulator();
+    });
+
+    document.getElementById("sendMockDataBtn")?.addEventListener("click", async () => {
+        const jsonEl = document.getElementById("simPayloadJson");
+        const btn = document.getElementById("sendMockDataBtn");
         let payload;
         try {
-            payload = JSON.parse(simPayloadJson.value);
+            payload = JSON.parse(jsonEl?.value || "{}");
         } catch (e) {
             toast("Invalid JSON in payload: " + e.message, "error");
             return;
         }
 
-        sendMockDataBtn.disabled = true;
-        sendMockDataBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending…';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending…';
+        }
 
-        const connectorId = simConnectorSelect.value;
+        const connectorId = document.getElementById("simConnectorSelect")?.value;
         const targetUrl = connectorId
             ? `${API}/ingest/${connectorId}`
             : `${BASE_URL}/api/v1/user/get-result`;
@@ -673,7 +813,7 @@
         try {
             const res = await fetch(targetUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: getAuthHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
@@ -685,8 +825,19 @@
         } catch (err) {
             toast("Error sending mock data: " + err.message, "error");
         } finally {
-            sendMockDataBtn.disabled = false;
-            sendMockDataBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Data Now';
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Data Now';
+            }
+        }
+    });
+
+    // ── Global Escape Key Listener ───────────────────────────────────────────
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeMachineModal();
+            closeDetailModal();
+            closeSimulator();
         }
     });
 

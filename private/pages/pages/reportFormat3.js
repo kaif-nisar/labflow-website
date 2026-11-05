@@ -449,7 +449,7 @@
                 <div>
                     <div class="format1-registered-div2">
                         <div class="format1-registeration-tag2"><strong>Registered on:</strong></div>
-                        <div class="format1-time-div">${formatDateTime(new Date(report.date).toISOString().split('T')[0] + "T" + report.time)}</div>
+                        <div class="format1-time-div">${formatDateTime(report.registeredOn || (report.date ? new Date(report.date).toISOString().split('T')[0] + "T" + report.time : ''))}</div>
                         </div>
                         <div class="format1-registered-div2 forhide">
                             <div class="format1-registeration-tag2"><strong>Collected on:</strong></div>

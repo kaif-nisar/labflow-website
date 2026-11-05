@@ -547,7 +547,7 @@ const PRINT_PAPER_PAGES = new Set([
 ]);
 
 const PAPER_SELECTOR_RE =
-  /\.(?:container-pdf|ps-a4-sheet|ps-a4-body|ps-a4-letterhead-overlay|a4-page|print-sheet)\b/i;
+  /\.(?:container-pdf|container-format1|container|ps-a4-sheet|ps-a4-body|ps-a4-letterhead-overlay|a4-page|print-sheet|signed-off-div)\b/i;
 
 const NAMED_CSS_COLORS = {
   white: [255, 255, 255, 1],
@@ -1127,6 +1127,7 @@ function mountNormalizedSubpage(stagingContainer, rawHtml, pageName) {
   const canvas = document.createElement("div");
   canvas.className = "spa-page-canvas";
   canvas.dataset.spaPage = pageName;
+  canvas.dataset.subpage = pageName;
 
   const extraClasses = extractSafeBodyClasses(rawHtml);
   extraClasses.forEach((cls) => canvas.classList.add(cls));
@@ -2141,13 +2142,13 @@ function isProtectedPaperOrSkipNode(el) {
   }
   if (
     el.closest(
-      ".container-pdf, .ps-a4-sheet, .ps-a4-body, .ps-a4-letterhead-overlay, .a4-page, .print-sheet, [data-keep-light='true']"
+      ".container-pdf, .container-format1, #container, .ps-a4-sheet, .ps-a4-body, .ps-a4-letterhead-overlay, .a4-page, .print-sheet, .signed-off-div, [data-keep-light='true']"
     )
   ) {
     return true;
   }
   const canvas = el.closest(".spa-page-canvas");
-  const pageName = canvas?.getAttribute("data-subpage") || "";
+  const pageName = canvas?.getAttribute("data-spa-page") || canvas?.getAttribute("data-subpage") || "";
   if (pageName && PRINT_PAPER_PAGES.has(pageName)) {
     return true;
   }
@@ -3600,6 +3601,28 @@ function clearOldPage() {
     getLiveContentBox();
 
   cleanupSubpageGlobalListeners();
+
+  // Call subpage cleanup if registered
+  if (typeof window.cleanupCurrentPage === "function") {
+    try {
+      window.cleanupCurrentPage();
+    } catch (error) {
+      console.warn("cleanupCurrentPage failed:", error);
+    }
+    window.cleanupCurrentPage = null;
+  }
+
+  // Remove any stale or orphaned teleported modals attached to document.body
+  document.querySelectorAll([
+    "body > #machineModal",
+    "body > #detailModal",
+    "body > #simulatorModal",
+    "body > .mc-modal-overlay",
+    "body > #sampleTypeModal",
+    "body > #invoiceCustomizerModal",
+    "body > #excelExportModal",
+    "body > .modal-backdrop"
+  ].join(", ")).forEach((el) => el.remove());
 
   if (window.editor && typeof window.editor.destroy === "function") {
     window.editor.destroy().catch((error) => console.warn("Editor cleanup failed:", error));

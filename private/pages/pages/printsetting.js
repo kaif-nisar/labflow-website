@@ -247,6 +247,18 @@
             docBody.style.paddingLeft = `${Math.max(10, Math.round(marginLeftCm * CM_TO_PX))}px`;
             docBody.style.paddingRight = `${Math.max(10, Math.round(marginRightCm * CM_TO_PX))}px`;
             docBody.style.fontSize = `${fontSizePt}pt`;
+
+            // Report Format 1 Header font size is strictly locked to 10px
+            const patientCard = document.querySelector('.ps-doc-patient-card');
+            if (patientCard) {
+                const currentFormat = localStorage.getItem('pdfformat') || 'reportFormat1';
+                if (!currentFormat || currentFormat === 'reportFormat1') {
+                    patientCard.style.fontSize = '10px';
+                    patientCard.querySelectorAll('*').forEach(el => {
+                        el.style.fontSize = '10px';
+                    });
+                }
+            }
         }
 
         // Letterhead Layer vs Pre-printed Spacer
@@ -971,7 +983,8 @@
             fileInputDoctorlefttext: doc1Text,
             fileInputDoctorrighttext: doc2Text,
             footer: footerHtml,
-            persistCustomization: !!customOverrides.persistCustomization
+            persistCustomization: !!customOverrides.persistCustomization,
+            pdfFormat: localStorage.getItem('pdfformat') || 'reportFormat1'
         };
 
         try {
@@ -1172,6 +1185,13 @@
         // Calculate initial true-to-scale responsive preview
         fitPreviewToWindow();
         updateLiveCanvas();
+
+        const currentFormat = localStorage.getItem('pdfformat') || 'reportFormat1';
+        if (!currentFormat || currentFormat === 'reportFormat1') {
+            const notice = document.getElementById('psHeaderFontNotice');
+            if (notice) notice.style.display = 'block';
+        }
+
         updateStatusIndicator('saved', 'Ready');
     }
 

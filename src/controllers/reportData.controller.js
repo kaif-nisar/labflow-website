@@ -271,6 +271,7 @@ const SaveReportController = asyncHandler(async (req, res) => {
         reportData,
         reg_id,
         booking,
+        registeredOn,
         collectedOn,
         receivedOn,
         reportedOn,
@@ -299,6 +300,11 @@ const SaveReportController = asyncHandler(async (req, res) => {
         resolvedCompletionMeta
     );
 
+    const effectiveRegisteredOn = registeredOn || booking?.registeredOn;
+    const effectiveCollectedOn = collectedOn || booking?.collectedOn;
+    const effectiveReceivedOn = receivedOn || booking?.receivedOn;
+    const effectiveReportedOn = reportedOn || booking?.reportedOn;
+
     const savedREport = await reports.findOneAndUpdate(
         {
             bookingId: booking.bookingId,
@@ -307,9 +313,10 @@ const SaveReportController = asyncHandler(async (req, res) => {
         {
             reg_id,
             ...booking,
-            collectedOn,
-            receivedOn,
-            reportedOn,
+            registeredOn: effectiveRegisteredOn,
+            collectedOn: effectiveCollectedOn,
+            receivedOn: effectiveReceivedOn,
+            reportedOn: effectiveReportedOn,
             categorizedPDF: categorized,
             MoreDetails: moredetails,
             uniquetestArray,
@@ -326,6 +333,27 @@ const SaveReportController = asyncHandler(async (req, res) => {
 
     if (!savedREport) {
         throw new ApiError(400, "please try again after sometime, report not saved");
+    }
+
+    try {
+        const bookingUpdateFields = {};
+        if (booking?.date) bookingUpdateFields.date = new Date(booking.date);
+        if (booking?.time) bookingUpdateFields.time = booking.time;
+        if (typeof categorized === "boolean") bookingUpdateFields.categorizedPDF = categorized;
+        if (effectiveRegisteredOn) bookingUpdateFields.registeredOn = effectiveRegisteredOn;
+        if (effectiveCollectedOn) bookingUpdateFields.collectedOn = effectiveCollectedOn;
+        if (effectiveReceivedOn) bookingUpdateFields.receivedOn = effectiveReceivedOn;
+        if (effectiveReportedOn) bookingUpdateFields.reportedOn = effectiveReportedOn;
+
+        if (Object.keys(bookingUpdateFields).length > 0) {
+            await newBooking.findOneAndUpdate(
+                { bookingId: booking.bookingId, tenantId },
+                bookingUpdateFields,
+                { new: true }
+            );
+        }
+    } catch (err) {
+        console.warn("Could not sync booking timestamps:", err);
     }
 
     if (req.user.role === "staff") {

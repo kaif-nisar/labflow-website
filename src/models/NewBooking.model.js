@@ -200,6 +200,22 @@ const TestBookingSchema = new Schema({
         type: Boolean,
         default: false
     },
+    categorizedPDF: {
+        type: Boolean,
+        default: true
+    },
+    registeredOn: {
+        type: String
+    },
+    collectedOn: {
+        type: String
+    },
+    receivedOn: {
+        type: String
+    },
+    reportedOn: {
+        type: String
+    },
     discountamount: {
         type: Number,
         default: 0

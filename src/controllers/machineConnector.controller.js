@@ -1,5 +1,6 @@
 import { MachineConnector } from "../models/machineConnector.model.js";
 import { lisdata } from "../models/lismodel.js";
+import { autoParseMachineData } from "../utils/machineProtocolParser.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -14,6 +15,7 @@ function resolveTenantId(req) {
         req.user?.tenantId ||
         req.user?.tenant ||
         req.tenantId ||
+        req.user?._id ||
         null
     );
 }
@@ -107,28 +109,41 @@ const createMachineConnector = async (req, res) => {
             }
         }
 
+        // Clean up paramMappings to ensure no half-empty objects fail validation
+        const cleanedMappings = Array.isArray(paramMappings)
+            ? paramMappings
+                .filter(m => m && typeof m === "object")
+                .map(m => ({
+                    machineKey: String(m.machineKey || "").trim(),
+                    testShortName: String(m.testShortName || "").trim(),
+                    unit: String(m.unit || "").trim(),
+                    notes: String(m.notes || "").trim()
+                }))
+                .filter(m => m.machineKey && m.testShortName)
+            : [];
+
         const connector = await MachineConnector.create({
             tenantId,
-            createdBy: req.user._id,
-            machineName,
+            createdBy: req.user?._id || req.user?.id || tenantId,
+            machineName: String(machineName).trim(),
             machineType,
-            manufacturer: manufacturer || "",
-            modelNumber: modelNumber || "",
+            manufacturer: manufacturer ? String(manufacturer).trim() : "",
+            modelNumber: modelNumber ? String(modelNumber).trim() : "",
             connectionType,
-            tcpHost: tcpHost || "",
+            tcpHost: tcpHost ? String(tcpHost).trim() : "",
             tcpPort: tcpPort ? Number(tcpPort) : null,
             tcpMode: tcpMode || "server",
-            serialPort: serialPort || "",
-            baudRate: baudRate || 9600,
-            dataBits: dataBits || 8,
-            stopBits: stopBits || 1,
+            serialPort: serialPort ? String(serialPort).trim() : "",
+            baudRate: baudRate ? Number(baudRate) : 9600,
+            dataBits: dataBits ? Number(dataBits) : 8,
+            stopBits: stopBits ? Number(stopBits) : 1,
             parity: parity || "none",
-            watchDirectory: watchDirectory || "",
-            filePattern: filePattern || "*.txt",
+            watchDirectory: watchDirectory ? String(watchDirectory).trim() : "",
+            filePattern: filePattern ? String(filePattern).trim() : "*.txt",
             protocol,
-            sampleIdField: sampleIdField || "sample_id",
-            paramMappings: Array.isArray(paramMappings) ? paramMappings : [],
-            notes: notes || ""
+            sampleIdField: sampleIdField ? String(sampleIdField).trim() : "sample_id",
+            paramMappings: cleanedMappings,
+            notes: notes ? String(notes).trim() : ""
         });
 
         return res.status(201).json({
@@ -235,7 +250,23 @@ const updateMachineConnector = async (req, res) => {
 
         allowedFields.forEach((field) => {
             if (req.body[field] !== undefined) {
-                connector[field] = req.body[field];
+                if (field === "paramMappings") {
+                    connector.paramMappings = Array.isArray(req.body.paramMappings)
+                        ? req.body.paramMappings
+                            .filter(m => m && typeof m === "object")
+                            .map(m => ({
+                                machineKey: String(m.machineKey || "").trim(),
+                                testShortName: String(m.testShortName || "").trim(),
+                                unit: String(m.unit || "").trim(),
+                                notes: String(m.notes || "").trim()
+                            }))
+                            .filter(m => m.machineKey && m.testShortName)
+                        : [];
+                } else if (field === "tcpPort") {
+                    connector.tcpPort = req.body.tcpPort ? Number(req.body.tcpPort) : null;
+                } else {
+                    connector[field] = req.body[field];
+                }
             }
         });
 
@@ -302,12 +333,7 @@ const toggleMachineConnector = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /machine-connectors/ingest/:connectorId
 //
-// This is the primary "push" endpoint — the machine (or a middleware bridge)
-// sends its result JSON to this URL.  LabFlowLIS:
-//   1. Validates the connector belongs to the tenant (via a shared API key or JWT)
-//   2. Applies param mapping
-//   3. Saves as lisdata (same schema already in use by getresult / getbarcoderesult)
-//   4. Updates connector.lastDataReceivedAt + lastDataReceivedCount
+// Primary push endpoint for machine data. Supports JSON, raw ASTM, and HL7.
 // ─────────────────────────────────────────────────────────────────────────────
 const ingestMachineData = async (req, res) => {
     try {
@@ -318,12 +344,10 @@ const ingestMachineData = async (req, res) => {
             return res.status(400).json({ success: false, message: "connectorId is required in URL" });
         }
 
-        if (!rawPayload || Object.keys(rawPayload).length === 0) {
+        if (!rawPayload || (typeof rawPayload === "object" && Object.keys(rawPayload).length === 0)) {
             return res.status(400).json({ success: false, message: "No data received in body" });
         }
 
-        // Find connector — we allow lookup by connectorId alone here
-        // because machines send data without a user JWT session.
         const connector = await MachineConnector.findById(connectorId);
         if (!connector) {
             return res.status(404).json({ success: false, message: "Machine connector not found" });
@@ -333,16 +357,37 @@ const ingestMachineData = async (req, res) => {
             return res.status(403).json({ success: false, message: "Machine connector is currently disabled" });
         }
 
-        // Apply tenant-specific param mapping
-        const mappedData = applyParamMapping(rawPayload, connector.paramMappings);
-
-        // Ensure sample_id is present (try connector's configured field name first)
-        const sampleIdField = connector.sampleIdField || "sample_id";
-        if (!mappedData.sample_id && mappedData[sampleIdField]) {
-            mappedData.sample_id = mappedData[sampleIdField];
+        // Auto-parse if string or raw ASTM/HL7
+        let normalizedPayload = rawPayload;
+        if (typeof rawPayload === "string" || typeof rawPayload?.rawData === "string") {
+            const parsed = autoParseMachineData(rawPayload);
+            if (parsed) {
+                normalizedPayload = {
+                    sample_id: parsed.sample_id,
+                    ...parsed.results,
+                    _protocol: parsed.protocol
+                };
+            }
         }
 
-        // Save to lisdata collection (existing schema — no migration needed)
+        // Apply tenant-specific param mapping
+        const mappedData = applyParamMapping(normalizedPayload, connector.paramMappings);
+
+        // Ensure sample_id is present (check configured field name & common aliases)
+        const sampleIdField = connector.sampleIdField || "sample_id";
+        if (!mappedData.sample_id) {
+            mappedData.sample_id =
+                mappedData[sampleIdField] ||
+                mappedData.sampleId ||
+                mappedData.SampleID ||
+                mappedData.Sample_ID ||
+                mappedData.barcode ||
+                mappedData.sid ||
+                mappedData.SID ||
+                "";
+        }
+
+        // Save to lisdata collection
         const doc = await lisdata.create({
             lisData: {
                 ...mappedData,
@@ -371,7 +416,7 @@ const ingestMachineData = async (req, res) => {
         );
 
         console.log(
-            `[MachineConnector] Ingested data from connector "${connector.machineName}" (${connectorId}), sample_id: ${mappedData.sample_id}`
+            `[MachineConnector] Ingested data for "${connector.machineName}" (${connectorId}), sample_id: ${mappedData.sample_id}`
         );
 
         return res.status(200).json({
@@ -387,7 +432,6 @@ const ingestMachineData = async (req, res) => {
     } catch (error) {
         console.error("[MachineConnector] ingestMachineData error:", error);
 
-        // Try to flag the connector as errored
         try {
             if (req.params.connectorId) {
                 await MachineConnector.updateOne(
@@ -403,7 +447,6 @@ const ingestMachineData = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /machine-connectors/:id/test-connection
-// Simple ping — just update status to "connected" for UI feedback
 // ─────────────────────────────────────────────────────────────────────────────
 const testMachineConnection = async (req, res) => {
     try {
@@ -415,14 +458,13 @@ const testMachineConnection = async (req, res) => {
             return res.status(404).json({ success: false, message: "Machine connector not found" });
         }
 
-        // We return the ingest URL the machine should POST to
-        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
         const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
         const ingestUrl = `${protocol}://${host}/api/v1/user/machine-connectors/ingest/${connector._id}`;
 
         return res.status(200).json({
             success: true,
-            message: "Connection details verified. Configure your machine or middleware to POST data to the ingest URL below.",
+            message: "Connection verified. Send test results to the ingest URL below.",
             data: {
                 connectorId: connector._id,
                 machineName: connector.machineName,
@@ -444,7 +486,6 @@ const testMachineConnection = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /machine-connectors/:id/recent-data
-// Returns the last N lisdata documents received from this connector
 // ─────────────────────────────────────────────────────────────────────────────
 const getRecentMachineData = async (req, res) => {
     try {
@@ -485,4 +526,3 @@ export {
     testMachineConnection,
     getRecentMachineData
 };
-

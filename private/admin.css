@@ -242,26 +242,26 @@ img[src=""] {
 
 .logo-div .logo {
     width: 100%;
-    height: 44px;
-    padding: 5px 12px;
-    border-radius: 10px;
+    height: 42px;
+    padding: 4px 12px;
+    border-radius: 9px;
     background: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .lf-brand-link:hover .logo {
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
 }
 
 .logo-div #logo {
-    max-height: 34px !important;
+    max-height: 32px !important;
     width: auto !important;
     max-width: 100% !important;
     height: auto !important;
@@ -729,13 +729,13 @@ img[src=""] {
     min-height: 38px;
     padding: 7px 10px;
     border-radius: 9px;
-    color: #e2e8f0 !important;
+    color: var(--lf-sidebar-text) !important;
     font-family: var(--lf-font-sans) !important;
     font-size: 13px !important;
     font-weight: 600 !important;
     text-decoration: none !important;
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.12) 100%);
+    border: 1px solid transparent;
+    background: transparent;
     transition: all 0.18s ease;
     cursor: pointer;
 }
@@ -748,19 +748,19 @@ img[src=""] {
     background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
     color: #ffffff !important;
     font-size: 12px;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.38);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
 }
 
 .sidebar-copilot-link .dash_text {
-    color: #f8fafc !important;
+    color: var(--lf-sidebar-text) !important;
     font-weight: 600;
 }
 
 .sidebar-copilot-link .sidebar-copilot-badge {
     margin-left: auto;
-    background: rgba(99, 102, 241, 0.28);
-    border: 1px solid rgba(165, 180, 252, 0.38);
-    color: #e0e7ff;
+    background: rgba(99, 102, 241, 0.22);
+    border: 1px solid rgba(165, 180, 252, 0.28);
+    color: #c7d2fe;
     font-size: 9.5px;
     font-weight: 800;
     padding: 2px 6px;
@@ -769,10 +769,19 @@ img[src=""] {
     line-height: 1.1;
 }
 
-.sidebar-copilot-link:hover,
+.sidebar-copilot-link:hover {
+    background: var(--lf-sidebar-hover);
+    color: #ffffff !important;
+}
+
 .sidebar-copilot-link.active {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.3) 0%, rgba(79, 70, 229, 0.32) 100%);
-    border-color: rgba(129, 140, 248, 0.55);
+    background: var(--lf-sidebar-active-bg) !important;
+    border-color: var(--lf-sidebar-active-border) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.18);
+}
+
+.sidebar-copilot-link.active .dash_text {
     color: #ffffff !important;
 }
 
@@ -960,34 +969,36 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 .lf-breadcrumb {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     min-width: 0;
     margin-left: 2px;
-    padding-left: 12px;
+    padding-left: 14px;
     border-left: 1px solid var(--lf-border);
     font-family: var(--lf-font-sans);
 }
 
 .lf-breadcrumb__section {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--lf-text-muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
     white-space: nowrap;
 }
 
 .lf-breadcrumb .lf-breadcrumb__sep {
-    font-size: 9px;
-    color: #94a3b8;
+    font-size: 8.5px;
+    color: #cbd5e1;
 }
 
 .lf-breadcrumb__current {
-    font-size: 13.5px;
+    font-size: 14.5px;
     font-weight: 700;
     color: var(--lf-text-main);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
+    max-width: 220px;
 }
 
 /* Topbar Center: Segmented Quick Navigation Pills */
@@ -995,7 +1006,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     height: auto;
     width: auto;
@@ -1006,7 +1017,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     max-width: 100%;
     background: #f1f5f9;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 3px;
 }
 
@@ -1030,27 +1041,27 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 9px;
+    height: 30px;
+    padding: 0 11px;
+    border-radius: 7px;
     font-family: var(--lf-font-sans);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--lf-text-secondary) !important;
+    color: #64748b !important;
     white-space: nowrap;
     transition: all 0.16s ease;
     text-decoration: none !important;
 }
 
 .lf-quick-pill i {
-    font-size: 12px;
+    font-size: 11.5px;
     color: #64748b;
     transition: color 0.16s ease;
 }
 
 .lf-quick-pill:hover {
     color: var(--lf-text-main) !important;
-    background: rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.75);
 }
 
 .lf-quick-pill:hover i {
@@ -1060,7 +1071,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 .lf-quick-pill.active {
     background: #ffffff;
     color: var(--lf-primary) !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     font-weight: 700;
 }
 
@@ -1077,16 +1088,16 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 .nav-copilot-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 11px;
-    border-radius: 9px;
+    gap: 5px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 7px;
     background: transparent;
     border: 1px solid transparent;
     color: #4338ca !important;
     font-family: var(--lf-font-sans);
     font-weight: 700;
-    font-size: 12.5px;
+    font-size: 12px;
     line-height: 1;
     white-space: nowrap;
     transition: all 0.16s ease;
@@ -1094,7 +1105,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 }
 
 .nav-copilot-btn .nav-copilot-icon {
-    font-size: 12px;
+    font-size: 11.5px;
     color: #4f46e5;
     display: inline-flex;
     align-items: center;
@@ -1103,7 +1114,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 .nav-copilot-btn .nav-copilot-badge {
     font-size: 9px;
     font-weight: 800;
-    padding: 2px 5px;
+    padding: 1.5px 4.5px;
     border-radius: 4px;
     background: #e0e7ff;
     color: #3730a3;
@@ -1113,7 +1124,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 }
 
 .nav-copilot-btn:hover {
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.75);
     color: #312e81 !important;
 }
 
@@ -1121,7 +1132,7 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     background: #ffffff;
     border-color: rgba(79, 70, 229, 0.18);
     color: #4338ca !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(79, 70, 229, 0.08);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .nav-copilot-btn.active .nav-copilot-icon {
@@ -1144,27 +1155,27 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 
 /* Quick Jump Command Trigger */
 .lf-cmd-trigger {
-    height: 36px;
-    padding: 0 10px 0 12px;
-    border-radius: 10px;
+    height: 34px;
+    padding: 0 11px;
+    border-radius: 8px;
     border: 1px solid var(--lf-border);
     background: var(--lf-surface-subtle);
     color: var(--lf-text-muted);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     font-family: var(--lf-font-sans);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.18s ease;
+    transition: all 0.16s ease;
 }
 
 .lf-cmd-trigger:hover {
     background: #ffffff;
     border-color: #93c5fd;
     color: var(--lf-text-main);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
 }
 
 .lf-cmd-trigger i {
@@ -1173,13 +1184,13 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 }
 
 .lf-cmd-trigger__kbd {
-    padding: 2px 6px;
-    border-radius: 5px;
+    padding: 1.5px 5px;
+    border-radius: 4px;
     background: #ffffff;
     border: 1px solid var(--lf-border);
     color: var(--lf-text-secondary);
     font-family: var(--lf-font-sans);
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     line-height: 1.2;
 }
@@ -1187,23 +1198,23 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
 /* Action Pills (Videos & Help) */
 .lf-action-pill,
 .help-div {
-    height: 36px;
+    height: 34px;
     width: auto;
-    padding: 0 12px;
-    border-radius: 10px;
+    padding: 0 11px;
+    border-radius: 8px;
     border: 1px solid var(--lf-border);
     background: #ffffff;
     color: var(--lf-text-secondary) !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: 6px;
     font-family: var(--lf-font-sans);
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.18s ease;
+    transition: all 0.16s ease;
     box-shadow: var(--lf-shadow-xs);
 }
 
@@ -1231,12 +1242,21 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     color: var(--lf-text-main) !important;
 }
 
+/* Clean Topbar Vertical Divider */
+.lf-topbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--lf-border);
+    margin: 0 3px;
+    flex-shrink: 0;
+}
+
 /* Icon Utility Buttons (Fullscreen, Bell) */
 .lf-icon-btn {
     position: relative;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
     border: 1px solid var(--lf-border);
     background: #ffffff;
     color: var(--lf-text-secondary);
@@ -2472,9 +2492,20 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
    7. RESPONSIVE BREAKPOINTS (Large Laptops, Compact Laptops, Tablets, Mobile)
    ========================================================================== */
 
-/* Mid-Sized Laptops (<= 1520px with sidebar open, or <= 1320px overall):
-   Eliminate topbar crowding and remove any orphan breadcrumb chevron */
-@media (max-width: 1520px) {
+/* Mid-Sized Laptops (<= 1440px with sidebar open): Preserve labels while streamlining spacing */
+@media (max-width: 1440px) {
+    body:not(.lf-sidebar-collapsed) .lf-cmd-trigger__kbd,
+    body:not(.lf-sidebar-collapsed) .nav-copilot-badge {
+        display: none !important;
+    }
+
+    body:not(.lf-sidebar-collapsed) .lf-breadcrumb__current {
+        max-width: 160px;
+    }
+}
+
+/* Standard Laptops (<= 1300px): Clean graceful collapse */
+@media (max-width: 1300px) {
     body:not(.lf-sidebar-collapsed) .lf-breadcrumb__section,
     body:not(.lf-sidebar-collapsed) .lf-breadcrumb .lf-breadcrumb__sep {
         display: none !important;
@@ -2485,74 +2516,22 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
     }
 
     body:not(.lf-sidebar-collapsed) .lf-cmd-trigger {
-        padding: 0 10px;
-    }
-
-    body:not(.lf-sidebar-collapsed) .lf-action-pill__text {
-        display: none !important;
-    }
-
-    body:not(.lf-sidebar-collapsed) .lf-action-pill,
-    body:not(.lf-sidebar-collapsed) .help-div {
-        width: 36px;
-        padding: 0;
-    }
-}
-
-/* Standard 1366px / 1280px Laptops with Sidebar Open: Generous Center Breathing Room */
-@media (max-width: 1380px) {
-    body:not(.lf-sidebar-collapsed) .lf-cmd-trigger__kbd,
-    body:not(.lf-sidebar-collapsed) .nav-copilot-badge {
-        display: none !important;
-    }
-
-    body:not(.lf-sidebar-collapsed) .lf-cmd-trigger {
-        width: 36px;
-        padding: 0;
-        justify-content: center;
-        background: var(--lf-surface);
-    }
-
-    body:not(.lf-sidebar-collapsed) .lf-quick-pill,
-    body:not(.lf-sidebar-collapsed) .nav-copilot-btn {
-        padding: 0 10px;
-        font-size: 12px;
-    }
-
-    body:not(.lf-sidebar-collapsed) .lf-breadcrumb__current {
-        max-width: 148px;
-    }
-}
-
-/* Medium Desktops <= 1460px (Even when Sidebar is Collapsed with Topbar Logo Visible) */
-@media (max-width: 1460px) {
-    .lf-breadcrumb__section,
-    .lf-breadcrumb .lf-breadcrumb__sep,
-    .nav-copilot-badge,
-    .lf-cmd-trigger__kbd {
-        display: none !important;
-    }
-
-    .lf-cmd-trigger__label {
-        display: none !important;
-    }
-
-    .lf-cmd-trigger {
-        width: 36px;
+        width: 34px;
         padding: 0;
         justify-content: center;
     }
 }
 
-@media (max-width: 1220px) {
+/* Compact Screens (<= 1180px): Compact Action Buttons */
+@media (max-width: 1180px) {
     .lf-quick-pill i {
         display: none !important;
     }
 
     .lf-quick-pill,
     .nav-copilot-btn {
-        padding: 0 9px;
-        font-size: 12px;
+        padding: 0 8px;
+        font-size: 11.5px;
     }
 
     .nav-copilot-badge,
@@ -2564,7 +2543,7 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
     .lf-cmd-trigger,
     .lf-action-pill,
     .help-div {
-        width: 36px;
+        width: 34px;
         padding: 0;
         justify-content: center;
     }
@@ -3448,15 +3427,15 @@ html[data-theme="dark"] .content-box .spa-page-canvas :is(.bg-yellow-50, .bg-amb
     background-color: rgba(245, 158, 11, 0.13) !important;
 }
 
-html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-black, .text-gray-900, .text-slate-900, .text-gray-800, .text-slate-800):not(.container-pdf *):not(.ps-a4-sheet *) {
+html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-black, .text-gray-900, .text-slate-900, .text-gray-800, .text-slate-800):not(.container-pdf *):not(.ps-a4-sheet *):not(.container-format1 *):not(#container *):not(.signed-off-div *) {
     color: var(--lf-text-main) !important;
 }
 
-html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-gray-700, .text-slate-700, .text-gray-600, .text-slate-600):not(.container-pdf *):not(.ps-a4-sheet *) {
+html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-gray-700, .text-slate-700, .text-gray-600, .text-slate-600):not(.container-pdf *):not(.ps-a4-sheet *):not(.container-format1 *):not(#container *):not(.signed-off-div *) {
     color: var(--lf-text-secondary) !important;
 }
 
-html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-gray-500, .text-slate-500, .text-gray-400, .text-slate-400):not(.container-pdf *):not(.ps-a4-sheet *) {
+html[data-theme="dark"] .content-box .spa-page-canvas :is(.text-gray-500, .text-slate-500, .text-gray-400, .text-slate-400):not(.container-pdf *):not(.ps-a4-sheet *):not(.container-format1 *):not(#container *):not(.signed-off-div *) {
     color: var(--lf-text-muted) !important;
 }
 
@@ -3568,15 +3547,32 @@ html[data-theme="dark"] .spa-page-canvas[data-spa-page="allcases"] tbody td {
 html[data-theme="dark"] :is(
     .container-pdf,
     .ps-a4-sheet,
-    .spa-page-canvas[data-spa-page="reportFormat"] .container,
-    .spa-page-canvas[data-spa-page="reportFormat1"] .container,
-    .spa-page-canvas[data-spa-page="reportFormat3"] .container,
-    .spa-page-canvas[data-spa-page="reportFormat4"] .container,
+    .container-format1,
+    .spa-page-canvas[data-spa-page^="reportFormat"] #container,
+    .spa-page-canvas[data-spa-page^="reportFormat"] .container,
+    .spa-page-canvas[data-spa-page^="reportFormat"] .container-format1,
     .spa-page-canvas[data-spa-page="invoice"] .container,
     .spa-page-canvas[data-spa-page="generatecertificate"] .container
 ) {
     color-scheme: light;
     background-color: #ffffff !important;
+    color: #0f172a !important;
+}
+
+/* Ensure all typography, tables, and content inside reportFormat sheets stay crisp and readable in dark mode */
+html[data-theme="dark"] :is(
+    .spa-page-canvas[data-spa-page^="reportFormat"] #container,
+    .spa-page-canvas[data-spa-page^="reportFormat"] .container-format1,
+    .spa-page-canvas[data-spa-page^="reportFormat"] .container
+) :is(
+    h1, h2, h3, h4, h5, h6,
+    p, span, div, strong, b, label,
+    table, thead, tbody, tr, th, td,
+    .format1-tags, .value, .format1-registeration-tag2, .format1-time-div,
+    .test-name, .parameter-name-cell, .result-value, .high-low-marker,
+    .notes, .advice, .remarks, .remark-row, .details-row, .moreDetails, .interpretation,
+    .documented-content, .textspan
+) {
     color: #0f172a !important;
 }
 
@@ -3589,3 +3585,35 @@ html[data-theme="dark"] :is(
         color: #000000 !important;
     }
 }
+
+/* ==========================================================================
+   MACHINE CONNECTOR MODALS - GLOBAL OVERLAY FIX (Bypasses content-box stacking context)
+   ========================================================================== */
+.mc-modal-overlay,
+body > #machineModal,
+body > #detailModal,
+body > #simulatorModal {
+    display: none !important;
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 2147483647 !important;
+}
+
+.mc-modal-overlay.open,
+body > #machineModal.open,
+body > #detailModal.open,
+body > #simulatorModal.open {
+    display: flex !important;
+}
+
+.content-box:has(.mc-modal-overlay.open) {
+    z-index: 100000 !important;
+}
+
