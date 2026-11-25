@@ -915,6 +915,280 @@ const updateTestOrdersuper = asyncHandler(async (req, res) => {
     }
 });
 
+/**
+ * Resolve tenant/owner query scope consistently for Lab Report reorder APIs.
+ */
+const resolveTestReorderScopeFilter = (req) => {
+    const tid = req.user?.tenantId?._id || req.user?.tenantId || null;
+    if (tid) {
+        return { tid, filter: { tenantId: tid } };
+    }
+    const ownerId = req.user?.role === "staff" ? req.user?.parentUser : req.user?._id;
+    return { tid: null, filter: { createdBy: ownerId } };
+};
+
+/**
+ * Reorder booked tests directly from Enter Result / Lab Report while preserving
+ * relative order numbers against all other unbooked tests in the tenant database.
+ *
+ * Example: Booked tests currently at DB orders [30, 32, 48] reordered into [A, C, B]
+ * receive slots [30, 32, 48] (A->30, C->32, B->48). If duplicate or colliding DB
+ * order numbers exist, tenant tests are cleanly normalized 1..N while keeping
+ * unbooked tests in their exact relative positions.
+ */
+const reorderTestsFromReport = asyncHandler(async (req, res) => {
+    const { orderedTestIds, panelId } = req.body || {};
+    const { filter: scopeFilter } = resolveTestReorderScopeFilter(req);
+
+    if (!Array.isArray(orderedTestIds)) {
+        throw new ApiError(400, "orderedTestIds array is required");
+    }
+
+    const seenIds = new Set();
+    const cleanOrderedIds = [];
+    for (const rawId of orderedTestIds) {
+        const idStr = toIdString(rawId).trim();
+        if (!idStr || !mongoose.isValidObjectId(idStr) || seenIds.has(idStr)) continue;
+        seenIds.add(idStr);
+        cleanOrderedIds.push(idStr);
+    }
+
+    if (cleanOrderedIds.length < 2) {
+        throw new ApiError(400, "At least two distinct valid test IDs are required to reorder");
+    }
+
+    const targetObjectIds = cleanOrderedIds.map((id) => new mongoose.Types.ObjectId(id));
+    const foundTests = await testSchema
+        .find({ ...scopeFilter, _id: { $in: targetObjectIds } })
+        .select("_id Name order")
+        .lean();
+
+    if (foundTests.length < 2) {
+        throw new ApiError(404, "Matching tenant tests not found for reordering");
+    }
+
+    const foundById = new Map(foundTests.map((doc) => [String(doc._id), doc]));
+    const activeOrderedIds = cleanOrderedIds.filter((id) => foundById.has(id));
+    if (activeOrderedIds.length < 2) {
+        throw new ApiError(400, "At least two matched tests are required to reorder");
+    }
+
+    const activeObjectIds = activeOrderedIds.map((id) => new mongoose.Types.ObjectId(id));
+    const existingOrders = activeOrderedIds.map((id) => Number(foundById.get(id)?.order));
+    const allOrdersValid = existingOrders.every((val) => Number.isFinite(val) && val > 0);
+    const hasUniqueInternalOrders = new Set(existingOrders).size === existingOrders.length;
+
+    let hasExternalOrderCollision = false;
+    if (allOrdersValid && hasUniqueInternalOrders) {
+        const collidingCount = await testSchema.countDocuments({
+            ...scopeFilter,
+            _id: { $nin: activeObjectIds },
+            order: { $in: existingOrders },
+        });
+        hasExternalOrderCollision = collidingCount > 0;
+    }
+
+    const updatedOrders = {};
+    const bulkOps = [];
+
+    if (allOrdersValid && hasUniqueInternalOrders && !hasExternalOrderCollision) {
+        // Fast path: reassign exact ascending slots from the booked tests' existing DB orders
+        const sortedSlots = [...existingOrders].sort((a, b) => a - b);
+        activeOrderedIds.forEach((idStr, idx) => {
+            const nextOrder = sortedSlots[idx];
+            updatedOrders[idStr] = nextOrder;
+            if (Number(foundById.get(idStr)?.order) !== nextOrder) {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { _id: new mongoose.Types.ObjectId(idStr), ...scopeFilter },
+                        update: { $set: { order: nextOrder } },
+                    },
+                });
+            }
+        });
+    } else {
+        // Collision-healing path: normalize tenant test orders 1..N while inserting the
+        // reordered tests into their sorted canonical positions without disturbing other tests.
+        const allTenantTests = await testSchema
+            .find(scopeFilter)
+            .sort({ order: 1, _id: 1 })
+            .select("_id order")
+            .lean();
+
+        const targetSet = new Set(activeOrderedIds);
+        const slotIndices = [];
+        allTenantTests.forEach((doc, idx) => {
+            if (targetSet.has(String(doc._id))) {
+                slotIndices.push(idx);
+            }
+        });
+
+        const nextTenantSequence = allTenantTests.map((doc) => ({ ...doc }));
+        slotIndices.forEach((slotIdx, seqIdx) => {
+            const targetId = activeOrderedIds[seqIdx];
+            if (targetId && foundById.has(targetId)) {
+                nextTenantSequence[slotIdx] = foundById.get(targetId);
+            }
+        });
+
+        nextTenantSequence.forEach((doc, idx) => {
+            const canonicalOrder = idx + 1;
+            const idStr = String(doc._id);
+            if (targetSet.has(idStr)) {
+                updatedOrders[idStr] = canonicalOrder;
+            }
+            if (Number(doc.order) !== canonicalOrder) {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { _id: doc._id, ...scopeFilter },
+                        update: { $set: { order: canonicalOrder } },
+                    },
+                });
+            }
+        });
+    }
+
+    if (bulkOps.length > 0) {
+        await testSchema.bulkWrite(bulkOps);
+    }
+
+    // Keep panel.testsId & panel.tests aligned when reordered inside a panel section
+    if (panelId && mongoose.isValidObjectId(String(panelId))) {
+        const panelDoc = await addPannel.findOne({
+            _id: new mongoose.Types.ObjectId(String(panelId)),
+            ...scopeFilter,
+        });
+        if (panelDoc && Array.isArray(panelDoc.testsId) && panelDoc.testsId.length > 1) {
+            const reorderedSet = new Set(activeOrderedIds);
+            const panelSlots = [];
+            panelDoc.testsId.forEach((tidItem, idx) => {
+                if (reorderedSet.has(String(tidItem))) {
+                    panelSlots.push(idx);
+                }
+            });
+            const presentIdsInOrder = activeOrderedIds.filter((idStr) =>
+                panelDoc.testsId.some((tidItem) => String(tidItem) === idStr)
+            );
+            if (panelSlots.length === presentIdsInOrder.length && panelSlots.length > 1) {
+                const nextTestsId = [...panelDoc.testsId];
+                panelSlots.forEach((slotIdx, i) => {
+                    nextTestsId[slotIdx] = new mongoose.Types.ObjectId(presentIdsInOrder[i]);
+                });
+                const panelTestDocs = await testSchema
+                    .find({ _id: { $in: nextTestsId } })
+                    .select("_id Name")
+                    .lean();
+                const nameById = new Map(panelTestDocs.map((d) => [String(d._id), d.Name]));
+                panelDoc.testsId = nextTestsId;
+                panelDoc.tests = nextTestsId.map((tidItem) => nameById.get(String(tidItem))).filter(Boolean);
+                await panelDoc.save();
+            }
+        }
+    }
+
+    return res.status(200).json({
+        success: true,
+        message: "Test order updated in database.",
+        updatedOrders,
+    });
+});
+
+/**
+ * Reorder parameters within a multi-parameter test directly from Lab Report / Enter Result.
+ * Reorders the persisted `test.parameters` array AND updates sequential `param.order` (1..N)
+ * while preserving each parameter's `_id`, `masterParameterKey`, ranges, and formula links.
+ */
+const reorderTestParametersFromReport = asyncHandler(async (req, res) => {
+    const { testId, orderedParameters } = req.body || {};
+    const { filter: scopeFilter } = resolveTestReorderScopeFilter(req);
+
+    if (!testId || !mongoose.isValidObjectId(String(testId))) {
+        throw new ApiError(400, "Valid testId is required");
+    }
+    if (!Array.isArray(orderedParameters) || orderedParameters.length < 2) {
+        throw new ApiError(400, "At least two parameter entries are required to reorder");
+    }
+
+    const testDoc = await testSchema.findOne({
+        _id: new mongoose.Types.ObjectId(String(testId)),
+        ...scopeFilter,
+    });
+    if (!testDoc) {
+        throw new ApiError(404, "Test not found for parameter reordering");
+    }
+
+    const existingParams = Array.isArray(testDoc.parameters) ? testDoc.parameters : [];
+    if (existingParams.length < 2) {
+        throw new ApiError(400, "Test must have multiple parameters to reorder");
+    }
+
+    const usedIndices = new Set();
+    const matchExistingIndex = (entry) => {
+        if (!entry) return -1;
+        const pid = String(entry.parameterId || entry._id || "").trim();
+        const mKey = String(entry.masterParameterKey || "").trim();
+        const pName = String(entry.paraName || entry.Para_name || "").trim().toLowerCase();
+
+        if (pid) {
+            const idx = existingParams.findIndex((p, i) => !usedIndices.has(i) && String(p?._id || "") === pid);
+            if (idx !== -1) return idx;
+        }
+        if (mKey) {
+            const idx = existingParams.findIndex(
+                (p, i) => !usedIndices.has(i) && String(p?.masterParameterKey || "").trim() === mKey
+            );
+            if (idx !== -1) return idx;
+        }
+        if (pName) {
+            const idx = existingParams.findIndex(
+                (p, i) => !usedIndices.has(i) && String(p?.Para_name || "").trim().toLowerCase() === pName
+            );
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    };
+
+    const reorderedParams = [];
+    for (const entry of orderedParameters) {
+        const idx = matchExistingIndex(entry);
+        if (idx !== -1) {
+            usedIndices.add(idx);
+            reorderedParams.push(existingParams[idx]);
+        }
+    }
+
+    // Safety net: append any untouched parameter subdocuments so zero parameters can be lost
+    existingParams.forEach((param, idx) => {
+        if (!usedIndices.has(idx)) {
+            reorderedParams.push(param);
+        }
+    });
+
+    if (reorderedParams.length !== existingParams.length) {
+        throw new ApiError(409, "Parameter count mismatch while reordering");
+    }
+
+    reorderedParams.forEach((param, idx) => {
+        param.order = idx + 1;
+    });
+
+    testDoc.set("parameters", reorderedParams);
+    testDoc.markModified("parameters");
+    await testDoc.save();
+
+    return res.status(200).json({
+        success: true,
+        message: "Parameter order updated in database.",
+        testId: String(testDoc._id),
+        parameters: testDoc.parameters.map((p) => ({
+            _id: String(p._id || ""),
+            masterParameterKey: p.masterParameterKey || "",
+            Para_name: p.Para_name || "",
+            order: p.order,
+        })),
+    });
+});
+
 // SuperAdmin Test Edit
 const editTest = asyncHandler(async (req, res) => {
     const {
@@ -2685,6 +2959,8 @@ export {
     updateTestcontroller,
     updateTestOrder,
     updateTestOrdersuper,
+    reorderTestsFromReport,
+    reorderTestParametersFromReport,
     updateTestInterpretation,
     getOneTest,
     addsample,

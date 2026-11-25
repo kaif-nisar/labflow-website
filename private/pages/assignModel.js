@@ -115,7 +115,8 @@
         formatDiv1: document.querySelector('.format1'),
         formatDiv2: document.querySelector('.format2'),
         formatDiv3: document.querySelector('.format3'),
-        formatDiv4: document.querySelector('.format4')
+        formatDiv4: document.querySelector('.format4'),
+        formatDiv5: document.querySelector('.format5')
     };
 
     // ==========================================
@@ -129,6 +130,10 @@
         if (els.formatDiv4) {
             els.formatDiv4.style.backgroundImage = `url("${BASE_URL}/images/format4.png"), linear-gradient(#f3f3f3, #e8e8e8)`;
             els.formatDiv4.style.backgroundSize = "cover";
+        }
+        if (els.formatDiv5) {
+            els.formatDiv5.style.backgroundImage = `url("${BASE_URL}/images/format5.svg"), linear-gradient(#f3f3f3, #e8e8e8)`;
+            els.formatDiv5.style.backgroundSize = "cover";
         }
 
         // Attach Interactive Help Tooltips

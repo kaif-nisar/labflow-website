@@ -61,6 +61,8 @@ import {
   findTestcontroller,
   updateTestcontroller,
   updateTestOrder,
+  reorderTestsFromReport,
+  reorderTestParametersFromReport,
   updateTestInterpretation,
   addUnit,
   getUnits,
@@ -918,6 +920,9 @@ router.route("/categoryById-tenant").post(verifyJWT, checkStaffPermission("canMa
 router.route("/editTestOrdersuper").post(verifySuperAdmin, updateTestOrdersuper);
 // for fetching all test data
 router.route("/editTestOrder").post(verifyJWT, updateTestOrder);
+// Lab Report inline drag-and-drop test & parameter reordering
+router.route("/reorder-tests-from-report").post(verifyJWT, reorderTestsFromReport);
+router.route("/reorder-test-parameters").post(verifyJWT, reorderTestParametersFromReport);
 
 // // new booking controller
 router.route("/new-booking").post(upload.fields([

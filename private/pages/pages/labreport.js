@@ -1,4 +1,4 @@
-﻿async function loadfunction() {
+async function loadfunction() {
     function ensureStatusHost() {
         let host = document.getElementById("status-message-host");
         if (host) return host;
@@ -3080,6 +3080,25 @@
         }
     }
 
+    /**
+     * Resolve numeric `order` cleanly without treating `0` as missing.
+     */
+    function resolveNumericOrder(rawOrder, fallback = 9999) {
+        const parsed = Number(rawOrder);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    /**
+     * Build the Page Break cell with a non-intrusive drag handle beside the checkbox.
+     * Placing the handle inside column 0 ensures `.test-name` (column 1) stays 100% pure
+     * for `extractTableData()` and report PDF formats.
+     */
+    function buildPageBreakCellHtml(handleRoleClass, titleText) {
+        const safeTitle = String(titleText || "Drag row up or down to reorder")
+            .replace(/"/g, "&quot;");
+        return `<div class="lr-pb-wrap"><span class="lr-drag-handle ${handleRoleClass}" title="${safeTitle}" tabindex="-1" aria-label="${safeTitle}"><i class="fa-solid fa-grip-vertical"></i></span><input type="checkbox" id="pagebreak" name="pagebreak" tabindex="-1"></div>`;
+    }
+
     //for creating tables
     async function createTable(title, category, data, isPanel = false, hideCategory = false, panelDetails = null) {
         const section = document.createElement("div");
@@ -3103,6 +3122,9 @@
         // Table
         const table = document.createElement("table");
         table.className = "table";
+        if (isPanel && panelDetails?._id) {
+            table.dataset.panelId = String(panelDetails._id);
+        }
         const thead = document.createElement("thead");
         thead.innerHTML = `
         <tr>
@@ -3120,17 +3142,27 @@
         const previousContentMap = {};
         let previousContent = '';
         for (const test of data) {
+            const testOrderVal = resolveNumericOrder(test?.order, 9999);
+            const testBlockId = String(test?._id || "");
+            const testOrderBadgeText = Number.isFinite(Number(test?.order)) ? `#${test.order}` : "";
+
             if (test.isDocumentedTest) {
 
                 const uniqueTestId = `${test._id}`; // Combine test._id and test.order for unique ID
                 const row = document.createElement("tr");
-                row.setAttribute("data-order", test.order);
+                row.setAttribute("data-order", testOrderVal);
                 row.setAttribute("data-id", test._id);
 
                 const detailsRow = document.createElement("tr");
-                detailsRow.setAttribute("data-order", test.order);
+                detailsRow.setAttribute("data-order", testOrderVal);
+                detailsRow.setAttribute("data-id", test._id);
+                detailsRow.setAttribute("data-test-block-id", testBlockId);
+                detailsRow.setAttribute("data-row-role", "documented-test");
                 const pagebreakcell = document.createElement("td");
-                pagebreakcell.innerHTML = '<input type="checkbox" id="pagebreak" name="pagebreak" tabindex="-1">';
+                pagebreakcell.innerHTML = buildPageBreakCellHtml(
+                    "lr-drag-handle--test",
+                    `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`
+                );
                 const detailsCell = document.createElement("td");
                 detailsCell.colSpan = 4;
                 detailsCell.style.width = "95%";
@@ -3234,12 +3266,14 @@
             const { lowerValue, upperValue } = await getLowerUpperValues(patient, test.parameters[0]?.NormalValue);
 
             const row = document.createElement("tr");
-            row.setAttribute("data-order", test.order); // Set a data attribute for sorting
+            row.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
+            row.setAttribute("data-test-block-id", testBlockId);
 
             if (test.parameters && test.parameters.length > 1) {
-                // Row for tests with multiple parameters
+                row.setAttribute("data-row-role", "multi-header");
+                // Row for tests with multiple parameters (dragging this moves the whole test block)
                 row.innerHTML = `
-                <td><input type="checkbox" id="pagebreak" name="pagebreak" tabindex="-1"></td>
+                <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
                 <td class="test-name"><div class="test-name-cell">${test.Name}</div></td>
                 <td></td>
                 <td></td>
@@ -3247,13 +3281,31 @@
                     `;
                 tbody.appendChild(row);
 
-                // Rows for individual parameters
-                for (const param of test.parameters) {
+                // Respect persisted DB parameter order cleanly on initial render
+                const sortedParameters = [...test.parameters].sort((paramA, paramB) => {
+                    const ordA = resolveNumericOrder(paramA?.order, Number.MAX_SAFE_INTEGER);
+                    const ordB = resolveNumericOrder(paramB?.order, Number.MAX_SAFE_INTEGER);
+                    return ordA - ordB;
+                });
+
+                // Rows for individual parameters (dragging these reorders parameters inside this test)
+                for (const param of sortedParameters) {
                     const { lowerValue, upperValue } = await getLowerUpperValues(patient, param?.NormalValue);
+                    const paramMasterKey =
+                        param.masterParameterKey ||
+                        param._id ||
+                        test._id ||
+                        ("param_" + (param.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ""));
+                    const paramOrderLabel = Number.isFinite(Number(param?.order)) ? ` (#${param.order})` : "";
                     const paramRow = document.createElement("tr");
-                    paramRow.setAttribute("data-order", test.order); // Set a data attribute for sorting
+                    paramRow.setAttribute("data-order", testOrderVal); // Keeps child row attached to parent test order
+                    paramRow.setAttribute("data-test-block-id", testBlockId);
+                    paramRow.setAttribute("data-row-role", "param-row");
+                    paramRow.setAttribute("data-param-id", String(param._id || ""));
+                    paramRow.setAttribute("data-master-param-key", String(paramMasterKey));
+                    paramRow.setAttribute("data-param-name", String(param.Para_name || ""));
                     paramRow.innerHTML = `
-        <td><input type="checkbox" id="pagebreak" name="pagebreak" tabindex="-1"></td>
+        <td>${buildPageBreakCellHtml("lr-drag-handle--param", `Drag to reorder parameter inside ${test.Name}${paramOrderLabel}`)}</td>
         <td style="padding-left: 20px;" class="test-name" id="parameters"><div class="test-name-cell">${param.Para_name}</div></td>
         <td class="unit">
             <div class="value-column">
@@ -3264,7 +3316,7 @@
                         name="parameterName" 
                         data-test-id="${test._id}" 
                         data-param-id="${param._id || ""}" 
-                        data-master-param-key="${param.masterParameterKey || param._id || test._id || ('param_' + (param.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ''))}"
+                        data-master-param-key="${paramMasterKey}"
                         data-param-name="${param.Para_name}" 
                         data-reference-type="${(param.ValueType || (param.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
                         data-Shortname="${test.Short_name}" 
@@ -3296,7 +3348,10 @@
 
                     if (param.Para_name === "Basophils Percentage") {
                         paramRowCalc = document.createElement("tr");
-                        paramRowCalc.setAttribute("data-order", test.order); // Set a data attribute for sorting
+                        paramRowCalc.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
+                        paramRowCalc.setAttribute("data-test-block-id", testBlockId);
+                        paramRowCalc.setAttribute("data-row-role", "differential-total");
+                        paramRowCalc.setAttribute("data-owner-param-key", String(paramMasterKey));
                         paramRowCalc.className = "exclude differential-total-row";
 
                         const paramRowDiv = document.createElement("td");
@@ -3313,7 +3368,9 @@
                     addRemarkButton.addEventListener("click", () => {
                         if (!addRemarkButton.remarkRow) {
                             const remarkRow = document.createElement("tr");
-                            remarkRow.setAttribute("data-order", test.order); // Set a data attribute for sorting
+                            remarkRow.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
+                            remarkRow.setAttribute("data-test-block-id", testBlockId);
+                            remarkRow.setAttribute("data-row-role", "inline-remark");
                             remarkRow.innerHTML = `
                             <td></td>
                     <td>Remarks</td>
@@ -3337,8 +3394,9 @@
                 }
 
             } else {
+                row.setAttribute("data-row-role", "single-test");
                 row.innerHTML = `
-    <td><input type="checkbox" id="pagebreak" name="pagebreak" tabindex="-1"></td>
+    <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
     <td class="test-name"><div class="test-name-cell">${test.Name}</div></td>
     <td class="unit">
         <div class="value-column">
@@ -3382,7 +3440,9 @@
 
                 if (test.Name === "Basophils Percentage") {
                     paramRowCalc = document.createElement("tr");
-                    paramRowCalc.setAttribute("data-order", test.order); // Set a data attribute for sorting
+                    paramRowCalc.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
+                    paramRowCalc.setAttribute("data-test-block-id", testBlockId);
+                    paramRowCalc.setAttribute("data-row-role", "differential-total");
                     paramRowCalc.className = "exclude differential-total-row";
 
                     const paramRowDiv = document.createElement("td");
@@ -3399,7 +3459,9 @@
                 addRemarkButton.addEventListener("click", () => {
                     if (!addRemarkButton.remarkRow) {
                         const remarkRow = document.createElement("tr");
-                        remarkRow.setAttribute("data-order", test.order); // Set a data attribute for sorting
+                        remarkRow.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
+                        remarkRow.setAttribute("data-test-block-id", testBlockId);
+                        remarkRow.setAttribute("data-row-role", "inline-remark");
                         remarkRow.innerHTML = `
                         <td></td>
                         <td>Remarks</td>
@@ -3475,7 +3537,9 @@
 
             if (detailBlocks.length > 0) {
                 const detailsRow = document.createElement("tr");
-                detailsRow.setAttribute("data-order", test.order);
+                detailsRow.setAttribute("data-order", testOrderVal);
+                detailsRow.setAttribute("data-test-block-id", testBlockId);
+                detailsRow.setAttribute("data-row-role", "test-details");
                 const detailsCell = document.createElement("td");
                 detailsCell.colSpan = 4;
 
@@ -3845,24 +3909,41 @@
                     section.insertBefore(h3Tag, tables[0]);
                 }
 
-                // ðŸŸ¢ Step 2: Sort rows inside all tables
+                // Step 2: Sort test blocks atomically by `data-order` (never splitting multi-param blocks)
                 for (const table of tables) {
                     const tbody = table.querySelector("tbody");
                     if (tbody) {
                         const rows = Array.from(tbody.querySelectorAll(":scope > tr"));
+                        const blocks = [];
+                        const blockById = new Map();
+                        const trailingRows = [];
 
-                        // âœ… Sorting rows based on `data-order`
-                        rows.sort((rowA, rowB) => {
-                            const orderA = parseInt(rowA.getAttribute("data-order"), 10) || 9999;
-                            const orderB = parseInt(rowB.getAttribute("data-order"), 10) || 9999;
-                            return orderA - orderB;
-                        });
-
-                        // âœ… Clear existing rows and append sorted rows
-                        tbody.innerHTML = "";
                         for (const row of rows) {
-                            tbody.appendChild(row);
+                            const blockId = row.getAttribute("data-test-block-id");
+                            if (!blockId) {
+                                trailingRows.push(row);
+                                continue;
+                            }
+                            if (!blockById.has(blockId)) {
+                                const block = {
+                                    blockId,
+                                    order: resolveNumericOrder(row.getAttribute("data-order"), 9999),
+                                    rows: [],
+                                };
+                                blockById.set(blockId, block);
+                                blocks.push(block);
+                            }
+                            blockById.get(blockId).rows.push(row);
                         }
+
+                        blocks.sort((a, b) => a.order - b.order);
+
+                        const fragment = document.createDocumentFragment();
+                        blocks.forEach((block) => {
+                            block.rows.forEach((r) => fragment.appendChild(r));
+                        });
+                        trailingRows.forEach((r) => fragment.appendChild(r));
+                        tbody.replaceChildren(fragment);
                     }
                 }
 
@@ -4050,7 +4131,464 @@
         await groupTablesByCategory();
     }
 
+    /**
+     * Enables smooth mouse drag-and-drop row reordering directly inside Lab Report:
+     *   1. Test-level drag (`.lr-drag-handle--test`): moves single tests, documented tests,
+     *      or entire multi-parameter test blocks cleanly within their table and persists
+     *      updated test `order` values in the database (`reorder-tests-from-report`).
+     *   2. Parameter-level drag (`.lr-drag-handle--param`): moves parameters within their
+     *      parent multi-parameter test and persists both `parameters` array order and
+     *      `parameters[].order` in the database (`reorder-test-parameters`).
+     */
+    function initializeReportRowReordering() {
+        const tablesContainer = document.getElementById("tables-container");
+        if (!tablesContainer || tablesContainer.dataset.reorderInitialized === "true") {
+            return;
+        }
+        tablesContainer.dataset.reorderInitialized = "true";
+
+        let pendingRow = null;
+        let pendingMode = "";
+        let dragState = null;
+        let autoScrollTimer = null;
+        let lastDragClientY = 0;
+        let reorderSaveInFlight = false;
+
+        /** Collect all rows in `tbody` belonging to a given test block (`data-test-block-id`). */
+        function getTestBlockRows(tbody, testBlockId) {
+            if (!tbody || !testBlockId) return [];
+            return Array.from(tbody.querySelectorAll(":scope > tr")).filter(
+                (r) => r.getAttribute("data-test-block-id") === testBlockId
+            );
+        }
+
+        /** Collect a parameter row + any immediately following inline remark / diff-total rows. */
+        function getParamSubBlockRows(paramRow) {
+            if (!paramRow) return [];
+            const testBlockId = paramRow.getAttribute("data-test-block-id");
+            const subRows = [paramRow];
+            let cursor = paramRow.nextElementSibling;
+            while (cursor && cursor.getAttribute("data-test-block-id") === testBlockId) {
+                const role = cursor.getAttribute("data-row-role");
+                if (role === "inline-remark" || role === "differential-total") {
+                    subRows.push(cursor);
+                    cursor = cursor.nextElementSibling;
+                    continue;
+                }
+                break;
+            }
+            return subRows;
+        }
+
+        /** Map an inline-remark or differential-total row back to its owning `param-row`. */
+        function findOwningParamRow(hoveredRow) {
+            if (!hoveredRow) return null;
+            const role = hoveredRow.getAttribute("data-row-role");
+            if (role === "param-row") return hoveredRow;
+            if (role !== "inline-remark" && role !== "differential-total") return null;
+
+            const testBlockId = hoveredRow.getAttribute("data-test-block-id");
+            let cursor = hoveredRow.previousElementSibling;
+            while (cursor && cursor.getAttribute("data-test-block-id") === testBlockId) {
+                if (cursor.getAttribute("data-row-role") === "param-row") {
+                    return cursor;
+                }
+                if (cursor.getAttribute("data-row-role") === "multi-header") {
+                    return null;
+                }
+                cursor = cursor.previousElementSibling;
+            }
+            return null;
+        }
+
+        function clearDropHighlights() {
+            tablesContainer
+                .querySelectorAll("tr.lr-drop-before, tr.lr-drop-after")
+                .forEach((r) => r.classList.remove("lr-drop-before", "lr-drop-after"));
+        }
+
+        function stopAutoScroll() {
+            if (autoScrollTimer) {
+                clearInterval(autoScrollTimer);
+                autoScrollTimer = null;
+            }
+        }
+
+        function startAutoScroll() {
+            stopAutoScroll();
+            autoScrollTimer = setInterval(() => {
+                if (!dragState || !lastDragClientY) return;
+                const edgeThreshold = 85;
+                const scrollStep = 14;
+                if (lastDragClientY < edgeThreshold) {
+                    window.scrollBy(0, -scrollStep);
+                } else if (lastDragClientY > window.innerHeight - edgeThreshold) {
+                    window.scrollBy(0, scrollStep);
+                }
+            }, 24);
+        }
+
+        function resetDragVisuals() {
+            stopAutoScroll();
+            clearDropHighlights();
+            tablesContainer
+                .querySelectorAll("tr.lr-row-dragging")
+                .forEach((r) => r.classList.remove("lr-row-dragging"));
+            if (pendingRow) {
+                pendingRow.draggable = false;
+                pendingRow = null;
+            }
+            pendingMode = "";
+            if (dragState?.primaryRow) {
+                dragState.primaryRow.draggable = false;
+            }
+            dragState = null;
+        }
+
+        function resolveDropPlan(hoveredRow, clientY) {
+            if (!dragState || !hoveredRow) return null;
+            const targetTbody = hoveredRow.closest("tbody");
+            if (!targetTbody || targetTbody !== dragState.tbody) return null;
+
+            if (dragState.mode === "param") {
+                const targetParamRow = findOwningParamRow(hoveredRow);
+                if (!targetParamRow) return null;
+                if (targetParamRow.getAttribute("data-test-block-id") !== dragState.testBlockId) {
+                    return null;
+                }
+                const targetSubRows = getParamSubBlockRows(targetParamRow);
+                if (dragState.draggedRows.some((r) => targetSubRows.includes(r))) {
+                    return null;
+                }
+
+                const firstRect = targetSubRows[0].getBoundingClientRect();
+                const lastRect = targetSubRows[targetSubRows.length - 1].getBoundingClientRect();
+                const midpointY = (firstRect.top + lastRect.bottom) / 2;
+                const placeAfter = clientY >= midpointY;
+
+                return {
+                    highlightRow: placeAfter ? targetSubRows[targetSubRows.length - 1] : targetSubRows[0],
+                    placeAfter,
+                    insertBeforeNode: placeAfter
+                        ? targetSubRows[targetSubRows.length - 1].nextSibling
+                        : targetSubRows[0],
+                };
+            }
+
+            // Test-block reorder: ignore non-test trailing rows (Notes / Advice / Remarks)
+            const targetBlockId = hoveredRow.getAttribute("data-test-block-id");
+            if (!targetBlockId || targetBlockId === dragState.testBlockId) return null;
+
+            const targetBlockRows = getTestBlockRows(targetTbody, targetBlockId);
+            if (!targetBlockRows.length) return null;
+
+            const firstRect = targetBlockRows[0].getBoundingClientRect();
+            const lastRect = targetBlockRows[targetBlockRows.length - 1].getBoundingClientRect();
+            const midpointY = (firstRect.top + lastRect.bottom) / 2;
+            const placeAfter = clientY >= midpointY;
+
+            return {
+                highlightRow: placeAfter ? targetBlockRows[targetBlockRows.length - 1] : targetBlockRows[0],
+                placeAfter,
+                insertBeforeNode: placeAfter
+                    ? targetBlockRows[targetBlockRows.length - 1].nextSibling
+                    : targetBlockRows[0],
+            };
+        }
+
+        function syncInMemoryTestOrder(updatedOrders = {}, panelId = "") {
+            const updateOrderOnDoc = (doc) => {
+                if (!doc?._id) return;
+                const nextOrd = updatedOrders[String(doc._id)];
+                if (Number.isFinite(Number(nextOrd))) {
+                    doc.order = Number(nextOrd);
+                }
+            };
+
+            (testpanels?.singleTests || []).forEach(updateOrderOnDoc);
+            (testpanels?.panels || []).forEach((panel) => {
+                (panel?.testsId || []).forEach(updateOrderOnDoc);
+                if (panelId && String(panel?._id) === String(panelId) && Array.isArray(panel.testsId)) {
+                    panel.testsId.sort(
+                        (a, b) => resolveNumericOrder(a?.order, 9999) - resolveNumericOrder(b?.order, 9999)
+                    );
+                    panel.tests = panel.testsId.map((t) => t?.Name).filter(Boolean);
+                }
+            });
+        }
+
+        function syncInMemoryParameterOrder(testId, orderedServerParams = []) {
+            if (!testId || !Array.isArray(orderedServerParams) || !orderedServerParams.length) return;
+            const orderById = new Map();
+            const orderByMasterKey = new Map();
+            orderedServerParams.forEach((p, idx) => {
+                const ord = resolveNumericOrder(p?.order, idx + 1);
+                if (p?._id) orderById.set(String(p._id), ord);
+                if (p?.masterParameterKey) orderByMasterKey.set(String(p.masterParameterKey), ord);
+            });
+
+            const reorderDocParams = (testDoc) => {
+                if (!testDoc || String(testDoc._id) !== String(testId) || !Array.isArray(testDoc.parameters)) return;
+                testDoc.parameters.forEach((p, idx) => {
+                    const matched =
+                        (p?._id && orderById.get(String(p._id))) ||
+                        (p?.masterParameterKey && orderByMasterKey.get(String(p.masterParameterKey)));
+                    if (Number.isFinite(Number(matched))) {
+                        p.order = Number(matched);
+                    } else if (!Number.isFinite(Number(p.order))) {
+                        p.order = idx + 1;
+                    }
+                });
+                testDoc.parameters.sort(
+                    (a, b) => resolveNumericOrder(a?.order, 9999) - resolveNumericOrder(b?.order, 9999)
+                );
+            };
+
+            (testpanels?.singleTests || []).forEach(reorderDocParams);
+            (testpanels?.panels || []).forEach((panel) => {
+                (panel?.testsId || []).forEach(reorderDocParams);
+            });
+        }
+
+        function restoreTbodySnapshot(tbody, snapshotRows) {
+            if (!tbody || !Array.isArray(snapshotRows)) return;
+            const frag = document.createDocumentFragment();
+            snapshotRows.forEach((r) => {
+                if (r) frag.appendChild(r);
+            });
+            tbody.replaceChildren(frag);
+        }
+
+        async function persistReorderedTests(tbody, snapshotRows) {
+            const orderedTestIds = [];
+            const seen = new Set();
+            Array.from(tbody.querySelectorAll(":scope > tr[data-test-block-id]")).forEach((r) => {
+                const id = r.getAttribute("data-test-block-id");
+                if (id && !seen.has(id)) {
+                    seen.add(id);
+                    orderedTestIds.push(id);
+                }
+            });
+
+            if (orderedTestIds.length < 2) return;
+            const panelId = tbody.closest("table")?.dataset?.panelId || null;
+
+            reorderSaveInFlight = true;
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/user/reorder-tests-from-report`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderedTestIds, panelId }),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || payload?.success === false) {
+                    throw new Error(payload?.message || "Failed to save test order to database.");
+                }
+
+                const updatedOrders = payload?.updatedOrders || {};
+                Array.from(tbody.querySelectorAll(":scope > tr[data-test-block-id]")).forEach((r) => {
+                    const blockId = r.getAttribute("data-test-block-id");
+                    const nextOrder = updatedOrders[blockId];
+                    if (Number.isFinite(Number(nextOrder))) {
+                        r.setAttribute("data-order", String(nextOrder));
+                        const handle = r.querySelector(".lr-drag-handle--test");
+                        if (handle) {
+                            handle.title = `Drag to reorder test in database (Order #${nextOrder})`;
+                        }
+                    }
+                });
+
+                syncInMemoryTestOrder(updatedOrders, panelId);
+                syncDifferentialPercentageValidation();
+                showStatusMessage("Test order saved to database.", "success", 2400);
+            } catch (error) {
+                console.error("Test reorder failed:", error);
+                restoreTbodySnapshot(tbody, snapshotRows);
+                syncDifferentialPercentageValidation();
+                showStatusMessage(error?.message || "Could not update test order in database.", "error", 3600);
+            } finally {
+                reorderSaveInFlight = false;
+            }
+        }
+
+        async function persistReorderedParameters(tbody, testId, snapshotRows) {
+            const paramRows = Array.from(
+                tbody.querySelectorAll(`:scope > tr[data-test-block-id="${CSS.escape(testId)}"][data-row-role="param-row"]`)
+            );
+            if (paramRows.length < 2) return;
+
+            const orderedParameters = paramRows.map((r) => ({
+                parameterId: r.getAttribute("data-param-id") || "",
+                masterParameterKey: r.getAttribute("data-master-param-key") || "",
+                paraName: r.getAttribute("data-param-name") || "",
+            }));
+
+            reorderSaveInFlight = true;
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/user/reorder-test-parameters`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ testId, orderedParameters }),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || payload?.success === false) {
+                    throw new Error(payload?.message || "Failed to save parameter order to database.");
+                }
+
+                paramRows.forEach((r, idx) => {
+                    const handle = r.querySelector(".lr-drag-handle--param");
+                    if (handle) {
+                        const baseName = r.getAttribute("data-param-name") || "parameter";
+                        handle.title = `Drag to reorder ${baseName} (#${idx + 1})`;
+                    }
+                });
+
+                syncInMemoryParameterOrder(testId, payload?.parameters || []);
+                syncDifferentialPercentageValidation();
+                showStatusMessage("Parameter order saved to database.", "success", 2400);
+            } catch (error) {
+                console.error("Parameter reorder failed:", error);
+                restoreTbodySnapshot(tbody, snapshotRows);
+                syncDifferentialPercentageValidation();
+                showStatusMessage(error?.message || "Could not update parameter order in database.", "error", 3600);
+            } finally {
+                reorderSaveInFlight = false;
+            }
+        }
+
+        // Enable `draggable` strictly when user grabs the grip handle (preserves input text selection)
+        tablesContainer.addEventListener("pointerdown", (event) => {
+            if (reorderSaveInFlight) return;
+            const handle = event.target.closest(".lr-drag-handle");
+            if (!handle) {
+                if (pendingRow) {
+                    pendingRow.draggable = false;
+                    pendingRow = null;
+                }
+                pendingMode = "";
+                return;
+            }
+            const row = handle.closest("tbody > tr");
+            if (!row) return;
+            pendingRow = row;
+            pendingMode = handle.classList.contains("lr-drag-handle--param") ? "param" : "test";
+            row.draggable = true;
+        });
+
+        document.addEventListener("pointerup", () => {
+            if (!dragState && pendingRow) {
+                pendingRow.draggable = false;
+                pendingRow = null;
+                pendingMode = "";
+            }
+        });
+
+        tablesContainer.addEventListener("dragstart", (event) => {
+            const row = event.target.closest("tbody > tr");
+            if (!row || reorderSaveInFlight || pendingRow !== row) {
+                event.preventDefault();
+                return;
+            }
+
+            const tbody = row.closest("tbody");
+            const testBlockId = row.getAttribute("data-test-block-id");
+            if (!tbody || !testBlockId) {
+                event.preventDefault();
+                resetDragVisuals();
+                return;
+            }
+
+            const mode = pendingMode || (row.getAttribute("data-row-role") === "param-row" ? "param" : "test");
+            const draggedRows =
+                mode === "param" ? getParamSubBlockRows(row) : getTestBlockRows(tbody, testBlockId);
+            if (!draggedRows.length) {
+                event.preventDefault();
+                resetDragVisuals();
+                return;
+            }
+
+            dragState = {
+                mode,
+                tbody,
+                testBlockId,
+                primaryRow: row,
+                draggedRows,
+                dropPlan: null,
+            };
+
+            draggedRows.forEach((r) => r.classList.add("lr-row-dragging"));
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", testBlockId);
+            }
+            lastDragClientY = event.clientY;
+            startAutoScroll();
+        });
+
+        tablesContainer.addEventListener("dragover", (event) => {
+            if (!dragState) return;
+            lastDragClientY = event.clientY;
+
+            const hoveredRow = event.target.closest("tbody > tr");
+            const plan = resolveDropPlan(hoveredRow, event.clientY);
+            clearDropHighlights();
+            dragState.dropPlan = plan;
+
+            if (!plan) return;
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = "move";
+            }
+            plan.highlightRow.classList.add(plan.placeAfter ? "lr-drop-after" : "lr-drop-before");
+        });
+
+        tablesContainer.addEventListener("drop", async (event) => {
+            if (!dragState) return;
+            event.preventDefault();
+
+            const activeDrag = dragState;
+            const hoveredRow = event.target.closest("tbody > tr");
+            const plan = resolveDropPlan(hoveredRow, event.clientY) || activeDrag.dropPlan;
+
+            if (!plan) {
+                resetDragVisuals();
+                return;
+            }
+
+            const { tbody, mode, testBlockId, draggedRows } = activeDrag;
+            const snapshotRows = Array.from(tbody.children);
+            const anchorNode = plan.insertBeforeNode;
+
+            // Avoid inserting inside the dragged rows themselves
+            if (anchorNode && draggedRows.includes(anchorNode)) {
+                resetDragVisuals();
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            draggedRows.forEach((r) => fragment.appendChild(r));
+            tbody.insertBefore(fragment, anchorNode || null);
+
+            const afterRows = Array.from(tbody.children);
+            const hasChanged = snapshotRows.some((r, idx) => afterRows[idx] !== r);
+
+            resetDragVisuals();
+            if (!hasChanged) return;
+
+            if (mode === "param") {
+                await persistReorderedParameters(tbody, testBlockId, snapshotRows);
+            } else {
+                await persistReorderedTests(tbody, snapshotRows);
+            }
+        });
+
+        tablesContainer.addEventListener("dragend", () => {
+            resetDragVisuals();
+        });
+    }
+
     await renderData();
+    initializeReportRowReordering();
     await loadTenantFormulas();
     addIconsToMatchingRows();
     recalculateAllFormulas();
@@ -5629,31 +6167,44 @@ function sortTests() {
     });
 }
 
-// Function to Sort Rows by data-order Attribute
+// Function to Sort Rows atomically by test block & data-order attribute
 function sortRowsByDataOrder(tbody) {
-    const rows = Array.from(tbody.querySelectorAll("tr"));
-
-    // Separate rows with and without the data-order attribute
-    const rowsWithOrder = rows.filter((row) => row.hasAttribute("data-order"));
-    // Sort rows with the data-order attribute
-    rowsWithOrder.sort((rowA, rowB) => {
-        const orderA = parseInt(rowA.getAttribute("data-order"), 10) || 0;
-        const orderB = parseInt(rowB.getAttribute("data-order"), 10) || 0;
-        return orderA - orderB; // Ascending order
-    });
-
-    // Rebuild with fragment to reduce layout thrash
-    const fragment = document.createDocumentFragment();
-    let withOrderIndex = 0;
+    const rows = Array.from(tbody.querySelectorAll(":scope > tr"));
+    const blocks = [];
+    const blockById = new Map();
+    const trailingRows = [];
 
     rows.forEach((row) => {
-        if (row.hasAttribute("data-order")) {
-            fragment.appendChild(rowsWithOrder[withOrderIndex]);
-            withOrderIndex++;
+        const blockId = row.getAttribute("data-test-block-id");
+        if (blockId) {
+            if (!blockById.has(blockId)) {
+                const parsedOrder = Number(row.getAttribute("data-order"));
+                const block = {
+                    blockId,
+                    order: Number.isFinite(parsedOrder) ? parsedOrder : 9999,
+                    rows: [],
+                };
+                blockById.set(blockId, block);
+                blocks.push(block);
+            }
+            blockById.get(blockId).rows.push(row);
+        } else if (row.hasAttribute("data-order")) {
+            const parsedOrder = Number(row.getAttribute("data-order"));
+            blocks.push({
+                blockId: null,
+                order: Number.isFinite(parsedOrder) ? parsedOrder : 9999,
+                rows: [row],
+            });
         } else {
-            fragment.appendChild(row); // Append rows without data-order in their original positions
+            trailingRows.push(row);
         }
     });
+
+    blocks.sort((a, b) => a.order - b.order);
+
+    const fragment = document.createDocumentFragment();
+    blocks.forEach((block) => block.rows.forEach((r) => fragment.appendChild(r)));
+    trailingRows.forEach((r) => fragment.appendChild(r));
     tbody.replaceChildren(fragment);
 }
 // sortTests() is already covered during grouped render flow.

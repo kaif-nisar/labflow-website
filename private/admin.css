@@ -3587,12 +3587,14 @@ html[data-theme="dark"] :is(
 }
 
 /* ==========================================================================
-   MACHINE CONNECTOR MODALS - GLOBAL OVERLAY FIX (Bypasses content-box stacking context)
+   MACHINE CONNECTOR & FORMAT 5 MODALS - GLOBAL OVERLAY FIX
    ========================================================================== */
 .mc-modal-overlay,
 body > #machineModal,
 body > #detailModal,
-body > #simulatorModal {
+body > #simulatorModal,
+body > #popupModal.oh5-modal,
+.oh5-modal {
     display: none !important;
     position: fixed !important;
     inset: 0 !important;
@@ -3603,17 +3605,232 @@ body > #simulatorModal {
     width: 100vw !important;
     height: 100vh !important;
     height: 100dvh !important;
+    background: rgba(15, 23, 42, 0.68) !important;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
     z-index: 2147483647 !important;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 .mc-modal-overlay.open,
 body > #machineModal.open,
 body > #detailModal.open,
-body > #simulatorModal.open {
+body > #simulatorModal.open,
+body > #popupModal.oh5-modal.is-open,
+.oh5-modal.is-open {
     display: flex !important;
 }
 
-.content-box:has(.mc-modal-overlay.open) {
+.content-box:has(.mc-modal-overlay.open),
+.content-box:has(.oh5-modal.is-open),
+.content-box:has(.popup-modal.open),
+.content-box:has(.popup-modal[style*="display: block"]),
+.content-box:has(.popup-modal[style*="display: flex"]),
+.content-box:has(.popup-modal[style*="display:block"]),
+.content-box:has(.popup-modal[style*="display:flex"]) {
     z-index: 100000 !important;
 }
+
+/* Legacy Report Formats (1-4) Send Modal Overlay & Frame Sizing inside SPA Shell */
+.spa-page-canvas[data-spa-page^="reportFormat"] .popup-modal:not(.oh5-modal) {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+    z-index: 2147483647 !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+    overflow-y: auto !important;
+}
+
+.spa-page-canvas[data-spa-page^="reportFormat"] .popup-modal:not(.oh5-modal) .popup-content {
+    margin: 12px auto !important;
+    width: 100% !important;
+    max-width: 900px !important;
+    height: calc(100dvh - 36px) !important;
+    max-height: 860px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+.spa-page-canvas[data-spa-page^="reportFormat"] .popup-modal:not(.oh5-modal) .pdf-viewer,
+.spa-page-canvas[data-spa-page^="reportFormat"] .popup-modal:not(.oh5-modal) #pdfFrame {
+    flex: 1 1 0% !important;
+    min-height: 360px !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+}
+
+body > #popupModal.oh5-modal * {
+    box-sizing: border-box;
+}
+
+body > #popupModal.oh5-modal .oh5-modal-card {
+    width: 100%;
+    max-width: 880px;
+    height: min(88vh, 840px);
+    background: #ffffff;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.38);
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+}
+
+body > #popupModal.oh5-modal .oh5-modal-head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+body > #popupModal.oh5-modal .oh5-share-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+body > #popupModal.oh5-modal .oh5-share-tabs button {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 7px 13px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+
+body > #popupModal.oh5-modal .oh5-share-tabs button:hover {
+    border-color: #1e3a5f;
+    color: #1e3a5f;
+    background: #f1f5f9;
+}
+
+body > #popupModal.oh5-modal .oh5-close-modal {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+
+body > #popupModal.oh5-modal .oh5-close-modal:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+body > #popupModal.oh5-modal .oh5-contact-bar {
+    display: none;
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    background: #f1f5f9;
+    border-bottom: 1px solid #cbd5e1;
+    gap: 8px;
+    align-items: center;
+}
+
+body > #popupModal.oh5-modal .oh5-contact-bar input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #ffffff;
+    color: #0f172a;
+}
+
+body > #popupModal.oh5-modal .oh5-contact-bar button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #1e3a5f;
+    color: #ffffff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+body > #popupModal.oh5-modal .oh5-preview-status {
+    flex: 1 1 0%;
+    min-height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    background: #f8fafc;
+    color: #334155;
+}
+
+body > #popupModal.oh5-modal .oh5-preview-status.is-error {
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
+body > #popupModal.oh5-modal .oh5-pdf-frame {
+    flex: 1 1 0%;
+    min-height: 360px;
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: none;
+    background: #e2e8f0;
+}
+
+body > #toastStack.oh5-toast-stack {
+    position: fixed !important;
+    top: 68px;
+    right: 20px;
+    z-index: 2147483647 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 340px;
+    pointer-events: none;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+body > #toastStack.oh5-toast-stack .oh5-toast {
+    pointer-events: auto;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+    border-left: 4px solid #3b82f6;
+}
+
+body > #toastStack.oh5-toast-stack .oh5-toast.is-success { border-left-color: #10b981; }
+body > #toastStack.oh5-toast-stack .oh5-toast.is-error { border-left-color: #ef4444; }
+body > #toastStack.oh5-toast-stack .oh5-toast.is-warn { border-left-color: #f59e0b; }
 

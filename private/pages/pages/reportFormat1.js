@@ -1055,10 +1055,14 @@
                 }, { silent: true });
                 if (!pdfResponse.ok) throw new Error('PDF generation failed');
                 popupModal.style.display = 'block';
-                const pdfBlob = await pdfResponse.blob();
+                const rawBlob = await pdfResponse.blob();
+                const pdfBlob = rawBlob.type === 'application/pdf'
+                    ? rawBlob
+                    : new Blob([await rawBlob.arrayBuffer()], { type: 'application/pdf' });
                 activeSendPdfBlob = pdfBlob;
                 if (activeSendPdfBlobUrl) URL.revokeObjectURL(activeSendPdfBlobUrl);
                 activeSendPdfBlobUrl = URL.createObjectURL(activeSendPdfBlob);
+                iframe.style.display = 'block';
                 iframe.src = activeSendPdfBlobUrl;
                 inputField.style.display = 'flex';
                 shareDrafts.email = resolveDefaultEmail();

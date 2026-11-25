@@ -9,6 +9,7 @@ import {
     sanitizePdfMarkup,
 } from '../utils/pdfOfflineAssets.js';
 import { getPuppeteerLaunchOptions } from '../utils/puppeteerRuntime.js';
+import { generateFormat5PdfBuffer } from './reportFormat5Pdf.controller.js';
 
 const launchPdfBrowser = async () => {
     const launchOptions = getPuppeteerLaunchOptions();
@@ -479,6 +480,7 @@ const offlinePdfGeneratorController = async (params) => {
         marginLeft, investigationmargin, LeftsignPd, Rightsignpd, res
     } = params || {};
 
+    const rawInvestigationMargin = investigationmargin;
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
     const format3 = pdfformat === "reportFormat3";
     const cmToPx = (cm) => cm * 37.795;
@@ -524,6 +526,53 @@ const offlinePdfGeneratorController = async (params) => {
     });
 
     try {
+        if (pdfformat === "reportFormat5") {
+            const format5Buffer = await generateFormat5PdfBuffer({
+                htmlContent,
+                cssContent,
+                header,
+                footer,
+                backgroundImageUrl: effectiveBgUrl,
+                disableBackgroundImage,
+                checkBox,
+                headermargin,
+                footermargin,
+                marginRight,
+                marginLeft,
+                investigationmargin: rawInvestigationMargin,
+                LeftsignPd,
+                Rightsignpd,
+                selectedFontSize,
+                selectedFontFamily,
+                RowSpacing,
+                HighLow,
+                HLinred,
+                BoldRow,
+                showInvest,
+                hideCategories,
+                hideTableHeadings,
+                layerone,
+                showlab: params?.showlab,
+                showdoctorfirst: params?.showdoctorfirst,
+                showdoctorsecond: params?.showdoctorsecond,
+                fileInputLab: params?.fileInputLab,
+                fileInputDoctorleft: params?.fileInputDoctorleft,
+                fileInputDoctorright: params?.fileInputDoctorright,
+                fileInputLabtext: params?.fileInputLabtext,
+                fileInputDoctorlefttext: params?.fileInputDoctorlefttext,
+                fileInputDoctorrighttext: params?.fileInputDoctorrighttext,
+            }, {
+                launchPdfBrowser,
+                addBackgroundToPdf: effectiveBgUrl ? addBackgroundToPdf : null,
+            });
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'attachment; filename="offline_report.pdf"');
+            res.setHeader('Content-Length', format5Buffer.length);
+            res.end(format5Buffer);
+            return;
+        }
+
         const browser = await launchPdfBrowser();
         const page = await browser.newPage();
         let cleanupPageContent = async () => { };

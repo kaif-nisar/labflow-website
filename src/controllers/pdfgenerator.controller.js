@@ -15,6 +15,7 @@ import {
 } from '../utils/pdfOfflineAssets.js';
 import { doesLocalFileExist, normalizeStoredUploadUrl } from '../utils/localStorage.js';
 import { getPuppeteerLaunchOptions } from '../utils/puppeteerRuntime.js';
+import { generateFormat5PdfBuffer } from './reportFormat5Pdf.controller.js';
 
 // second try=====================================================================
 
@@ -375,6 +376,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
     showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
     fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, res }) => {
 
+    const rawInvestigationMargin = investigationmargin;
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
 
     const format3 = pdfformat === "reportFormat3" ? true : false;
@@ -396,68 +398,111 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
     footermarginPx = cmToPx(parseNumericValue(footermargin, 1));
 
     try {
-        const browser = await launchPdfBrowser();
-        const page = await browser.newPage();
+        let browser = null;
         let cleanupPageContent = async () => { };
 
         try {
-            const contentWithCssAndImage = buildPdfBodyDocument({
-                cssContent,
-                htmlContent,
-                selectedFontSize,
-                selectedFontFamily,
-                RowSpacing,
-                HighLow,
-                HLinred,
-                BoldRow,
-                hideCategories,
-                hideTableHeadings,
-            });
+            let finalpdfbufferwithmargin;
 
-            cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
+            if (pdfformat === "reportFormat5") {
+                finalpdfbufferwithmargin = await generateFormat5PdfBuffer({
+                    htmlContent,
+                    cssContent,
+                    header,
+                    footer,
+                    backgroundImageUrl,
+                    headermargin,
+                    footermargin,
+                    marginRight,
+                    marginLeft,
+                    investigationmargin: rawInvestigationMargin,
+                    LeftsignPd,
+                    Rightsignpd,
+                    selectedFontSize,
+                    selectedFontFamily,
+                    RowSpacing,
+                    HighLow,
+                    HLinred,
+                    BoldRow,
+                    showInvest,
+                    hideCategories,
+                    hideTableHeadings,
+                    showlab,
+                    showdoctorfirst,
+                    showdoctorsecond,
+                    fileInputLab,
+                    fileInputDoctorleft,
+                    fileInputDoctorright,
+                    fileInputLabtext,
+                    fileInputDoctorlefttext,
+                    fileInputDoctorrighttext,
+                    layerone,
+                }, {
+                    launchPdfBrowser,
+                    addBackgroundToPdf,
+                });
+            } else {
+                browser = await launchPdfBrowser();
+                const page = await browser.newPage();
 
-            const offlineHeaderTemplate = await buildPdfHeaderTemplate({
-                format3,
-                headermargin,
-                showInvest,
-                header,
-                selectedFontSize,
-                selectedFontFamily,
-            });
+                const contentWithCssAndImage = buildPdfBodyDocument({
+                    cssContent,
+                    htmlContent,
+                    selectedFontSize,
+                    selectedFontFamily,
+                    RowSpacing,
+                    HighLow,
+                    HLinred,
+                    BoldRow,
+                    hideCategories,
+                    hideTableHeadings,
+                });
 
-            const offlineFooterTemplate = await buildPdfFooterTemplate({
-                cssContent,
-                footer,
-                footermarginPx,
-                LeftsignPd,
-                Rightsignpd,
-                selectedFontSize,
-                selectedFontFamily,
-            });
+                cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
 
-            const pdfBuffer = await page.pdf({
-                format: 'A4',
-                printBackground: true,
-                displayHeaderFooter: true,
-                headerTemplate: offlineHeaderTemplate,
-                footerTemplate: offlineFooterTemplate,
-                margin: {
-                    top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
-                    bottom: '175px',
-                    left: '10px',
-                    right: '10px',
-                },
-            });
+                const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+                    format3,
+                    headermargin,
+                    showInvest,
+                    header,
+                    selectedFontSize,
+                    selectedFontFamily,
+                });
 
-            const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, backgroundImageUrl);
+                const offlineFooterTemplate = await buildPdfFooterTemplate({
+                    cssContent,
+                    footer,
+                    footermarginPx,
+                    LeftsignPd,
+                    Rightsignpd,
+                    selectedFontSize,
+                    selectedFontFamily,
+                });
 
-            if (!finalPdfBuffer) {
-                console.error('Final PDF buffer is null');
-                res.status(500).send('Failed to generate final PDF');
-                return;
+                const pdfBuffer = await page.pdf({
+                    format: 'A4',
+                    printBackground: true,
+                    displayHeaderFooter: true,
+                    headerTemplate: offlineHeaderTemplate,
+                    footerTemplate: offlineFooterTemplate,
+                    margin: {
+                        top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
+                        bottom: '175px',
+                        left: '10px',
+                        right: '10px',
+                    },
+                });
+
+                const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, backgroundImageUrl);
+
+                if (!finalPdfBuffer) {
+                    console.error('Final PDF buffer is null');
+                    res.status(500).send('Failed to generate final PDF');
+                    return;
+                }
+
+                finalpdfbufferwithmargin = await adjustPdfMargins(finalPdfBuffer, marginRightPx, marginLeftPx);
             }
-
-            const finalpdfbufferwithmargin = await adjustPdfMargins(finalPdfBuffer, marginRightPx, marginLeftPx);
 
             // Dynamically build the update object
             const updateData = {
@@ -515,7 +560,9 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
             res.end(finalpdfbufferwithmargin);
         } finally {
             await cleanupPageContent().catch(() => { });
-            await browser.close().catch(() => { });
+            if (browser) {
+                await browser.close().catch(() => { });
+            }
         }
 
     } catch (error) {
@@ -530,14 +577,18 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
 
 const getpdfcontroller = async (req, res) => {
 
-    const { value1, checkBox, disableBackgroundImage, htmlContent, cssContent, header, footer, backgroundImageUrl,
+    const { value1, reportId, checkBox, disableBackgroundImage, htmlContent, cssContent, header, footer, backgroundImageUrl,
         headermargin, footermargin, marginRight, marginLeft, selectedFontSize, RowSpacing, HighLow,
         selectedFontFamily, hideCategories, hideTableHeadings, HLinred, BoldRow, showInvest, DownloadPdf, investigationmargin, showlab, showdoctorfirst,
         showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
         fileInputDoctorlefttext, fileInputDoctorrighttext, bookingId, LeftsignPd, Rightsignpd } = req.body;
 
+    const effectiveReportId = String(value1 || reportId || "").trim();
+    if (!effectiveReportId) {
+        return res.status(400).json({ message: 'Report ID (value1/reportId) is required to generate PDF' });
+    }
 
-    let pdfformat;
+    const requestedFormat = String(req.body.pdfformat || req.body.pdfFormat || "").trim();
     const tid = req.user.tenantId._id;
     let userId;
     if (req.user.role === 'staff') {
@@ -546,15 +597,16 @@ const getpdfcontroller = async (req, res) => {
         userId = req.user._id
     }
 
-    if (req.user.role === "admin") {
-        pdfformat = req.user.pdfFormat;
-    } else {
-        pdfformat = req.user.createdBy.pdfFormat;
-    }
+    const assignedFormat = req.user.role === "admin"
+        ? req.user.pdfFormat
+        : (req.user.createdBy?.pdfFormat || req.user.tenantId?.adminDetails?.userId?.pdfFormat || req.user.pdfFormat);
+    const pdfformat = requestedFormat === "reportFormat5"
+        ? "reportFormat5"
+        : (assignedFormat || requestedFormat || "reportFormat1");
 
     try {
         // Attempt to fetch data from the database
-        const gettingcustomization = await customization.findOne({ reportId: value1 });
+        const gettingcustomization = await customization.findOne({ reportId: effectiveReportId });
 
         const defaultpdfsetting = await saveOrUpdatePdfSetting({
             tenantId: tid,
@@ -592,7 +644,7 @@ const getpdfcontroller = async (req, res) => {
                 selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
                 hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
                 hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: value1,
+                reportId: effectiveReportId,
                 bookingId: bookingId || gettingcustomization?.bookingId || "",
                 htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
                 cssContent: cssContent || gettingcustomization?.cssContent || "",
@@ -630,7 +682,7 @@ const getpdfcontroller = async (req, res) => {
                 selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
                 hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
                 hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: value1,
+                reportId: effectiveReportId,
                 bookingId: bookingId || gettingcustomization?.bookingId || "",
                 htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
                 cssContent: cssContent || gettingcustomization?.cssContent || "",
@@ -888,7 +940,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
     if (user.role === "admin") {
         pdfformat = user.pdfFormat;
     } else {
-        pdfformat = user.createdBy.pdfFormat;
+        pdfformat = user.createdBy?.pdfFormat || user.tenantId?.adminDetails?.userId?.pdfFormat || user.pdfFormat;
     }
 
     const format3 = pdfformat === "reportFormat3" ? true : false;
@@ -896,6 +948,16 @@ async function generateSinglePdfBuffer(mergedValues, user) {
 
     if (layerone) {
         mergedValues.showInvest = false;
+    }
+
+    if (pdfformat === "reportFormat5") {
+        return generateFormat5PdfBuffer({
+            ...mergedValues,
+            layerone,
+        }, {
+            launchPdfBrowser,
+            addBackgroundToPdf,
+        });
     }
 
     const cmToPx = (cm) => cm * 37.795;
@@ -973,41 +1035,53 @@ async function generateSinglePdfBuffer(mergedValues, user) {
 
 const getpdfcontrolleruser = async (req, res) => {
 
-    const { value1, checkBox, disableBackgroundImage, htmlContent, cssContent, header, footer, backgroundImageUrl,
+    const { value1, reportId, checkBox, disableBackgroundImage, htmlContent, cssContent, header, footer, backgroundImageUrl,
         headermargin, footermargin, marginRight, marginLeft, selectedFontSize, RowSpacing, HighLow,
         selectedFontFamily, hideCategories, hideTableHeadings, HLinred, BoldRow, showInvest, DownloadPdf, investigationmargin, showlab, showdoctorfirst,
         showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
-        fileInputDoctorlefttext, fileInputDoctorrighttext, pdfFormat, layerOne } = req.body;
+        fileInputDoctorlefttext, fileInputDoctorrighttext, pdfFormat, pdfformat, layerOne } = req.body;
+
+    const effectiveReportId = String(value1 || reportId || "").trim();
+    if (!effectiveReportId) {
+        return res.status(400).json({ message: 'Report ID (value1/reportId) is required to generate PDF' });
+    }
 
     try {
         // Attempt to fetch data from the database
-        const gettingcustomization = await customization.findOne({ reportId: value1 });
+        const gettingcustomization = await customization.findOne({ reportId: effectiveReportId });
+        const tenantDefaultSettings = gettingcustomization?.tenantId
+            ? await defaultpdfsetting.findOne({ tenantId: gettingcustomization.tenantId }).lean()
+            : null;
+        const resolvedPdfFormat = pdfformat || pdfFormat || gettingcustomization?.pdfformat || gettingcustomization?.pdfFormat || "reportFormat1";
         let mergedValues;
 
         if (checkBox || DownloadPdf) {
             // Define fallback logic to prioritize database values first
             mergedValues = {
-                pdfFormat,
-                showInvest: showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: HLinred ?? gettingcustomization?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
-                RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
-                selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
-                selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
-                hideCategories: hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
-                hideTableHeadings: hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: value1,
+                pdfformat: resolvedPdfFormat,
+                pdfFormat: resolvedPdfFormat,
+                showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
+                HLinred: HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
+                HighLow: HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
+                RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || tenantDefaultSettings?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
+                selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || tenantDefaultSettings?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
+                selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || tenantDefaultSettings?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
+                hideCategories: hideCategories ?? gettingcustomization?.hideCategories ?? tenantDefaultSettings?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
+                hideTableHeadings: hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? tenantDefaultSettings?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
+                reportId: effectiveReportId,
                 htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
                 cssContent: cssContent || gettingcustomization?.cssContent || "",
                 header: header || gettingcustomization?.header || "",
                 footer: footer || gettingcustomization?.footer || "",
                 backgroundImageUrl: "",
-                headermargin: headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
-                footermargin: footermargin || gettingcustomization?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
-                marginRight: marginRight || gettingcustomization?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
-                marginLeft: marginLeft || gettingcustomization?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
-                investigationmargin: investigationmargin || gettingcustomization?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
+                headermargin: headermargin || gettingcustomization?.headermargin || tenantDefaultSettings?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
+                footermargin: footermargin || gettingcustomization?.footermargin || tenantDefaultSettings?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
+                marginRight: marginRight || gettingcustomization?.marginRight || tenantDefaultSettings?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
+                marginLeft: marginLeft || gettingcustomization?.marginLeft || tenantDefaultSettings?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
+                LeftsignPd: gettingcustomization?.LeftsignPd ?? tenantDefaultSettings?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
+                Rightsignpd: gettingcustomization?.Rightsignpd ?? tenantDefaultSettings?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
+                investigationmargin: investigationmargin || gettingcustomization?.investigationmargin || tenantDefaultSettings?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
                 showlab: showlab ?? gettingcustomization?.showlab ?? false,
                 showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
                 showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,
@@ -1022,27 +1096,30 @@ const getpdfcontrolleruser = async (req, res) => {
         } else {
             // Define fallback logic to prioritize database values first
             mergedValues = {
-                pdfFormat,
-                showInvest: showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: HLinred ?? gettingcustomization?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
-                RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
-                selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
-                selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
-                hideCategories: hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
-                hideTableHeadings: hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
+                pdfformat: resolvedPdfFormat,
+                pdfFormat: resolvedPdfFormat,
+                showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
+                HLinred: HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
+                HighLow: HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
+                RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || tenantDefaultSettings?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
+                selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || tenantDefaultSettings?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
+                selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || tenantDefaultSettings?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
+                hideCategories: hideCategories ?? gettingcustomization?.hideCategories ?? tenantDefaultSettings?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
+                hideTableHeadings: hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? tenantDefaultSettings?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
                 reportId: value1,
                 htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
                 cssContent: cssContent || gettingcustomization?.cssContent || "",
                 header: header || gettingcustomization?.header || "",
                 footer: footer || gettingcustomization?.footer || "",
                 backgroundImageUrl: backgroundImageUrl || gettingcustomization?.backgroundImageUrl || "",
-                headermargin: headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
-                footermargin: footermargin || gettingcustomization?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
-                marginRight: marginRight || gettingcustomization?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
-                marginLeft: marginLeft || gettingcustomization?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
-                investigationmargin: investigationmargin || gettingcustomization?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
+                headermargin: headermargin || gettingcustomization?.headermargin || tenantDefaultSettings?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
+                footermargin: footermargin || gettingcustomization?.footermargin || tenantDefaultSettings?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
+                marginRight: marginRight || gettingcustomization?.marginRight || tenantDefaultSettings?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
+                marginLeft: marginLeft || gettingcustomization?.marginLeft || tenantDefaultSettings?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
+                LeftsignPd: gettingcustomization?.LeftsignPd ?? tenantDefaultSettings?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
+                Rightsignpd: gettingcustomization?.Rightsignpd ?? tenantDefaultSettings?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
+                investigationmargin: investigationmargin || gettingcustomization?.investigationmargin || tenantDefaultSettings?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
                 showlab: showlab ?? gettingcustomization?.showlab ?? false,
                 showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
                 showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,

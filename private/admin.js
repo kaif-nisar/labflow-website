@@ -40,6 +40,7 @@ const ROUTE_META_MAP = {
   reportFormat1: { title: "Report Format", section: "Operations", parent: "allcases" },
   reportFormat3: { title: "Report Format", section: "Operations", parent: "allcases" },
   reportFormat4: { title: "Report Format", section: "Operations", parent: "allcases" },
+  reportFormat5: { title: "Report Format", section: "Operations", parent: "allcases" },
   ModifyCase: { title: "Modify Case", section: "Operations", parent: "allcases" },
   editbooking: { title: "Edit Booking", section: "Operations", parent: "allcases" },
   new_booking: { title: "New Booking", section: "Booking", parent: "new_booking" },
@@ -542,6 +543,7 @@ const PRINT_PAPER_PAGES = new Set([
   "reportFormat1",
   "reportFormat3",
   "reportFormat4",
+  "reportFormat5",
   "invoice",
   "generatecertificate"
 ]);

@@ -37,24 +37,56 @@ const VALID_PAPER_PRESETS = new Set([
 /* ============================================================================
  * LEGACY BARCODE IMAGE ENDPOINT (100% BACKWARD COMPATIBLE)
  * ========================================================================== */
+const encodeCode128SetBRaw = (value) => {
+    const str = String(value || "");
+    if (!str) return null;
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code < 32 || code > 126) return null;
+    }
+    // Start B (104) + Set B ASCII offsets + weighted modulo-103 checksum + Stop (106)
+    const codes = [104, ...Array.from(str, (ch) => ch.charCodeAt(0) - 32)];
+    const checksum = codes.reduce((acc, val, idx) => acc + (idx === 0 ? val : val * idx), 0) % 103;
+    return [...codes, checksum, 106].map((val) => `^${String(val).padStart(3, "0")}`).join("");
+};
+
 const barcodegeneratecontroller = async (req, res) => {
-    const { number } = req.body;
+    const { number, dense } = req.body;
     const { nonumber } = req.query;
+    const useDense = dense === true || dense === "true" || req.query.dense === "true";
 
     if (!number) {
         return res.status(400).json({ success: false, message: "Number is required to generate barcode." });
     }
 
     try {
-        const barcodeBuffer = await bwipjs.toBuffer({
-            bcid: "code128",
-            text: String(number),
-            scale: 3,
-            height: 18,
-            includetext: !nonumber,
-            textxalign: "center",
-            backgroundcolor: "FFFFFF",
-        });
+        const cleanNumber = String(number);
+        const denseRaw = useDense ? encodeCode128SetBRaw(cleanNumber) : null;
+        const bwipOptions = denseRaw
+            ? {
+                bcid: "code128",
+                text: denseRaw,
+                raw: true,
+                parse: true,
+                scale: 3,
+                height: 15,
+                includetext: !nonumber,
+                textxalign: "center",
+                paddingwidth: 0,
+                paddingheight: 0,
+                backgroundcolor: "FFFFFF",
+            }
+            : {
+                bcid: "code128",
+                text: cleanNumber,
+                scale: 3,
+                height: 18,
+                includetext: !nonumber,
+                textxalign: "center",
+                backgroundcolor: "FFFFFF",
+            };
+
+        const barcodeBuffer = await bwipjs.toBuffer(bwipOptions);
 
         const barcodeImage = `data:image/png;base64,${barcodeBuffer.toString("base64")}`;
 

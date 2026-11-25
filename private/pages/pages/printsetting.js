@@ -930,8 +930,11 @@
         const doc1Text = document.getElementById('firstdoctor-info')?.value || '';
         const doc2Text = document.getElementById('seconddoctor-info')?.value || '';
 
-        // Safe image URLs: only pass HTTP(S) links, omit Base64 data strings for lightweight transport
-        const safeUrl = (url) => (url && url.startsWith('http')) ? url : '';
+        // Safe image URLs: allow HTTP(S) and root-relative /uploads/ paths, omit Base64 data strings
+        const safeUrl = (url) => {
+            const raw = String(url || '').trim();
+            return (raw.startsWith('http') || raw.startsWith('/')) ? raw : '';
+        };
         const labImgUrl = safeUrl(state.labSignUrl);
         const doc1ImgUrl = safeUrl(state.doc1SignUrl);
         const doc2ImgUrl = safeUrl(state.doc2SignUrl);
@@ -997,7 +1000,10 @@
 
             if (!res.ok) throw new Error('PDF Compiler failed to generate PDF.');
 
-            const blob = await res.blob();
+            const rawBlob = await res.blob();
+            const blob = rawBlob.type === 'application/pdf'
+                ? rawBlob
+                : new Blob([await rawBlob.arrayBuffer()], { type: 'application/pdf' });
             const blobUrl = URL.createObjectURL(blob);
             if (iframe) {
                 iframe.src = blobUrl;

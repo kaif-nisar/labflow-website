@@ -139,7 +139,7 @@ if (process.env.NODE_ENV === 'production') {
                     "wss:"
                 ],
                 fontSrc: ["'self'", "https:", "data:"],
-                objectSrc: ["'none'"],
+                objectSrc: ["'self'", "blob:"],
                 mediaSrc: ["'self'", "https:", "blob:"],
                 formAction: ["'self'"],
                 baseUri: ["'self'"],

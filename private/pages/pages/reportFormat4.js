@@ -473,8 +473,13 @@
                     const r = await fetch(`/api/v1/user/get-pdf`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...p, value1 }) });
                     if (!r.ok) throw new Error('PDF failed');
                     modal.style.display = 'block';
+                    const rawBlob = await r.blob();
+                    const pdfBlob = rawBlob.type === 'application/pdf'
+                        ? rawBlob
+                        : new Blob([await rawBlob.arrayBuffer()], { type: 'application/pdf' });
                     if (activeSendPdfBlobUrl) URL.revokeObjectURL(activeSendPdfBlobUrl);
-                    activeSendPdfBlobUrl = URL.createObjectURL(await r.blob());
+                    activeSendPdfBlobUrl = URL.createObjectURL(pdfBlob);
+                    iframe.style.display = 'block';
                     iframe.src = activeSendPdfBlobUrl;
                     inputField.style.display = 'flex';
                     contactIn.value = resolveDefaultEmail();

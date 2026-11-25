@@ -15,6 +15,7 @@
   const myDiv2 = document.querySelector(".format2");
   const myDiv3 = document.querySelector(".format3");
   const myDiv4 = document.querySelector(".format4");
+  const myDiv5 = document.querySelector(".format5");
 
   // Format1 wala background set karo
   myDiv.style.backgroundImage = `url("${BASE_URL}/images/format2.png")`;
@@ -27,6 +28,10 @@
 
   // New clinical template thumbnail
   if (myDiv4) myDiv4.style.backgroundImage = `url("${BASE_URL}/images/format4.png"), linear-gradient(#f3f3f3,#e8e8e8)`;
+  if (myDiv5) {
+    myDiv5.style.backgroundImage = `url("${BASE_URL}/images/format5.svg"), linear-gradient(#f3f3f3,#e8e8e8)`;
+    myDiv5.style.backgroundSize = "cover";
+  }
 
   // Fetch user/admin details and pre-fill form
   try {
@@ -55,6 +60,8 @@
       document.getElementById('format2').checked = true;
     } else if (data.adminDetails.userId.pdfFormat === "reportFormat4") {
       document.getElementById('format4').checked = true;
+    } else if (data.adminDetails.userId.pdfFormat === "reportFormat5") {
+      document.getElementById('format5').checked = true;
     } else {
       document.getElementById('format3').checked = true;
     }
