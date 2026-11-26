@@ -734,9 +734,17 @@
                 if (data.selectedFontSize) document.getElementById('pdf-font-size').value = data.selectedFontSize;
                 if (data.RowSpacing !== undefined) document.getElementById('spacing').value = data.RowSpacing;
 
-                if (data.HighLow !== undefined) document.getElementById('high-low-marker').checked = !!data.HighLow;
-                if (data.HLinred !== undefined) document.getElementById('abnormal-results-red').checked = !!data.HLinred;
-                if (data.BoldRow !== undefined) document.getElementById('abnormal-results-bold').checked = !!data.BoldRow;
+                const trustSavedAbnormalFlags = Boolean(data.hasUserSavedPrintSettings);
+
+                if (trustSavedAbnormalFlags) {
+                    if (data.HighLow !== undefined) document.getElementById('high-low-marker').checked = !!data.HighLow;
+                    if (data.HLinred !== undefined) document.getElementById('abnormal-results-red').checked = !!data.HLinred;
+                    if (data.BoldRow !== undefined) document.getElementById('abnormal-results-bold').checked = !!data.BoldRow;
+                } else {
+                    document.getElementById('high-low-marker').checked = true;
+                    document.getElementById('abnormal-results-red').checked = true;
+                    document.getElementById('abnormal-results-bold').checked = true;
+                }
                 if (data.showInvest !== undefined) document.getElementById('show-investigations').checked = !!data.showInvest;
                 if (data.hideCategories !== undefined) document.getElementById('hide-categories').checked = !!data.hideCategories;
                 if (data.hideTableHeadings !== undefined) document.getElementById('hide-table-headings').checked = !!data.hideTableHeadings;
@@ -987,6 +995,7 @@
             fileInputDoctorrighttext: doc2Text,
             footer: footerHtml,
             persistCustomization: !!customOverrides.persistCustomization,
+            explicitPrintSettingsSave: !!customOverrides.persistCustomization,
             pdfFormat: localStorage.getItem('pdfformat') || 'reportFormat1'
         };
 

@@ -9,7 +9,7 @@ const offlineReportSchema = new mongoose.Schema({
     DownloadPdf: { type: Boolean, default: false },
     showInvest: { type: Boolean, default: true },
     BoldRow: { type: Boolean, default: true },
-    HLinred: { type: Boolean, default: false },
+    HLinred: { type: Boolean, default: true },
     HighLow: { type: Boolean, default: true },
     RowSpacing: { type: Number, default: 7 },
     selectedFontSize: { type: Number, default: 12 },

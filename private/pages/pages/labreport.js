@@ -2203,23 +2203,54 @@ async function loadfunction() {
         input.style.fontWeight = "normal";
         if (highLowSpan) highLowSpan.textContent = "";
 
-        // Text-based reference: only bold if marked abnormal
+        // Text-based reference: respect manual dropdown abnormal OR evaluate scalar numeric ranges stored in `.reference`
         if (referenceType === "text") {
-            if (!inputValue) return;
+            if (!inputValue) {
+                input.dataset.isAbnormal = "false";
+                return;
+            }
             let isAbnormal = input.dataset.isAbnormal === "true";
 
-            // Try to infer abnormal flag from cached options if not already set
-            if (!isAbnormal) {
-                const key = textKeyForInput();
-                const cached = textDropdownState.cache.get(key);
-                if (cached && cached.length) {
-                    const match = cached.find(
-                        (entry) => (entry.valueName || "").toLowerCase() === inputValue.toLowerCase()
-                    );
-                    if (match) {
-                        isAbnormal = !!match.isAbnormal;
-                        input.dataset.isAbnormal = match.isAbnormal ? "true" : "false";
+            const key = textKeyForInput();
+            const cached = textDropdownState.cache.get(key);
+            const matchedDropdown = cached?.find(
+                (entry) => (entry.valueName || "").toLowerCase() === inputValue.toLowerCase()
+            );
+            if (matchedDropdown) {
+                isAbnormal = !!matchedDropdown.isAbnormal;
+                input.dataset.isAbnormal = isAbnormal ? "true" : "false";
+                if (isAbnormal) {
+                    row.style.fontWeight = "bold";
+                    input.style.fontWeight = "bold";
+                }
+                return;
+            }
+
+            // Fallback: check if reference cell holds a simple numeric interval (e.g. "13.0 - 17.0")
+            const refText = (row?.querySelector?.(".reference")?.textContent || "").replace(/,/g, "").trim();
+            const cleanVal = inputValue.replace(/,/g, "").trim();
+            const parsedNum = /^-?\d+(?:\.\d+)?$/.test(cleanVal) ? parseFloat(cleanVal) : NaN;
+            const simpleRange = refText.match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|—|\bto\b)\s*(-?\d+(?:\.\d+)?)/i);
+            if (!isNaN(parsedNum) && simpleRange) {
+                const low = parseFloat(simpleRange[1]);
+                const high = parseFloat(simpleRange[2]);
+                if (!isNaN(low) && !isNaN(high) && low <= high) {
+                    if (parsedNum < low) {
+                        row.style.fontWeight = "bold";
+                        input.style.fontWeight = "bold";
+                        input.dataset.isAbnormal = "true";
+                        if (highLowSpan) highLowSpan.textContent = "L";
+                        return;
                     }
+                    if (parsedNum > high) {
+                        row.style.fontWeight = "bold";
+                        input.style.fontWeight = "bold";
+                        input.dataset.isAbnormal = "true";
+                        if (highLowSpan) highLowSpan.textContent = "H";
+                        return;
+                    }
+                    input.dataset.isAbnormal = "false";
+                    return;
                 }
             }
 
@@ -2230,12 +2261,13 @@ async function loadfunction() {
             return;
         }
 
-        const numericValue = parseFloat(inputValue); // Parse the numeric value from the input
+        const numericValue = parseFloat(inputValue.replace(/,/g, "")); // Parse the numeric value from the input
         const lowerValue = parseFloat(input.getAttribute('data-lower'));
         const upperValue = parseFloat(input.getAttribute('data-upper'));
 
         // Reset styling and span content if input is invalid
         if (isNaN(numericValue) && inputValue.toLowerCase() !== "positive") {
+            input.dataset.isAbnormal = "false";
             return;
         }
 
@@ -2244,19 +2276,23 @@ async function loadfunction() {
             // If the input is "positive" (case-insensitive)
             row.style.fontWeight = "bold";
             input.style.fontWeight = "bold";
+            input.dataset.isAbnormal = "true";
             if (highLowSpan) highLowSpan.textContent = ""; // No L or H for "positive"
         } else if (numericValue < lowerValue) {
             row.style.fontWeight = "bold";
             input.style.fontWeight = "bold";
+            input.dataset.isAbnormal = "true";
             if (highLowSpan) highLowSpan.textContent = "L"; // Low
         } else if (numericValue > upperValue) {
             row.style.fontWeight = "bold";
-            if (highLowSpan) highLowSpan.textContent = "H"; // High
             input.style.fontWeight = "bold";
+            input.dataset.isAbnormal = "true";
+            if (highLowSpan) highLowSpan.textContent = "H"; // High
         } else {
             // Reset to normal if none of the conditions match
             row.style.fontWeight = "normal";
             input.style.fontWeight = "normal";
+            input.dataset.isAbnormal = "false";
             if (highLowSpan) highLowSpan.textContent = "";
         }
     };
@@ -5200,17 +5236,31 @@ async function loadfunction() {
                     row.previousElementSibling?.getAttribute("data-order") === rowOrder &&
                     !row.previousElementSibling?.querySelector(".value-input");
 
+                let highLowFlag = row.querySelector(".HighLow")?.textContent?.trim() || "";
                 if (referenceType === "text") {
                     isBold = isAbnormal;
+                    if (!isAbnormal && !highLowFlag && reference) {
+                        const cleanVal = trimmedValue.replace(/,/g, "");
+                        const numVal = /^-?\d+(?:\.\d+)?$/.test(cleanVal) ? parseFloat(cleanVal) : NaN;
+                        const simpleRange = String(reference).replace(/,/g, "").match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|—|\bto\b)\s*(-?\d+(?:\.\d+)?)/i);
+                        if (!isNaN(numVal) && simpleRange) {
+                            const lo = parseFloat(simpleRange[1]);
+                            const hi = parseFloat(simpleRange[2]);
+                            if (!isNaN(lo) && !isNaN(hi) && lo <= hi) {
+                                if (numVal < lo) { isAbnormal = true; isBold = true; highLowFlag = "L"; }
+                                else if (numVal > hi) { isAbnormal = true; isBold = true; highLowFlag = "H"; }
+                            }
+                        }
+                    }
                 } else {
-                    const numericValue = parseFloat(trimmedValue);
+                    const numericValue = parseFloat(trimmedValue.replace(/,/g, ""));
                     const positive = trimmedValue.toLowerCase() === "positive";
                     if (positive) {
                         isBold = true;
                         isAbnormal = true;
                     } else if (!isNaN(numericValue)) {
-                        if (!isNaN(lowerValue) && numericValue < lowerValue) { isBold = true; isAbnormal = true; }
-                        if (!isNaN(upperValue) && numericValue > upperValue) { isBold = true; isAbnormal = true; }
+                        if (!isNaN(lowerValue) && numericValue < lowerValue) { isBold = true; isAbnormal = true; highLowFlag = highLowFlag || "L"; }
+                        else if (!isNaN(upperValue) && numericValue > upperValue) { isBold = true; isAbnormal = true; highLowFlag = highLowFlag || "H"; }
                     }
                 }
 
@@ -5264,6 +5314,7 @@ async function loadfunction() {
                         referenceType,
                         isAbnormal,
                         isBold,
+                        highLow: highLowFlag,
                         isDocumented,
                     });
                     return;

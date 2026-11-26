@@ -906,6 +906,224 @@
         };
     }
 
+    let cachedClinicalEvalFn = null;
+    let clinicalEvalPromise = null;
+
+    async function loadClinicalRangeEvaluator() {
+        if (typeof cachedClinicalEvalFn === "function") return cachedClinicalEvalFn;
+        if (!clinicalEvalPromise) {
+            clinicalEvalPromise = (async () => {
+                const candidateOrigins = [];
+                if (typeof BASE_URL === "string" && BASE_URL) candidateOrigins.push(BASE_URL);
+                if (typeof window !== "undefined" && window.location?.origin && !candidateOrigins.includes(window.location.origin)) {
+                    candidateOrigins.push(window.location.origin);
+                }
+                for (const origin of candidateOrigins) {
+                    try {
+                        const mod = await import(`${origin}/js/clinicalRangeEvaluator.mjs?v=3`);
+                        if (typeof mod?.evaluateClinicalReferenceFlag === "function") {
+                            cachedClinicalEvalFn = mod.evaluateClinicalReferenceFlag;
+                            return cachedClinicalEvalFn;
+                        }
+                    } catch (err) {
+                        console.warn("[ReportActionHelpers] Could not load clinicalRangeEvaluator.mjs:", err?.message || err);
+                    }
+                }
+                return null;
+            })();
+        }
+        return clinicalEvalPromise;
+    }
+
+    function stripPlainHtmlText(raw) {
+        return String(raw ?? "")
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<!--[\s\S]*?-->|<\/?[a-zA-Z][^<>]*>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function evaluateLegacyTestAbnormal(test = {}, report = {}) {
+        const value = test?.value ?? test?.result ?? test?.currentvalue ?? "";
+        const reference = test?.reference ?? test?.normalRange ?? test?.text ?? "";
+        const testName = stripPlainHtmlText(test?.testName || test?.Name || "");
+        const dbFlag = /^(?:H|L)$/i.test(String(test?.highLow || "").trim())
+            ? String(test.highLow).trim().toUpperCase()
+            : "";
+        const dbIsAbnormal = Boolean(test?.isBold || test?.isAbnormal || dbFlag);
+
+        if (typeof cachedClinicalEvalFn === "function") {
+            return cachedClinicalEvalFn({
+                value,
+                reference,
+                testName,
+                gender: report?.gender || "",
+                age: report?.year || "",
+                referenceType: test?.referenceType || "",
+                dbIsAbnormal,
+                dbFlag,
+            });
+        }
+
+        // Fallback if .mjs failed to load over network
+        const valStr = String(value ?? "").trim();
+        const refStr = stripPlainHtmlText(reference);
+        if (!valStr) return { isAbnormal: false, flag: "", isNumeric: false };
+        const cleanVal = valStr.replace(/,/g, "").trim();
+        const numVal = /^-?\d+(?:\.\d+)?$/.test(cleanVal) ? Number(cleanVal) : NaN;
+        if (Number.isFinite(numVal) && refStr) {
+            const cleanRef = refStr.replace(/,/g, "");
+            const rangeMatch = cleanRef.match(/([+-]?\d+(?:\.\d+)?)\s*(?:-|–|—|\bto\b)\s*([+-]?\d+(?:\.\d+)?)/i);
+            if (rangeMatch) {
+                const lo = parseFloat(rangeMatch[1]);
+                const hi = parseFloat(rangeMatch[2]);
+                if (Number.isFinite(lo) && Number.isFinite(hi) && lo <= hi) {
+                    if (numVal < lo) return { isAbnormal: true, flag: "L", isNumeric: true };
+                    if (numVal > hi) return { isAbnormal: true, flag: "H", isNumeric: true };
+                    return { isAbnormal: false, flag: "", isNumeric: true };
+                }
+            }
+            const upperMatch = cleanRef.match(/^(?:<=|<|up\s*to)\s*([+-]?\d+(?:\.\d+)?)/i);
+            if (upperMatch && numVal > parseFloat(upperMatch[1])) {
+                return { isAbnormal: true, flag: "H", isNumeric: true };
+            }
+            const lowerMatch = cleanRef.match(/^(?:>=|>)\s*([+-]?\d+(?:\.\d+)?)/i);
+            if (lowerMatch && numVal < parseFloat(lowerMatch[1])) {
+                return { isAbnormal: true, flag: "L", isNumeric: true };
+            }
+        }
+        return { isAbnormal: dbIsAbnormal, flag: dbIsAbnormal ? dbFlag : "", isNumeric: Number.isFinite(numVal) };
+    }
+
+    function applyLegacyAbnormalHighlightStyles({
+        HighLow = true,
+        HLinred = true,
+        BoldRow = true,
+    } = {}) {
+        if (typeof document === "undefined") return;
+        let styleEl = document.getElementById("labflowLegacyAbnormalStyles");
+        if (!styleEl) {
+            styleEl = document.createElement("style");
+            styleEl.id = "labflowLegacyAbnormalStyles";
+            (document.head || document.body).appendChild(styleEl);
+        }
+
+        const boldWeight = BoldRow ? "700" : "400";
+        const rowBg = HLinred ? "rgba(254, 226, 226, 0.72)" : "rgba(241, 245, 249, 0.90)";
+        const rowTextColor = HLinred ? "#7f1d1d" : "#0f172a";
+        const valueTextColor = HLinred ? "#b91c1c" : "#0f172a";
+        const stripeColor = HLinred ? "#dc2626" : "#1e3a5f";
+        const badgeBg = HLinred ? "#fee2e2" : "#e2e8f0";
+        const badgeColor = HLinred ? "#991b1b" : "#0f172a";
+        const badgeBorder = HLinred ? "#ef4444" : "#94a3b8";
+
+        styleEl.textContent = `
+            table.test-table tbody tr.is-normal-row td,
+            table.test-table tbody tr.is-normal-row td.high-low,
+            table.test-table tbody tr.is-normal-row .test-name-cell,
+            table.test-table tbody tr.is-normal-row .result-value,
+            table.sec-tbl tbody tr.is-normal-row td {
+                font-weight: 400 !important;
+                color: #1e293b !important;
+                background-color: transparent !important;
+            }
+            table.test-table tbody tr td:nth-child(2) {
+                border-left: 3px solid transparent;
+                padding-left: 6px;
+            }
+            table.test-table tbody tr.abnormal-result-row td,
+            table.test-table tbody tr.BoldRow td,
+            table.sec-tbl tbody tr.row-abn td,
+            table.sec-tbl tbody tr.BoldRow td {
+                background-color: ${rowBg} !important;
+                color: ${rowTextColor} !important;
+                font-weight: ${boldWeight} !important;
+            }
+            table.test-table tbody tr.abnormal-result-row td *,
+            table.test-table tbody tr.BoldRow td *,
+            table.sec-tbl tbody tr.row-abn td *,
+            table.sec-tbl tbody tr.BoldRow td * {
+                font-weight: ${boldWeight} !important;
+                color: ${rowTextColor} !important;
+            }
+            table.test-table tbody tr.abnormal-result-row td.high-low .result-value,
+            table.test-table tbody tr.BoldRow td.high-low .result-value,
+            table.test-table tbody tr.abnormal-result-row td.high-low > span:last-child,
+            table.test-table tbody tr.BoldRow td.high-low > span:last-child {
+                color: ${valueTextColor} !important;
+                font-weight: ${boldWeight} !important;
+            }
+            table.test-table tbody tr.abnormal-result-row td:nth-child(2),
+            table.test-table tbody tr.BoldRow td:nth-child(2),
+            table.sec-tbl tbody tr.row-abn td:first-child,
+            table.sec-tbl tbody tr.BoldRow td:first-child {
+                border-left: 3px solid ${stripeColor} !important;
+                padding-left: 6px !important;
+            }
+            table.test-table tbody tr.abnormal-result-row .methods,
+            table.test-table tbody tr.abnormal-result-row .methods *,
+            table.test-table tbody tr.BoldRow .methods,
+            table.test-table tbody tr.BoldRow .methods * {
+                font-weight: 400 !important;
+                color: #565656 !important;
+            }
+            td .HL span.high-low-marker,
+            td .hl-tag {
+                display: ${HighLow ? "inline-flex" : "none"} !important;
+                align-items: center !important;
+                justify-content: center !important;
+                min-width: 18px;
+                height: 15px;
+                padding: 0 4px !important;
+                margin-right: 4px !important;
+                border-radius: 3px !important;
+                font-size: 9px !important;
+                font-weight: 800 !important;
+                line-height: 1 !important;
+                background-color: ${badgeBg} !important;
+                color: ${badgeColor} !important;
+                border: 1px solid ${badgeBorder} !important;
+                vertical-align: middle !important;
+            }
+            td .HL span.high-low-marker:empty,
+            td .hl-tag:empty {
+                display: none !important;
+            }
+        `;
+    }
+
+    async function fetchAndApplyLegacyPrintSettings(reportId) {
+        const defaults = { HighLow: true, HLinred: true, BoldRow: true };
+        try {
+            if (!reportId) {
+                applyLegacyAbnormalHighlightStyles(defaults);
+                return defaults;
+            }
+            const res = await fetch("/api/v1/user/getting-pdf-data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reportId }),
+                __topLoaderSilent: true,
+            });
+            if (!res.ok) {
+                applyLegacyAbnormalHighlightStyles(defaults);
+                return defaults;
+            }
+            const data = await res.json();
+            const hasSaved = Boolean(data?.hasUserSavedPrintSettings);
+            const prefs = {
+                HighLow: hasSaved && data?.HighLow !== undefined ? Boolean(data.HighLow) : true,
+                HLinred: hasSaved && data?.HLinred !== undefined ? Boolean(data.HLinred) : true,
+                BoldRow: hasSaved && data?.BoldRow !== undefined ? Boolean(data.BoldRow) : true,
+            };
+            applyLegacyAbnormalHighlightStyles(prefs);
+            return prefs;
+        } catch {
+            applyLegacyAbnormalHighlightStyles(defaults);
+            return defaults;
+        }
+    }
+
     window.ReportActionHelpers = {
         normalizeCounters,
         normalizeActionHistory,
@@ -924,5 +1142,9 @@
         fetchActionStats,
         flushPendingActions,
         sendPdfByEmail,
+        loadClinicalRangeEvaluator,
+        evaluateLegacyTestAbnormal,
+        applyLegacyAbnormalHighlightStyles,
+        fetchAndApplyLegacyPrintSettings,
     };
 })();

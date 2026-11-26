@@ -105,8 +105,12 @@
         let value1 = urlParams.get('value1');
 
         // ── 2. Fetch report ──
-        const report = await fetchreport();
+        const [report] = await Promise.all([
+            fetchreport(),
+            window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
+        ]);
         value1 = report._id;
+        window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
 
         const baseUrl = `${BASE_URL}/pages/pages/download_reports.html`;
         let backgroundImageUrl = null;
@@ -733,28 +737,25 @@
                             </td>`;
                             tbody.appendChild(tr);
                         } else {
-                            // Check H / L
-                            let abn   = Boolean(test.isBold || test.isAbnormal);
-                            let hlTag = '';
-                            if (!abn && test.reference) {
-                                const pts = test.reference.split(' - ');
-                                if (pts.length === 2) {
-                                    const lo = parseFloat(pts[0]);
-                                    const hi = parseFloat(pts[1]);
-                                    const v  = parseFloat(test.value);
-                                    if (!isNaN(lo) && !isNaN(hi) && !isNaN(v)) {
-                                        if (v < lo) { abn = true; hlTag = 'L'; }
-                                        else if (v > hi) { abn = true; hlTag = 'H'; }
-                                    }
-                                }
-                            }
-                            if (!abn && typeof test.value === 'string' && test.value.toLowerCase().includes('positive')) abn = true;
+                            const evalRes = reportActionHelpers.evaluateLegacyTestAbnormal
+                                ? reportActionHelpers.evaluateLegacyTestAbnormal(test, report)
+                                : { isAbnormal: Boolean(test.isBold || test.isAbnormal), flag: test.highLow || "" };
+                            const abn   = Boolean(evalRes.isAbnormal);
+                            const hlTag = evalRes.flag || '';
 
                             const tr = document.createElement('tr');
-                            if (abn) tr.classList.add('row-abn');
+                            if (test.referenceType) tr.setAttribute('data-ref-type', test.referenceType);
+                            if (abn) {
+                                tr.classList.add('row-abn', 'BoldRow', 'abnormal-result-row');
+                                tr.setAttribute('data-abnormal', '1');
+                                if (hlTag) tr.setAttribute('data-flag', hlTag);
+                            } else {
+                                tr.classList.add('is-normal-row');
+                                tr.setAttribute('data-abnormal', '0');
+                            }
                             tr.innerHTML = `
                                 <td>${test.testName}</td>
-                                <td style="text-align:center;${abn ? 'font-weight:700;' : ''}">${hlTag ? `<span class="hl-tag">${hlTag}</span>` : ''}${test.value || ''}</td>
+                                <td class="${abn ? 'high-low' : ''}" style="text-align:center;">${hlTag ? `<span class="hl-tag">${hlTag}</span>` : ''}<span class="result-value">${test.value || ''}</span></td>
                                 <td>${test.unit || ''}</td>
                                 <td>${test.reference || ''}</td>`;
                             tbody.appendChild(tr);

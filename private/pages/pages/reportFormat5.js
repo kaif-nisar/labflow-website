@@ -58,6 +58,7 @@
     "";
 
   const isLayerOneTenant = activeUser?.tenantId?.modelType === "1layer";
+  let evaluateClinicalReferenceFlagFn = null;
   const urlParams = new URLSearchParams(global.location.search);
   const urlValue1 = urlParams.get("value1") || localStorage.getItem("value1") || localStorage.getItem("myKey") || "";
 
@@ -96,7 +97,7 @@
       RowSpacing: 1,
       HighLow: true,
       HLinred: true,
-      BoldRow: false,
+      BoldRow: true,
       showInvest: true,
       showCategory: true,
       showTestHeading: true,
@@ -113,6 +114,7 @@
     },
     activeShareChannel: "",
     currentPreviewPdfUrl: "",
+    openedPdfUrls: [],
     hasSavedInitialSnapshot: false,
     saveTimer: null,
   };
@@ -120,6 +122,24 @@
   /* =========================================================================
    * 1. UTILITY HELPERS & SPECIMEN BARCODE MATCHING
    * ========================================================================= */
+
+  function pickNonEmpty(...vals) {
+    for (const v of vals) {
+      if (v === undefined || v === null) continue;
+      const str = String(v).trim();
+      if (str !== "" && str !== "null" && str !== "undefined") return v;
+    }
+    return "";
+  }
+
+  function normalizeReferenceDisplay(raw) {
+    return String(raw ?? "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li|tr)>/gi, "\n")
+      .replace(/<!--[\s\S]*?-->|<\/?[a-zA-Z][^<>]*>/g, " ")
+      .replace(/\n[ \t]+/g, "\n")
+      .trim();
+  }
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -290,33 +310,71 @@
     return `${dateStr}, ${timeStr}`;
   }
 
-  function evaluateReferenceFlag(rawValue, rawReference, patientGender = "") {
-    const valStr = String(rawValue ?? "").trim();
-    const refStr = String(rawReference ?? "").trim();
-    if (!valStr) return { isAbnormal: false, flag: "", isNumeric: false };
+  async function loadClinicalRangeEvaluator() {
+    if (typeof evaluateClinicalReferenceFlagFn === "function") return;
+    const origins = [];
+    if (BASE_URL) origins.push(BASE_URL);
+    if (global.location?.origin && !origins.includes(global.location.origin)) {
+      origins.push(global.location.origin);
+    }
+    for (const origin of origins) {
+      try {
+        const mod = await import(`${origin}/js/clinicalRangeEvaluator.mjs?v=3`);
+        if (typeof mod?.evaluateClinicalReferenceFlag === "function") {
+          evaluateClinicalReferenceFlagFn = mod.evaluateClinicalReferenceFlag;
+          return;
+        }
+      } catch (err) {
+        console.warn("[Format5] Shared clinicalRangeEvaluator.mjs unavailable from", origin, err?.message || err);
+      }
+    }
+  }
 
-    const numVal = parseFloat(valStr.replace(/,/g, ""));
-    const isPureNumeric = !Number.isNaN(numVal) && /^-?\d+(?:\.\d+)?$/.test(valStr.replace(/,/g, ""));
+  function evaluateReferenceFlag(rawValue, rawReference, patientGender = "", extra = {}) {
+    const opts =
+      rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
+        ? {
+            value: "",
+            reference: "",
+            gender: "",
+            testName: "",
+            age: "",
+            referenceType: "",
+            dbIsAbnormal: false,
+            dbFlag: "",
+            ...rawValue,
+          }
+        : typeof patientGender === "object" && patientGender !== null
+        ? { value: rawValue, reference: rawReference, ...patientGender }
+        : {
+            value: rawValue,
+            reference: rawReference,
+            gender: patientGender,
+            testName: extra.testName || "",
+            age: extra.age || "",
+            referenceType: extra.referenceType || "",
+            dbIsAbnormal: Boolean(extra.dbIsAbnormal),
+            dbFlag: extra.dbFlag || "",
+          };
+    const valStr = String(opts.value ?? "").trim();
+    const refStr = String(opts.reference ?? "").trim();
+
+    if (typeof evaluateClinicalReferenceFlagFn === "function") {
+      return evaluateClinicalReferenceFlagFn(opts);
+    }
+
+    if (!valStr) return { isAbnormal: false, flag: "", isNumeric: false };
+    const cleanDbFlag = /^(?:H|L)$/i.test(String(opts.dbFlag || "").trim())
+      ? String(opts.dbFlag).trim().toUpperCase()
+      : "";
+    const effectiveDbAbnormal = Boolean(opts.dbIsAbnormal || cleanDbFlag);
+    const cleanVal = valStr.replace(/,/g, "").replace(/\s*%$/, "").trim();
+    const numMatch = cleanVal.match(/^(?:<=|>=|<|>)?\s*([+-]?\d+(?:\.\d+)?)/);
+    const numVal = numMatch ? Number(numMatch[1]) : NaN;
+    const isPureNumeric = cleanVal !== "" && Number.isFinite(numVal);
 
     if (isPureNumeric && refStr) {
-      const lines = refStr
-        .split(/\r?\n|<br\s*\/?>/i)
-        .map((s) => s.replace(/<[^>]+>/g, " ").trim())
-        .filter(Boolean);
-
-      let targetRef = lines[0] || refStr;
-      const gNorm = String(patientGender || "").trim().toLowerCase();
-      if (lines.length > 1 && gNorm) {
-        const matched = lines.find((line) => {
-          const low = line.toLowerCase();
-          if (gNorm.startsWith("m")) return /\bmale\b/.test(low) && !/\bfemale\b/.test(low);
-          if (gNorm.startsWith("f")) return /\bfemale\b/.test(low);
-          return false;
-        });
-        if (matched) targetRef = matched;
-      }
-
-      const cleanRef = targetRef.replace(/,/g, "");
+      const cleanRef = refStr.replace(/,/g, "");
       const rangeMatch = cleanRef.match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|—|\bto\b)\s*(-?\d+(?:\.\d+)?)/i);
       if (rangeMatch) {
         const low = parseFloat(rangeMatch[1]);
@@ -327,35 +385,21 @@
           return { isAbnormal: false, flag: "", isNumeric: true };
         }
       }
-
       const upperMatch = cleanRef.match(/^(?:<=|<|up\s*to)\s*(-?\d+(?:\.\d+)?)/i);
-      if (upperMatch) {
-        const limit = parseFloat(upperMatch[1]);
-        if (Number.isFinite(limit) && numVal > limit) {
-          return { isAbnormal: true, flag: "H", isNumeric: true };
-        }
+      if (upperMatch && numVal > parseFloat(upperMatch[1])) {
+        return { isAbnormal: true, flag: "H", isNumeric: true };
       }
-
       const lowerMatch = cleanRef.match(/^(?:>=|>)\s*(-?\d+(?:\.\d+)?)/i);
-      if (lowerMatch) {
-        const limit = parseFloat(lowerMatch[1]);
-        if (Number.isFinite(limit) && numVal < limit) {
-          return { isAbnormal: true, flag: "L", isNumeric: true };
-        }
+      if (lowerMatch && numVal < parseFloat(lowerMatch[1])) {
+        return { isAbnormal: true, flag: "L", isNumeric: true };
       }
     }
 
-    const lowerVal = valStr.toLowerCase();
-    const lowerRef = refStr.toLowerCase();
-    if (
-      (lowerVal.includes("positive") && !lowerRef.includes("positive")) ||
-      (lowerVal.includes("reactive") && !lowerVal.includes("non-reactive") && !lowerVal.includes("non reactive")) ||
-      (lowerVal === "detected" && lowerRef.includes("not detected"))
-    ) {
-      return { isAbnormal: true, flag: "H", isNumeric: false };
-    }
-
-    return { isAbnormal: false, flag: "", isNumeric: isPureNumeric };
+    return {
+      isAbnormal: effectiveDbAbnormal,
+      flag: effectiveDbAbnormal ? cleanDbFlag : "",
+      isNumeric: isPureNumeric,
+    };
   }
 
   function collectAllSpecimenEntries(report, bookingData, barcodeMetaRows = []) {
@@ -500,9 +544,10 @@
 
   async function ensureReportActionHelpersLoaded() {
     if (global.ReportActionHelpers) return global.ReportActionHelpers;
+    const scriptUrl = `${BASE_URL}/admin/pages/pages/reportAction.shared.js?t=${Date.now()}`;
     if (typeof global.loadScript === "function") {
       try {
-        await global.loadScript(`pages/pages/reportAction.shared.js?t=${Date.now()}`);
+        await global.loadScript(scriptUrl);
         if (global.ReportActionHelpers) return global.ReportActionHelpers;
       } catch {
         // Fallback to script tag
@@ -511,7 +556,7 @@
     try {
       await new Promise((resolve) => {
         const script = document.createElement("script");
-        script.src = `pages/pages/reportAction.shared.js?t=${Date.now()}`;
+        script.src = scriptUrl;
         script.async = false;
         script.onload = resolve;
         script.onerror = resolve;
@@ -707,6 +752,9 @@
       return undefined;
     };
 
+    const hasExplicitSavedPrefs = Boolean(ps?.hasUserSavedPrintSettings);
+    const pickSensitive = (...vals) => (hasExplicitSavedPrefs ? pick(...vals) : undefined);
+
     state.settings.headermargin = parseNum(pick(ps.headermargin, lsPrint.headermargin), 2.8, 0, 10);
     state.settings.footermargin = parseNum(pick(ps.footermargin, lsPrint.footermargin), 1.0, 0, 6);
     state.settings.marginLeft = parseNum(pick(ps.marginLeft, lsPrint.marginLeft), 0, 0, 4);
@@ -714,13 +762,13 @@
     state.settings.LeftsignPd = parseNum(pick(ps.LeftsignPd, lsPrint.LeftsignPd), 0, 0, 6);
     state.settings.Rightsignpd = parseNum(pick(ps.Rightsignpd, lsPrint.Rightsignpd), 0, 0, 6);
     state.settings.headerContentGap = parseNum(pick(ps.headerContentGap, lsPrint.headerContentGap), 0.7, 0.1, 10);
-    state.settings.selectedFontSize = parseNum(pick(ps.selectedFontSize, lsPrint.selectedFontSize), 10.5, 8, 18);
+    state.settings.selectedFontSize = parseNum(pickSensitive(ps.selectedFontSize, lsPrint.selectedFontSize), 10.5, 8, 18);
     state.settings.selectedFontFamily = pick(ps.selectedFontFamily, lsPrint.selectedFontFamily, "'Segoe UI', Arial, Helvetica, sans-serif") || "'Segoe UI', Arial, Helvetica, sans-serif";
-    state.settings.RowSpacing = parseNum(pick(ps.RowSpacing, lsPrint.RowSpacing), 1, 0, 12);
+    state.settings.RowSpacing = parseNum(pickSensitive(ps.RowSpacing, lsPrint.RowSpacing), 1, 0, 12);
 
-    state.settings.HighLow = parseBool(pick(ps.HighLow, lsPrint.HighLow), true);
-    state.settings.HLinred = parseBool(pick(ps.HLinred, lsPrint.HLinred), true);
-    state.settings.BoldRow = parseBool(pick(ps.BoldRow, lsPrint.BoldRow), false);
+    state.settings.HighLow = parseBool(pickSensitive(ps.HighLow, lsPrint.HighLow), true);
+    state.settings.HLinred = parseBool(pickSensitive(ps.HLinred, lsPrint.HLinred), true);
+    state.settings.BoldRow = parseBool(pickSensitive(ps.BoldRow, lsPrint.BoldRow), true);
     // Investigations always stays visible inside Format 5 right-column header
     state.settings.showInvest = true;
 
@@ -1001,20 +1049,27 @@
   function sanitizeCategories(categories) {
     if (!Array.isArray(categories)) return [];
     return categories
-      .map((cat) => {
+      .map((cat, origCatIdx) => {
         if (!cat) return null;
-        const validTests = (cat.tests || []).filter((t) => {
-          if (!t) return false;
-          if (t.isDocumented || t.isInterpretation || t.isMultiHeader || t.isMultiParameterHeading) return true;
-          if (Array.isArray(t.parameters) && t.parameters.length > 0) return true;
-          const valStr = String(t.value ?? t.result ?? "").trim();
-          const hasMeta = Boolean(t.remark || t.details);
-          return valStr.length > 0 || hasMeta || Boolean(t.Name || t.testName);
+        const validTests = [];
+        (cat.tests || []).forEach((t, origTestIdx) => {
+          if (!t) return;
+          const isValid =
+            t.isDocumented ||
+            t.isInterpretation ||
+            t.isMultiHeader ||
+            t.isMultiParameterHeading ||
+            (Array.isArray(t.parameters) && t.parameters.length > 0) ||
+            String(t.value ?? t.result ?? "").trim().length > 0 ||
+            Boolean(t.remark || t.details || t.Name || t.testName);
+          if (isValid) {
+            validTests.push({ ...t, _origTestIdx: origTestIdx });
+          }
         });
         if (!validTests.length && !cat.interpretation && !cat.advice && !cat.notes && !cat.remarks) {
           return null;
         }
-        return { ...cat, tests: validTests };
+        return { ...cat, _origCatIdx: origCatIdx, tests: validTests };
       })
       .filter(Boolean);
   }
@@ -1022,6 +1077,40 @@
   function buildFlagSlotInnerHtml(flag, isHighLowEnabled, isRedEnabled) {
     if (!flag || !isHighLowEnabled) return "";
     return `<span class="HL"><span class="oh5-flag-badge${isRedEnabled ? " is-red" : ""}">${escapeHtml(flag)}</span></span>`;
+  }
+
+  function applyRowEvaluationState(tr, evalRes, settings = state.settings) {
+    if (!tr) return;
+    const isAbnormal = Boolean(evalRes?.isAbnormal);
+    const flag = isAbnormal ? String(evalRes?.flag || "") : "";
+    const valCell = tr.children[1];
+    const valSpan = tr.querySelector('[data-field="value"]') || tr.querySelector(".oh5-result-value");
+    const flagSlot = tr.querySelector(".oh5-flag-slot");
+
+    tr.classList.remove("oh5-row--abnormal", "BoldRow", "is-bold-row", "is-red-row", "is-normal-row");
+    if (valCell) valCell.classList.remove("high-low");
+    if (valSpan) valSpan.classList.remove("is-abnormal", "is-red");
+    if (flagSlot) flagSlot.innerHTML = "";
+
+    tr.setAttribute("data-evaluated", "v2");
+    tr.setAttribute("data-abnormal", isAbnormal ? "1" : "0");
+    tr.setAttribute("data-flag", flag);
+
+    if (isAbnormal) {
+      tr.classList.add("oh5-row--abnormal", "BoldRow");
+      if (settings.BoldRow) tr.classList.add("is-bold-row");
+      if (settings.HLinred) tr.classList.add("is-red-row");
+      if (valCell) valCell.classList.add("high-low");
+      if (valSpan) {
+        valSpan.classList.add("is-abnormal");
+        if (settings.HLinred) valSpan.classList.add("is-red");
+      }
+      if (flagSlot) {
+        flagSlot.innerHTML = buildFlagSlotInnerHtml(flag, settings.HighLow, settings.HLinred);
+      }
+    } else {
+      tr.classList.add("is-normal-row");
+    }
   }
 
   function resolveMethodDisplay(testObj, rawName) {
@@ -1040,26 +1129,46 @@
     return parts.join(" | ");
   }
 
-  function createParameterRow({ catIndex, testIndex, paramIndex = null, title, method, value, unit, reference, isSubParam = false, patientGender = "" }) {
+  function createParameterRow({
+    catIndex,
+    testIndex,
+    paramIndex = null,
+    title,
+    method,
+    value,
+    unit,
+    reference,
+    isSubParam = false,
+    patientGender = "",
+    patientAge = "",
+    referenceType = "",
+    dbIsAbnormal = false,
+    dbFlag = "",
+  }) {
     const cleanTitle = stripHtmlTags(title);
     const cleanMethod = stripHtmlTags(method);
     const safeVal = value === null || value === undefined || String(value) === "null" ? "" : String(value);
     const safeUnit = unit === null || unit === undefined || String(unit) === "null" ? "" : String(unit);
     const safeRef = reference === null || reference === undefined || String(reference) === "null" ? "" : String(reference);
 
-    const evalRes = evaluateReferenceFlag(safeVal, safeRef, patientGender);
-    const s = state.settings;
+    const evalRes = evaluateReferenceFlag({
+      value: safeVal,
+      reference: safeRef,
+      testName: cleanTitle,
+      gender: patientGender,
+      age: patientAge,
+      referenceType,
+      dbIsAbnormal: Boolean(dbIsAbnormal),
+      dbFlag,
+    });
 
     const tr = document.createElement("tr");
+    const rowKey = `${catIndex}:${testIndex}:${paramIndex !== null ? paramIndex : "self"}`;
     tr.className = `oh5-test-row${isSubParam ? " oh5-param-row parameter-row" : ""}`;
+    tr.setAttribute("data-row-key", rowKey);
     tr.setAttribute("data-test-name", cleanTitle);
-    if (evalRes.isAbnormal) {
-      tr.classList.add("oh5-row--abnormal", "BoldRow");
-      if (s.BoldRow) tr.classList.add("is-bold-row");
-    }
-
-    const redClass = s.HLinred ? " is-red" : "";
-    const flagHtml = buildFlagSlotInnerHtml(evalRes.flag, s.HighLow, s.HLinred);
+    if (referenceType) tr.setAttribute("data-ref-type", String(referenceType));
+    if (dbFlag) tr.setAttribute("data-db-flag", String(dbFlag));
 
     const titleHtml = isSubParam
       ? `<span class="oh5-param-indent"><span class="oh5-test-title test-name">${escapeHtml(cleanTitle)}</span></span>`
@@ -1074,9 +1183,9 @@
         ${titleHtml}
         ${methodHtml}
       </td>
-      <td class="oh5-col-result-cell${evalRes.isAbnormal ? " high-low" : ""}">
+      <td class="oh5-col-result-cell">
         <div class="oh5-result-wrap">
-          <span class="oh5-result-value cell-edit${evalRes.isAbnormal ? ` is-abnormal${redClass}` : ""}"
+          <span class="oh5-result-value cell-edit"
                 contenteditable="true"
                 spellcheck="false"
                 data-cat-idx="${catIndex}"
@@ -1084,7 +1193,7 @@
                 ${paramIndex !== null ? `data-param-idx="${paramIndex}"` : ""}
                 data-field="value"
                 title="Click to edit observed result inline">${escapeHtml(safeVal)}</span>
-          <span class="oh5-flag-slot">${flagHtml}</span>
+          <span class="oh5-flag-slot"></span>
         </div>
       </td>
       <td class="oh5-unit-cell">
@@ -1106,6 +1215,8 @@
               data-field="reference">${escapeHtml(safeRef)}</span>
       </td>
     `;
+
+    applyRowEvaluationState(tr, evalRes, state.settings);
 
     tr.querySelectorAll(".cell-edit").forEach((cell) => {
       cell.addEventListener("blur", () => handleInlineCellEdit(cell, tr));
@@ -1148,28 +1259,32 @@
 
     const currentVal = (rowEl.querySelector('[data-field="value"]')?.textContent || "").trim();
     const currentRef = (rowEl.querySelector('[data-field="reference"]')?.textContent || "").trim();
-    const evalRes = evaluateReferenceFlag(currentVal, currentRef, state.report?.gender || "");
-    const s = state.settings;
+    const evalRes = evaluateReferenceFlag({
+      value: currentVal,
+      reference: currentRef,
+      testName: rowEl.getAttribute("data-test-name") || "",
+      gender: state.report?.gender || "",
+      age: state.report?.year || "",
+      referenceType: rowEl.getAttribute("data-ref-type") || targetObj?.referenceType || "",
+      dbIsAbnormal: false,
+    });
 
-    const valCell = rowEl.children[1];
-    const valSpan = rowEl.querySelector('[data-field="value"]');
-    const flagSlot = rowEl.querySelector(".oh5-flag-slot");
+    targetObj.isAbnormal = evalRes.isAbnormal;
+    targetObj.isBold = evalRes.isAbnormal;
+    targetObj.highLow = evalRes.flag || "";
 
-    rowEl.classList.remove("oh5-row--abnormal", "BoldRow", "is-bold-row");
-    if (valCell) valCell.classList.remove("high-low");
-    if (valSpan) valSpan.classList.remove("is-abnormal", "is-red");
-    if (flagSlot) flagSlot.innerHTML = "";
+    applyRowEvaluationState(rowEl, evalRes, state.settings);
 
-    if (evalRes.isAbnormal) {
-      rowEl.classList.add("oh5-row--abnormal", "BoldRow");
-      if (s.BoldRow) rowEl.classList.add("is-bold-row");
-      if (valCell) valCell.classList.add("high-low");
-      if (valSpan) {
-        valSpan.classList.add("is-abnormal");
-        if (s.HLinred) valSpan.classList.add("is-red");
-      }
-      if (flagSlot) {
-        flagSlot.innerHTML = buildFlagSlotInnerHtml(evalRes.flag, s.HighLow, s.HLinred);
+    const rowKey = rowEl.getAttribute("data-row-key");
+    if (rowKey) {
+      for (const section of state.categoryNodes) {
+        const sourceRow = section.querySelector(`tr[data-row-key="${rowKey}"]`);
+        if (sourceRow && sourceRow !== rowEl) {
+          const sourceField = sourceRow.querySelector(`[data-field="${field}"]`);
+          if (sourceField) sourceField.textContent = newValue;
+          applyRowEvaluationState(sourceRow, evalRes, state.settings);
+          break;
+        }
       }
     }
 
@@ -1203,10 +1318,12 @@
     const sanitizedCats = sanitizeCategories(report.CategoryAndTest || []);
     const rawCats = report.CategoryAndTest || [];
     const patientGender = report?.gender || "";
+    const patientAge = report?.year || "";
 
     sanitizedCats.forEach((cat, safeIdx) => {
-      const origCatIdx = rawCats.findIndex((raw) => raw === cat || (raw?.category === cat.category && raw?.title === cat.title));
-      const catIdx = origCatIdx >= 0 ? origCatIdx : safeIdx;
+      const catIdx = Number.isInteger(cat._origCatIdx)
+        ? cat._origCatIdx
+        : Math.max(0, rawCats.findIndex((raw) => raw === cat || (raw?.category === cat.category && raw?.title === cat.title)));
 
       const section = document.createElement("section");
       section.className = "section oh5-category-section";
@@ -1278,6 +1395,7 @@
       }
 
       (cat.tests || []).forEach((test, tIdx) => {
+        const testIdx = Number.isInteger(test._origTestIdx) ? test._origTestIdx : tIdx;
         if (test.isInterpretation) {
           closeTable();
           const card = createCalloutCard("Clinical Interpretation", test.details || "");
@@ -1302,17 +1420,23 @@
           const tbody = ensureTable();
           test.parameters.forEach((param, pIdx) => {
             const pName = param.Para_name || param.parameterName || param.name || "";
+            const pVal = pickNonEmpty(param.value, param.result, param.currentvalue, param.defaultresult);
+            const pRef = normalizeReferenceDisplay(pickNonEmpty(param.reference, param.normalRange, param.text));
             tbody.appendChild(createParameterRow({
               catIndex: catIdx,
-              testIndex: tIdx,
+              testIndex: testIdx,
               paramIndex: pIdx,
               title: pName,
               method: resolveMethodDisplay(param, pName),
-              value: param.value ?? param.result ?? param.defaultresult ?? "",
+              value: pVal,
               unit: param.unit || "",
-              reference: param.reference ?? param.normalRange ?? param.text ?? "",
+              reference: pRef,
               isSubParam: true,
               patientGender,
+              patientAge,
+              referenceType: param.referenceType || test.referenceType || "",
+              dbIsAbnormal: Boolean(param.isAbnormal || param.isBold || param.highLow),
+              dbFlag: param.highLow || "",
             }));
           });
 
@@ -1332,10 +1456,9 @@
         const rawName = String(test.Name || test.testName || "");
         const isExplicitParam = Boolean(test.isParameter) || /id=["']parameters["']/.test(rawName);
         const isExplicitMulti = Boolean(test.isMultiHeader || test.isMultiParameterHeading);
-        const hasEmptyFields =
-          (test.value === null || test.value === undefined || test.value === "" || test.value === "null") &&
-          !test.unit &&
-          !(test.reference ?? test.normalRange);
+        const resolvedVal = pickNonEmpty(test.value, test.result, test.currentvalue);
+        const resolvedRef = normalizeReferenceDisplay(pickNonEmpty(test.reference, test.normalRange, test.text));
+        const hasEmptyFields = !resolvedVal && !test.unit && !resolvedRef;
         const isImplicitHeader = !isExplicitParam && !test.isDocumented && (isExplicitMulti || hasEmptyFields);
 
         if (isImplicitHeader) {
@@ -1347,14 +1470,18 @@
           const tbody = ensureTable();
           tbody.appendChild(createParameterRow({
             catIndex: catIdx,
-            testIndex: tIdx,
+            testIndex: testIdx,
             title: rawName,
             method: resolveMethodDisplay(test, rawName),
-            value: test.value ?? test.result ?? "",
+            value: resolvedVal,
             unit: test.unit || "",
-            reference: test.reference ?? test.normalRange ?? "",
+            reference: resolvedRef,
             isSubParam: isExplicitParam,
             patientGender,
+            patientAge,
+            referenceType: test.referenceType || "",
+            dbIsAbnormal: Boolean(test.isAbnormal || test.isBold || test.highLow),
+            dbFlag: test.highLow || "",
           }));
         }
 
@@ -1449,16 +1576,51 @@
       #oh5PageRoot .oh5-flag-badge {
         display: ${s.HighLow ? "inline-flex" : "none"} !important;
       }
+      #oh5PageRoot tr.oh5-test-row.is-normal-row td,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-test-title,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-result-value,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-unit-cell,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-unit-inner,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-ref-block,
+      #oh5PageRoot tr.oh5-test-row.is-normal-row .oh5-ref-text {
+        font-weight: 400 !important;
+        background-color: transparent !important;
+      }
       #oh5PageRoot .oh5-result-value.is-abnormal {
-        color: ${s.HLinred ? "#b91c1c" : "#0f172a"};
+        color: ${s.HLinred ? "#b91c1c" : "#0f172a"} !important;
       }
       #oh5PageRoot .oh5-flag-badge {
-        background: ${s.HLinred ? "#fef2f2" : "#f1f5f9"};
-        color: ${s.HLinred ? "#b91c1c" : "#0f172a"};
-        border-color: ${s.HLinred ? "#fca5a5" : "#cbd5e1"};
+        background: ${s.HLinred ? "#fee2e2" : "#e2e8f0"};
+        color: ${s.HLinred ? "#991b1b" : "#0f172a"};
+        border-color: ${s.HLinred ? "#ef4444" : "#94a3b8"};
       }
-      #oh5PageRoot .oh5-row--abnormal td {
-        font-weight: ${s.BoldRow ? "700" : "inherit"};
+      #oh5PageRoot tr.oh5-row--abnormal td {
+        background-color: ${s.HLinred ? "rgba(254, 226, 226, 0.72)" : "rgba(241, 245, 249, 0.92)"};
+        border-bottom-color: ${s.HLinred ? "#fecaca" : "#cbd5e1"};
+        color: ${s.HLinred ? "#7f1d1d" : "#0f172a"};
+      }
+      #oh5PageRoot tr.oh5-row--abnormal td:first-child {
+        border-left-color: ${s.HLinred ? "#dc2626" : "#1e3a5f"};
+      }
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-test-title,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-unit-cell,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-unit-inner,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-ref-block,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-ref-text {
+        color: ${s.HLinred ? "#7f1d1d" : "#0f172a"};
+      }
+      #oh5PageRoot tr.oh5-row--abnormal td,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-test-title,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-result-value,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-unit-cell,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-unit-inner,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-ref-block,
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-ref-text {
+        font-weight: ${s.BoldRow ? "700" : "400"} !important;
+      }
+      #oh5PageRoot tr.oh5-row--abnormal .oh5-method-note {
+        font-weight: 400 !important;
+        color: var(--oh5-muted) !important;
       }
     `;
   }
@@ -1790,6 +1952,7 @@
       header: snapshot.header,
       footer: snapshot.footer,
       DownloadPdf: Boolean(download),
+      explicitPrintSettingsSave: false,
       investigationmargin: Math.round(s.headermargin * CM_TO_PX + 115),
     };
 
@@ -2039,9 +2202,91 @@
 
     const printBtn = document.getElementById("BrowserPrint");
     if (printBtn) {
-      printBtn.addEventListener("click", () => {
-        trackReportAction("printDialog");
-        global.print();
+      printBtn.addEventListener("click", async () => {
+        if (printBtn.disabled) return;
+        const usesDesktopShell = Boolean(global.LabFlowDesktopShell?.saveAndOpenPdf);
+        let printTab = null;
+
+        // Open blank tab synchronously inside user gesture so popup blockers allow immediate PDF navigation
+        if (!usesDesktopShell) {
+          try {
+            printTab = global.open("", "_blank");
+            if (printTab && printTab.document) {
+              printTab.document.open();
+              printTab.document.write(
+                `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>Generating Clinical PDF — LabFlow</title>` +
+                  `<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;color:#0f172a;}` +
+                  `.card{background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:28px 34px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.08);max-width:360px;}` +
+                  `.spin{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#0f766e;border-radius:50%;margin:0 auto 14px;animation:s .75s linear infinite;}` +
+                  `h3{margin:0 0 6px;font-size:15px;font-weight:700;color:#1e3a5f;}p{margin:0;font-size:12.5px;color:#475569;}` +
+                  `@keyframes s{to{transform:rotate(360deg);}}</style></head>` +
+                  `<body><div class="card"><div class="spin"></div><h3>Generating Format 5 PDF</h3><p>Preparing print-ready report, opening automatically...</p></div></body></html>`
+              );
+              printTab.document.close();
+            }
+          } catch {
+            printTab = null;
+          }
+        }
+
+        setButtonLoading("BrowserPrint", true);
+        clearTimeout(state.saveTimer);
+        try {
+          const { blob, filename } = await requestFormat5PdfBlob({ download: false });
+          if (!blob || blob.size === 0) {
+            throw new Error("Generated PDF is empty.");
+          }
+
+          if (usesDesktopShell) {
+            const buffer = await blob.arrayBuffer();
+            await global.LabFlowDesktopShell.saveAndOpenPdf({ fileName: filename, buffer });
+          } else {
+            const pdfUrl = URL.createObjectURL(blob);
+            state.openedPdfUrls.push(pdfUrl);
+            setTimeout(() => {
+              URL.revokeObjectURL(pdfUrl);
+              state.openedPdfUrls = state.openedPdfUrls.filter((u) => u !== pdfUrl);
+            }, 5 * 60 * 1000);
+
+            if (printTab && !printTab.closed) {
+              printTab.location.replace(pdfUrl);
+            } else {
+              // Strict popup blocker fallback: display immediately inside integrated preview modal
+              const liveModal = portalOverlaysToBody()?.popupModal || document.getElementById("popupModal");
+              const livePdfFrame = liveModal?.querySelector("#pdfFrame") || document.getElementById("pdfFrame");
+              if (state.currentPreviewPdfUrl) {
+                URL.revokeObjectURL(state.currentPreviewPdfUrl);
+              }
+              state.currentPreviewPdfUrl = pdfUrl;
+              if (liveModal && livePdfFrame) {
+                const statusEl = document.getElementById("oh5PreviewStatus");
+                if (statusEl) statusEl.style.display = "none";
+                livePdfFrame.style.display = "block";
+                livePdfFrame.src = pdfUrl;
+                liveModal.classList.add("is-open");
+                liveModal.style.display = "flex";
+              }
+            }
+          }
+
+          await trackReportAction("printDialog");
+          toast("PDF generated and opened for print.", "success");
+        } catch (err) {
+          const msg = err?.message || "Could not generate print PDF.";
+          if (printTab && !printTab.closed) {
+            try {
+              printTab.document.open();
+              printTab.document.write(
+                `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;padding:32px;color:#991b1b;background:#fef2f2;">` +
+                  `<h3>PDF Generation Failed</h3><p>${escapeHtml(msg)}</p></body></html>`
+              );
+              printTab.document.close();
+            } catch { /* ignore cross-state error */ }
+          }
+          toast(msg, "error");
+        } finally {
+          setButtonLoading("BrowserPrint", false);
+        }
       }, { signal });
     }
 
@@ -2279,6 +2524,7 @@
         fetchReportData(state.value1),
         fetchTemplateLetterhead(),
         fetchDoctorsSignatures(),
+        loadClinicalRangeEvaluator(),
       ]);
 
       if (!reportData || !reportData._id) {
@@ -2419,6 +2665,14 @@
     }
     if (state.currentPreviewPdfUrl) {
       URL.revokeObjectURL(state.currentPreviewPdfUrl);
+    }
+    if (Array.isArray(state.openedPdfUrls)) {
+      state.openedPdfUrls.forEach((u) => {
+        try {
+          if (u) URL.revokeObjectURL(u);
+        } catch { /* ignore */ }
+      });
+      state.openedPdfUrls = [];
     }
     state.portaledNodes.forEach((n) => {
       try {

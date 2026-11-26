@@ -549,7 +549,7 @@ const PRINT_PAPER_PAGES = new Set([
 ]);
 
 const PAPER_SELECTOR_RE =
-  /\.(?:container-pdf|container-format1|container|ps-a4-sheet|ps-a4-body|ps-a4-letterhead-overlay|a4-page|print-sheet|signed-off-div)\b/i;
+  /\.(?:container-pdf|container-format1|container|ps-a4-sheet|ps-a4-body|ps-a4-letterhead-overlay|a4-page|print-sheet|signed-off-div|oh5-sheet|oh5-sheet-header|oh5-sheet-body|oh5-sheet-footer|oh5-header-card|oh5-results-table|oh5-row--abnormal|oh5-param-row|oh5-test-title|oh5-method-note|oh5-col-result-cell|oh5-unit-cell|oh5-unit-inner|oh5-ref-block|oh5-ref-text|oh5-result-value|oh5-category-banner|oh5-profile-banner|oh5-flag-badge|oh5-footer-wrap)\b/i;
 
 const NAMED_CSS_COLORS = {
   white: [255, 255, 255, 1],

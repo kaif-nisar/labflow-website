@@ -600,7 +600,7 @@ app.use(express.static("public", {
         // Portal shell files must always be revalidated. They contain the session
         // guard / auth bootstrap logic, and a 7 day cached copy meant users kept
         // running an old guard (and kept getting logged out) after a deploy.
-        if (/[/\\]public[/\\]js[/\\][^/\\]+\.js$/i.test(filePath)) {
+        if (/[/\\]public[/\\]js[/\\][^/\\]+\.(?:js|mjs)$/i.test(filePath)) {
             res.setHeader("Cache-Control", "no-cache, must-revalidate");
             return;
         }
@@ -608,7 +608,7 @@ app.use(express.static("public", {
             res.setHeader("Cache-Control", "no-cache, must-revalidate");
             return;
         }
-        if (/\.(png|jpe?g|gif|svg|webp|avif|css|js|woff2?)$/i.test(filePath)) {
+        if (/\.(png|jpe?g|gif|svg|webp|avif|css|js|mjs|woff2?)$/i.test(filePath)) {
             res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
         }
     }
@@ -737,7 +737,7 @@ const protectedStatic = (directory) => {
             // Root level portal scripts (main.js, franchisee.js, ...) carry the
             // session guard configuration and must never be served from a stale
             // cache after a deploy.
-            if (/[/\\]private[/\\][^/\\]+\.(js|html)$/i.test(path)) {
+            if (/[/\\]private[/\\](?:pages[/\\]pages[/\\])?[^/\\]+\.(js|html)$/i.test(path)) {
                 res.setHeader("Cache-Control", "no-cache, must-revalidate");
             }
 

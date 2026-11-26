@@ -36,9 +36,13 @@
     await ensureReportActionHelpersLoaded();
     const urlParams = await new URLSearchParams(window.location.search);
     let value1 = await urlParams.get('value1');
-    let report = await fetchreport();
+    const [report] = await Promise.all([
+        fetchreport(),
+        window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
+    ]);
     const backgroundImageUrl = await fetchTemplateImages();
     value1 = report._id;
+    window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
     const baseUrl = `${BASE_URL}/pages/pages/download_reports.html`;
     localStorage.setItem('myKey', value1);
     localStorage.setItem('bookingId', report.bookingId);
@@ -606,36 +610,19 @@
                         testRow.classList.add('page-break');
                     }
 
-                    let isBold = Boolean(test.isBold || test.isAbnormal);
-                    let testNameSuffix = "";
-                    const refType = (test.referenceType || "").toLowerCase();
-
-                    if (test.reference && refType !== "text") {
-                        const referenceParts = test.reference.split(" - ");
-                        if (referenceParts.length === 2) {
-                            const lowerLimit = parseFloat(referenceParts[0]);
-                            const upperLimit = parseFloat(referenceParts[1]);
-                            const testValue = parseFloat(test.value);
-
-                            if (!isNaN(lowerLimit) && !isNaN(upperLimit) && !isNaN(testValue)) {
-                                if (testValue < lowerLimit) {
-                                    isBold = true;
-                                    testNameSuffix = "L";
-                                } else if (testValue > upperLimit) {
-                                    isBold = true;
-                                    testNameSuffix = "H";
-                                }
-                            }
-                        }
-                    }
-
-                    if (typeof test.value === "string" && test.value.toLowerCase().includes("positive")) {
-                        isBold = true;
-                    }
-
+                    const evalRes = reportActionHelpers.evaluateLegacyTestAbnormal
+                        ? reportActionHelpers.evaluateLegacyTestAbnormal(test, report)
+                        : { isAbnormal: Boolean(test.isBold || test.isAbnormal), flag: test.highLow || "" };
+                    const isBold = Boolean(evalRes.isAbnormal);
+                    const testNameSuffix = evalRes.flag || "";
+                    if (test.referenceType) testRow.setAttribute("data-ref-type", test.referenceType);
                     if (isBold) {
-                        testRow.style.fontWeight = "bold";
                         testRow.classList.add('BoldRow', 'abnormal-result-row');
+                        testRow.setAttribute("data-abnormal", "1");
+                        if (testNameSuffix) testRow.setAttribute("data-flag", testNameSuffix);
+                    } else {
+                        testRow.classList.add('is-normal-row');
+                        testRow.setAttribute("data-abnormal", "0");
                     }
 
                     // ✅ FIXED: Documented test with proper colspan

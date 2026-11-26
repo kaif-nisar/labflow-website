@@ -16,6 +16,10 @@ import {
 import { doesLocalFileExist, normalizeStoredUploadUrl } from '../utils/localStorage.js';
 import { getPuppeteerLaunchOptions } from '../utils/puppeteerRuntime.js';
 import { generateFormat5PdfBuffer } from './reportFormat5Pdf.controller.js';
+import {
+    buildLegacyAbnormalHighlightCss,
+    normalizeLegacyPdfBodyHtml,
+} from '../utils/pdfAbnormalHighlight.js';
 
 // second try=====================================================================
 
@@ -65,7 +69,7 @@ const DEFAULT_PDF_PREFERENCES = Object.freeze({
     investigationmargin: 40,
     showInvest: true,
     BoldRow: true,
-    HLinred: false,
+    HLinred: true,
     HighLow: true,
     RowSpacing: 7,
     selectedFontSize: 12,
@@ -73,6 +77,143 @@ const DEFAULT_PDF_PREFERENCES = Object.freeze({
     hideCategories: false,
     hideTableHeadings: false,
 });
+
+const DEFAULT_FORMAT5_PREFERENCES = Object.freeze({
+    BoldRow: true,
+    HLinred: true,
+    HighLow: true,
+    RowSpacing: 1,
+    selectedFontSize: 10.5,
+    showInvest: true,
+});
+
+const resolveNumericPref = (...vals) => {
+    for (const v of vals) {
+        if (v !== undefined && v !== null && v !== "") {
+            const parsed = Number(v);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+    }
+    return undefined;
+};
+
+const resolveFormatAwarePreferences = ({
+    pdfformat,
+    reqBody = {},
+    gettingcustomization = null,
+    defaultpdfsetting = null,
+}) => {
+    const isFormat5 = pdfformat === "reportFormat5";
+    const explicitUserSaved = Boolean(
+        reqBody.explicitPrintSettingsSave ||
+        reqBody.persistCustomization ||
+        gettingcustomization?.hasUserSavedPrintSettings ||
+        defaultpdfsetting?.hasUserSavedPrintSettings
+    );
+
+    if (isFormat5) {
+        return {
+            showInvest: true,
+            BoldRow: explicitUserSaved
+                ? (reqBody.BoldRow ?? gettingcustomization?.BoldRow ?? defaultpdfsetting?.BoldRow ?? DEFAULT_FORMAT5_PREFERENCES.BoldRow)
+                : (reqBody.BoldRow ?? DEFAULT_FORMAT5_PREFERENCES.BoldRow),
+            HLinred: explicitUserSaved
+                ? (reqBody.HLinred ?? gettingcustomization?.HLinred ?? defaultpdfsetting?.HLinred ?? DEFAULT_FORMAT5_PREFERENCES.HLinred)
+                : (reqBody.HLinred ?? DEFAULT_FORMAT5_PREFERENCES.HLinred),
+            HighLow: explicitUserSaved
+                ? (reqBody.HighLow ?? gettingcustomization?.HighLow ?? defaultpdfsetting?.HighLow ?? DEFAULT_FORMAT5_PREFERENCES.HighLow)
+                : (reqBody.HighLow ?? DEFAULT_FORMAT5_PREFERENCES.HighLow),
+            RowSpacing: resolveNumericPref(
+                reqBody.RowSpacing,
+                explicitUserSaved ? gettingcustomization?.RowSpacing : undefined,
+                explicitUserSaved ? defaultpdfsetting?.RowSpacing : undefined,
+                DEFAULT_FORMAT5_PREFERENCES.RowSpacing
+            ),
+            selectedFontSize: resolveNumericPref(
+                reqBody.selectedFontSize,
+                explicitUserSaved ? gettingcustomization?.selectedFontSize : undefined,
+                explicitUserSaved ? defaultpdfsetting?.selectedFontSize : undefined,
+                DEFAULT_FORMAT5_PREFERENCES.selectedFontSize
+            ),
+            selectedFontFamily:
+                reqBody.selectedFontFamily ||
+                gettingcustomization?.selectedFontFamily ||
+                defaultpdfsetting?.selectedFontFamily ||
+                DEFAULT_PDF_FONT_FAMILY,
+            hideCategories:
+                reqBody.hideCategories ??
+                gettingcustomization?.hideCategories ??
+                defaultpdfsetting?.hideCategories ??
+                DEFAULT_PDF_PREFERENCES.hideCategories,
+            hideTableHeadings:
+                reqBody.hideTableHeadings ??
+                gettingcustomization?.hideTableHeadings ??
+                defaultpdfsetting?.hideTableHeadings ??
+                DEFAULT_PDF_PREFERENCES.hideTableHeadings,
+            headermargin:
+                reqBody.headermargin ??
+                gettingcustomization?.headermargin ??
+                defaultpdfsetting?.headermargin ??
+                DEFAULT_PDF_PREFERENCES.headermargin,
+            footermargin:
+                reqBody.footermargin ??
+                gettingcustomization?.footermargin ??
+                defaultpdfsetting?.footermargin ??
+                DEFAULT_PDF_PREFERENCES.footermargin,
+            marginRight:
+                reqBody.marginRight ??
+                gettingcustomization?.marginRight ??
+                defaultpdfsetting?.marginRight ??
+                DEFAULT_PDF_PREFERENCES.marginRight,
+            marginLeft:
+                reqBody.marginLeft ??
+                gettingcustomization?.marginLeft ??
+                defaultpdfsetting?.marginLeft ??
+                DEFAULT_PDF_PREFERENCES.marginLeft,
+            LeftsignPd:
+                reqBody.LeftsignPd ??
+                gettingcustomization?.LeftsignPd ??
+                defaultpdfsetting?.LeftsignPd ??
+                DEFAULT_PDF_PREFERENCES.LeftsignPd,
+            Rightsignpd:
+                reqBody.Rightsignpd ??
+                gettingcustomization?.Rightsignpd ??
+                defaultpdfsetting?.Rightsignpd ??
+                DEFAULT_PDF_PREFERENCES.Rightsignpd,
+            investigationmargin: resolveNumericPref(
+                reqBody.investigationmargin,
+                gettingcustomization?.investigationmargin,
+                defaultpdfsetting?.investigationmargin,
+                DEFAULT_PDF_PREFERENCES.investigationmargin
+            ),
+        };
+    }
+
+    return {
+        showInvest: reqBody.showInvest ?? defaultpdfsetting?.showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+        BoldRow: explicitUserSaved
+            ? (reqBody.BoldRow ?? defaultpdfsetting?.BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
+            : (reqBody.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
+        HLinred: explicitUserSaved
+            ? (reqBody.HLinred ?? defaultpdfsetting?.HLinred ?? gettingcustomization?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred)
+            : (reqBody.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred),
+        HighLow: explicitUserSaved
+            ? (reqBody.HighLow ?? defaultpdfsetting?.HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow)
+            : (reqBody.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow),
+        RowSpacing: resolveNumericPref(defaultpdfsetting?.RowSpacing, gettingcustomization?.RowSpacing, DEFAULT_PDF_PREFERENCES.RowSpacing),
+        selectedFontSize: resolveNumericPref(defaultpdfsetting?.selectedFontSize, gettingcustomization?.selectedFontSize, DEFAULT_PDF_PREFERENCES.selectedFontSize),
+        selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
+        hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
+        hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
+        headermargin: defaultpdfsetting?.headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
+        footermargin: defaultpdfsetting?.footermargin || gettingcustomization?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
+        marginRight: defaultpdfsetting?.marginRight || gettingcustomization?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
+        marginLeft: defaultpdfsetting?.marginLeft || gettingcustomization?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
+        LeftsignPd: defaultpdfsetting?.LeftsignPd ?? gettingcustomization?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
+        Rightsignpd: defaultpdfsetting?.Rightsignpd ?? gettingcustomization?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
+        investigationmargin: resolveNumericPref(defaultpdfsetting?.investigationmargin, gettingcustomization?.investigationmargin, DEFAULT_PDF_PREFERENCES.investigationmargin),
+    };
+};
 
 const resolvePdfFontStack = (selectedFontFamily) => {
     const normalizedFontFamily = String(selectedFontFamily || "").trim();
@@ -82,24 +223,36 @@ const resolvePdfFontStack = (selectedFontFamily) => {
 const buildPdfBodyDocument = ({
     cssContent,
     htmlContent,
+    header = "",
     selectedFontSize,
     selectedFontFamily,
     RowSpacing,
-    HighLow,
-    HLinred,
-    BoldRow,
+    HighLow = true,
+    HLinred = true,
+    BoldRow = true,
     hideCategories,
     hideTableHeadings,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
-    const safeMarkup = sanitizePdfMarkup(htmlContent);
+    const highLowResolved = HighLow !== undefined ? Boolean(HighLow) : true;
+    const hlInRedResolved = HLinred !== undefined ? Boolean(HLinred) : true;
+    const boldRowResolved = BoldRow !== undefined ? Boolean(BoldRow) : true;
+    const safeMarkup = normalizeLegacyPdfBodyHtml({
+        htmlContent: sanitizePdfMarkup(htmlContent),
+        header,
+        HighLow: highLowResolved,
+        HLinred: hlInRedResolved,
+        BoldRow: boldRowResolved,
+    });
     const fontSize = parseNumericValue(selectedFontSize, 12);
     const rowSpacing = parseNumericValue(RowSpacing, 7) / 2;
-    const showHighLow = HighLow ? 'block' : 'none';
-    const abnormalResultColor = HLinred ? 'red' : 'inherit';
-    const boldWeight = BoldRow ? 'bold' : '400';
     const fontStack = resolvePdfFontStack(selectedFontFamily);
     const categoryDisplay = hideCategories ? 'none' : 'block';
+    const abnormalHighlightCss = buildLegacyAbnormalHighlightCss({
+        HighLow: highLowResolved,
+        HLinred: hlInRedResolved,
+        BoldRow: boldRowResolved,
+    });
 
     return [
         '<!DOCTYPE html>',
@@ -116,11 +269,9 @@ const buildPdfBodyDocument = ({
         `.middle { font-size: ${fontSize}px !important; }`,
         `.middle td, .middle th, .middle p, .middle span, .middle div, .middle li, .middle label, .middle small, .middle strong, .middle b, .middle em, .middle a { font-size: ${fontSize}px !important; }`,
         `td { padding-top: ${rowSpacing}px !important; padding-bottom: ${rowSpacing}px !important; }`,
-        `td .HL span, td .HL .high-low-marker { display: ${showHighLow}; }`,
         `.headings > h3, .headings > .category-heading, .headings h3, .category-heading { display: ${categoryDisplay} !important; text-align: center !important; width: 100% !important; margin: 0 auto !important; }`,
         `.headings > h4, .headings > .table-heading, .headings h4, .table-heading { display: ${hideTableHeadings ? 'none' : 'block'} !important; text-align: center !important; width: 100% !important; margin: 0 auto !important; }`,
-        `.abnormal-result-row .high-low > span:last-child, .abnormal-result-row .high-low .result-value, .abnormal-result-row .HL span, .abnormal-result-row .HL .high-low-marker, .BoldRow .high-low > span:last-child, .BoldRow .high-low .result-value, .BoldRow .HL span, .BoldRow .HL .high-low-marker { color: ${abnormalResultColor} !important; }`,
-        `.BoldRow { font-weight: ${boldWeight} !important; }`,
+        abnormalHighlightCss,
         '.deletion { display: none !important; }',
         'td.wrong { display: none !important; }',
         '.details-row, .details-row * { font-size: 10px !important; }',
@@ -374,7 +525,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
     cssContent, header, footer, backgroundImageUrl, headermargin, footermargin, marginRight,
     marginLeft, investigationmargin, showlab, showdoctorfirst,
     showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
-    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, res }) => {
+    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, explicitPrintSettingsSave = false, res }) => {
 
     const rawInvestigationMargin = investigationmargin;
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
@@ -448,6 +599,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 const contentWithCssAndImage = buildPdfBodyDocument({
                     cssContent,
                     htmlContent,
+                    header,
                     selectedFontSize,
                     selectedFontFamily,
                     RowSpacing,
@@ -510,8 +662,8 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 BoldRow: BoldRow,
                 HLinred: HLinred,
                 HighLow: HighLow,
-                RowSpacing: parseNumericValue(RowSpacing, 7),
-                selectedFontSize: parseNumericValue(selectedFontSize, 12),
+                RowSpacing: parseNumericValue(RowSpacing, pdfformat === "reportFormat5" ? 1 : 7),
+                selectedFontSize: parseNumericValue(selectedFontSize, pdfformat === "reportFormat5" ? 10.5 : 12),
                 selectedFontFamily: selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
                 hideCategories: Boolean(hideCategories),
                 hideTableHeadings: Boolean(hideTableHeadings),
@@ -538,6 +690,10 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 fileInputDoctorrighttext: fileInputDoctorrighttext,
                 updatedAt: new Date()
             };
+
+            if (explicitPrintSettingsSave) {
+                updateData.hasUserSavedPrintSettings = true;
+            }
 
             // Add backgroundImageUrl to the update object only if it is not empty
             if (backgroundImageUrl) {
@@ -607,108 +763,65 @@ const getpdfcontroller = async (req, res) => {
     try {
         // Attempt to fetch data from the database
         const gettingcustomization = await customization.findOne({ reportId: effectiveReportId });
+        const explicitPrintSettingsSave = Boolean(
+            req.body.persistCustomization || req.body.explicitPrintSettingsSave
+        );
+        const shouldPersistDefaultSettings =
+            pdfformat !== "reportFormat5" || explicitPrintSettingsSave;
 
-        const defaultpdfsetting = await saveOrUpdatePdfSetting({
-            tenantId: tid,
-            createdBy: userId,
-            headermargin,
-            footermargin,
-            marginRight,
-            marginLeft,
-            investigationmargin,
-            showInvest,
-            BoldRow,
-            HLinred,
-            HighLow,
-            RowSpacing,
-            selectedFontSize,
-            selectedFontFamily,
-            hideCategories,
-            hideTableHeadings,
-            LeftsignPd,
-            Rightsignpd
-        })
+        const defaultSettingDoc = shouldPersistDefaultSettings
+            ? await saveOrUpdatePdfSetting({
+                tenantId: tid,
+                createdBy: userId,
+                headermargin,
+                footermargin,
+                marginRight,
+                marginLeft,
+                investigationmargin,
+                showInvest,
+                BoldRow,
+                HLinred,
+                HighLow,
+                RowSpacing,
+                selectedFontSize,
+                selectedFontFamily,
+                hideCategories,
+                hideTableHeadings,
+                LeftsignPd,
+                Rightsignpd,
+                hasUserSavedPrintSettings: explicitPrintSettingsSave ? true : undefined,
+            })
+            : await saveOrUpdatePdfSetting({ tenantId: tid, createdBy: userId });
 
-        let mergedValues;
+        const resolvedPrefs = resolveFormatAwarePreferences({
+            pdfformat,
+            reqBody: req.body,
+            gettingcustomization,
+            defaultpdfsetting: defaultSettingDoc,
+        });
 
-        if (checkBox || DownloadPdf) {
-            // Define fallback logic to prioritize database values first
-            mergedValues = {
-                pdfformat: pdfformat,
-                showInvest: defaultpdfsetting?.showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: defaultpdfsetting?.BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: defaultpdfsetting?.HLinred ?? gettingcustomization?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: defaultpdfsetting?.HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
-                RowSpacing: defaultpdfsetting?.RowSpacing || gettingcustomization?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
-                selectedFontSize: defaultpdfsetting?.selectedFontSize || gettingcustomization?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
-                selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
-                hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
-                hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: effectiveReportId,
-                bookingId: bookingId || gettingcustomization?.bookingId || "",
-                htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
-                cssContent: cssContent || gettingcustomization?.cssContent || "",
-                header: header || gettingcustomization?.header || "",
-                footer: footer || gettingcustomization?.footer || "",
-                backgroundImageUrl: "",
-                headermargin: defaultpdfsetting?.headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
-                footermargin: defaultpdfsetting?.footermargin || gettingcustomization?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
-                marginRight: defaultpdfsetting?.marginRight || gettingcustomization?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
-                marginLeft: defaultpdfsetting?.marginLeft || gettingcustomization?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
-                LeftsignPd: defaultpdfsetting?.LeftsignPd ?? gettingcustomization?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
-                Rightsignpd: defaultpdfsetting?.Rightsignpd ?? gettingcustomization?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
-                investigationmargin: defaultpdfsetting?.investigationmargin || gettingcustomization?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
-                showlab: showlab ?? gettingcustomization?.showlab ?? false,
-                showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
-                showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,
-                fileInputLab: fileInputLab || gettingcustomization?.fileInputLab || "",
-                fileInputDoctorleft: fileInputDoctorleft || gettingcustomization?.fileInputDoctorleft || "",
-                fileInputDoctorright: fileInputDoctorright || gettingcustomization?.fileInputDoctorright || "",
-                fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
-                fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
-                fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
-                res
-            };
-        } else {
-            // Define fallback logic to prioritize database values first
-            mergedValues = {
-                pdfformat: pdfformat,
-                showInvest: defaultpdfsetting?.showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: defaultpdfsetting?.BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: defaultpdfsetting?.HLinred ?? gettingcustomization?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: defaultpdfsetting?.HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
-                RowSpacing: defaultpdfsetting?.RowSpacing || gettingcustomization?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
-                selectedFontSize: defaultpdfsetting?.selectedFontSize || gettingcustomization?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
-                selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
-                hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
-                hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: effectiveReportId,
-                bookingId: bookingId || gettingcustomization?.bookingId || "",
-                htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
-                cssContent: cssContent || gettingcustomization?.cssContent || "",
-                header: header || gettingcustomization?.header || "",
-                footer: footer || gettingcustomization?.footer || "",
-                backgroundImageUrl: backgroundImageUrl || gettingcustomization?.backgroundImageUrl || "",
-                headermargin: defaultpdfsetting?.headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
-                footermargin: defaultpdfsetting?.footermargin || gettingcustomization?.footermargin || DEFAULT_PDF_PREFERENCES.footermargin,
-                marginRight: defaultpdfsetting?.marginRight || gettingcustomization?.marginRight || DEFAULT_PDF_PREFERENCES.marginRight,
-                marginLeft: defaultpdfsetting?.marginLeft || gettingcustomization?.marginLeft || DEFAULT_PDF_PREFERENCES.marginLeft,
-                LeftsignPd: defaultpdfsetting?.LeftsignPd ?? gettingcustomization?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
-                Rightsignpd: defaultpdfsetting?.Rightsignpd ?? gettingcustomization?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
-
-                investigationmargin: defaultpdfsetting?.investigationmargin || gettingcustomization?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
-                showlab: showlab ?? gettingcustomization?.showlab ?? false,
-                showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
-                showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,
-                fileInputLab: fileInputLab || gettingcustomization?.fileInputLab || "",
-                fileInputDoctorleft: fileInputDoctorleft || gettingcustomization?.fileInputDoctorleft || "",
-                fileInputDoctorright: fileInputDoctorright || gettingcustomization?.fileInputDoctorright || "",
-                fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
-                fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
-                fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
-                res
-            };
-        }
+        const mergedValues = {
+            pdfformat,
+            ...resolvedPrefs,
+            reportId: effectiveReportId,
+            bookingId: bookingId || gettingcustomization?.bookingId || "",
+            htmlContent: htmlContent || gettingcustomization?.htmlContent || "",
+            cssContent: cssContent || gettingcustomization?.cssContent || "",
+            header: header || gettingcustomization?.header || "",
+            footer: footer || gettingcustomization?.footer || "",
+            backgroundImageUrl: (checkBox || DownloadPdf) ? "" : (backgroundImageUrl || gettingcustomization?.backgroundImageUrl || ""),
+            showlab: showlab ?? gettingcustomization?.showlab ?? false,
+            showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
+            showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,
+            fileInputLab: fileInputLab || gettingcustomization?.fileInputLab || "",
+            fileInputDoctorleft: fileInputDoctorleft || gettingcustomization?.fileInputDoctorleft || "",
+            fileInputDoctorright: fileInputDoctorright || gettingcustomization?.fileInputDoctorright || "",
+            fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
+            fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
+            fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
+            explicitPrintSettingsSave,
+            res
+        };
 
         if (req.user.tenantId.modelType === "1layer") {
             mergedValues.showInvest = false;
@@ -750,7 +863,8 @@ const saveOrUpdatePdfSetting = async ({
     hideCategories,
     hideTableHeadings,
     LeftsignPd,
-    Rightsignpd
+    Rightsignpd,
+    hasUserSavedPrintSettings
 }) => {
     try {
 
@@ -778,7 +892,8 @@ const saveOrUpdatePdfSetting = async ({
                 hideCategories,
                 hideTableHeadings,
                 LeftsignPd,
-                Rightsignpd
+                Rightsignpd,
+                ...(hasUserSavedPrintSettings !== undefined ? { hasUserSavedPrintSettings } : {}),
             });
 
             return newSetting;
@@ -802,7 +917,8 @@ const saveOrUpdatePdfSetting = async ({
                 hideCategories,
                 hideTableHeadings,
                 LeftsignPd,
-                Rightsignpd
+                Rightsignpd,
+                hasUserSavedPrintSettings
             };
 
             for (let key in fields) {
@@ -975,6 +1091,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
         const contentWithCssAndImage = buildPdfBodyDocument({
             cssContent: mergedValues.cssContent,
             htmlContent: mergedValues.htmlContent,
+            header: mergedValues.header,
             selectedFontSize: mergedValues.selectedFontSize,
             selectedFontFamily: mergedValues.selectedFontFamily,
             hideCategories: mergedValues.hideCategories,
@@ -1053,17 +1170,59 @@ const getpdfcontrolleruser = async (req, res) => {
             ? await defaultpdfsetting.findOne({ tenantId: gettingcustomization.tenantId }).lean()
             : null;
         const resolvedPdfFormat = pdfformat || pdfFormat || gettingcustomization?.pdfformat || gettingcustomization?.pdfFormat || "reportFormat1";
+        const isFormat5User = resolvedPdfFormat === "reportFormat5";
+        const explicitUserSaved = Boolean(
+            gettingcustomization?.hasUserSavedPrintSettings || tenantDefaultSettings?.hasUserSavedPrintSettings
+        );
+        const resolvedFormat5Prefs = isFormat5User
+            ? resolveFormatAwarePreferences({
+                pdfformat: resolvedPdfFormat,
+                reqBody: req.body,
+                gettingcustomization,
+                defaultpdfsetting: tenantDefaultSettings,
+            })
+            : null;
+
         let mergedValues;
 
-        if (checkBox || DownloadPdf) {
+        if (isFormat5User && resolvedFormat5Prefs) {
+            mergedValues = {
+                pdfformat: resolvedPdfFormat,
+                pdfFormat: resolvedPdfFormat,
+                ...resolvedFormat5Prefs,
+                reportId: effectiveReportId,
+                htmlContent: htmlContent || gettingcustomization?.htmlContent || "",
+                cssContent: cssContent || gettingcustomization?.cssContent || "",
+                header: header || gettingcustomization?.header || "",
+                footer: footer || gettingcustomization?.footer || "",
+                backgroundImageUrl: (checkBox || DownloadPdf) ? "" : (backgroundImageUrl || gettingcustomization?.backgroundImageUrl || ""),
+                showlab: showlab ?? gettingcustomization?.showlab ?? false,
+                showdoctorfirst: showdoctorfirst ?? gettingcustomization?.showdoctorfirst ?? true,
+                showdoctorsecond: showdoctorsecond ?? gettingcustomization?.showdoctorsecond ?? true,
+                fileInputLab: fileInputLab || gettingcustomization?.fileInputLab || "",
+                fileInputDoctorleft: fileInputDoctorleft || gettingcustomization?.fileInputDoctorleft || "",
+                fileInputDoctorright: fileInputDoctorright || gettingcustomization?.fileInputDoctorright || "",
+                fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
+                fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
+                fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
+                explicitPrintSettingsSave: explicitUserSaved,
+                res,
+            };
+        } else if (checkBox || DownloadPdf) {
             // Define fallback logic to prioritize database values first
             mergedValues = {
                 pdfformat: resolvedPdfFormat,
                 pdfFormat: resolvedPdfFormat,
                 showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
+                BoldRow: explicitUserSaved
+                    ? (BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
+                    : (BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
+                HLinred: explicitUserSaved
+                    ? (HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred)
+                    : (HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred),
+                HighLow: explicitUserSaved
+                    ? (HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow)
+                    : (HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow),
                 RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || tenantDefaultSettings?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
                 selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || tenantDefaultSettings?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
                 selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || tenantDefaultSettings?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
@@ -1099,9 +1258,15 @@ const getpdfcontrolleruser = async (req, res) => {
                 pdfformat: resolvedPdfFormat,
                 pdfFormat: resolvedPdfFormat,
                 showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-                BoldRow: BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-                HLinred: HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-                HighLow: HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
+                BoldRow: explicitUserSaved
+                    ? (BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
+                    : (BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
+                HLinred: explicitUserSaved
+                    ? (HLinred ?? gettingcustomization?.HLinred ?? tenantDefaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred)
+                    : (HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred),
+                HighLow: explicitUserSaved
+                    ? (HighLow ?? gettingcustomization?.HighLow ?? tenantDefaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow)
+                    : (HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow),
                 RowSpacing: RowSpacing || gettingcustomization?.RowSpacing || tenantDefaultSettings?.RowSpacing || DEFAULT_PDF_PREFERENCES.RowSpacing,
                 selectedFontSize: selectedFontSize || gettingcustomization?.selectedFontSize || tenantDefaultSettings?.selectedFontSize || DEFAULT_PDF_PREFERENCES.selectedFontSize,
                 selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || tenantDefaultSettings?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
@@ -1223,6 +1388,9 @@ const getCustomizationByReportId = async (req, res) => {
             ? await defaultpdfsetting.findOne({ tenantId }).lean()
             : null;
 
+        const hasSavedCustomFlags = Boolean(
+            customizationData?.hasUserSavedPrintSettings || defaultSettings?.hasUserSavedPrintSettings
+        );
         const mergedCustomization = {
             ...(customizationData || {}),
             headermargin: customizationData?.headermargin ?? defaultSettings?.headermargin ?? DEFAULT_PDF_PREFERENCES.headermargin,
@@ -1232,15 +1400,22 @@ const getCustomizationByReportId = async (req, res) => {
             LeftsignPd: customizationData?.LeftsignPd ?? defaultSettings?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
             Rightsignpd: customizationData?.Rightsignpd ?? defaultSettings?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
             showInvest: customizationData?.showInvest ?? defaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
-            BoldRow: customizationData?.BoldRow ?? defaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow,
-            HLinred: customizationData?.HLinred ?? defaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred,
-            HighLow: customizationData?.HighLow ?? defaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow,
+            BoldRow: hasSavedCustomFlags
+                ? (customizationData?.BoldRow ?? defaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
+                : DEFAULT_PDF_PREFERENCES.BoldRow,
+            HLinred: hasSavedCustomFlags
+                ? (customizationData?.HLinred ?? defaultSettings?.HLinred ?? DEFAULT_PDF_PREFERENCES.HLinred)
+                : DEFAULT_PDF_PREFERENCES.HLinred,
+            HighLow: hasSavedCustomFlags
+                ? (customizationData?.HighLow ?? defaultSettings?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow)
+                : DEFAULT_PDF_PREFERENCES.HighLow,
             RowSpacing: customizationData?.RowSpacing ?? defaultSettings?.RowSpacing ?? DEFAULT_PDF_PREFERENCES.RowSpacing,
             selectedFontSize: customizationData?.selectedFontSize ?? defaultSettings?.selectedFontSize ?? DEFAULT_PDF_PREFERENCES.selectedFontSize,
             selectedFontFamily: customizationData?.selectedFontFamily ?? defaultSettings?.selectedFontFamily ?? DEFAULT_PDF_PREFERENCES.selectedFontFamily,
             hideCategories: customizationData?.hideCategories ?? defaultSettings?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
             hideTableHeadings: customizationData?.hideTableHeadings ?? defaultSettings?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
             investigationmargin: customizationData?.investigationmargin ?? defaultSettings?.investigationmargin ?? DEFAULT_PDF_PREFERENCES.investigationmargin,
+            hasUserSavedPrintSettings: hasSavedCustomFlags,
         };
 
         return res.status(200).json(mergedCustomization);

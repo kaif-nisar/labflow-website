@@ -45,7 +45,7 @@ const customizationSchema = new mongoose.Schema(
     },
     HLinred: {
       type: Boolean,
-      default: false,
+      default: true,
     },
     HighLow: {
       type: Boolean,
@@ -68,6 +68,10 @@ const customizationSchema = new mongoose.Schema(
       default: false,
     },
     hideTableHeadings: {
+      type: Boolean,
+      default: false,
+    },
+    hasUserSavedPrintSettings: {
       type: Boolean,
       default: false,
     },

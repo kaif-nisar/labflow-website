@@ -17,6 +17,10 @@ const tabledataSchema = new Schema({
         type: Boolean,
         default: false
     },
+    highLow: {
+        type: String,
+        default: ""
+    },
     remark: String,
     details: String,
     isDocumented: {

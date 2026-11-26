@@ -25,6 +25,7 @@ import {
   rewriteHtmlForOfflinePdf,
 } from "../utils/pdfOfflineAssets.js";
 import { getPuppeteerLaunchOptions } from "../utils/puppeteerRuntime.js";
+import { evaluateClinicalReferenceFlag } from "../../public/js/clinicalRangeEvaluator.mjs";
 
 const DEFAULT_BASE_SIDE_PX = 28;
 const CM_TO_PX = 37.7952755906;
@@ -288,11 +289,45 @@ export const prepareFormat5HeaderHtml = async (rawHeaderHtml = "", options = {})
   return inlineImagesAsDataUris($.html());
 };
 
+const extractDemographicsFromHeader = (rawHeaderHtml = "") => {
+  const cleaned = String(rawHeaderHtml || "").trim();
+  if (!cleaned) return { patientGender: "", patientAge: "" };
+  try {
+    const $ = cheerio.load(cleaned, null, false);
+    const badgeText = $(".oh5-age-gender, [data-field='ageSex']").first().text().trim() || $.root().text();
+    const parts = badgeText.split("/").map((p) => p.trim()).filter(Boolean);
+    let patientGender = "";
+    let patientAge = "";
+    for (const part of parts) {
+      if (/^(male|female|m|f|other)$/i.test(part)) {
+        patientGender = part;
+      } else if (/\d/.test(part) && /(?:y|yr|year|m|mon|month|d|day)/i.test(part)) {
+        patientAge = part;
+      }
+    }
+    if (!patientGender) {
+      const gMatch = badgeText.match(/\b(male|female)\b/i);
+      if (gMatch) patientGender = gMatch[1];
+    }
+    if (!patientAge) {
+      const aMatch = badgeText.match(/\b(\d+(?:\.\d+)?)\s*(?:years?|yrs?|y|months?|mos?|m|days?|d)\b/i);
+      if (aMatch) patientAge = aMatch[0];
+    }
+    return { patientGender, patientAge };
+  } catch {
+    return { patientGender: "", patientAge: "" };
+  }
+};
+
 export const prepareFormat5BodyHtml = ({
   rawBodyHtml = "",
   showCategory = true,
   showTestHeading = true,
   HighLow = true,
+  HLinred = true,
+  BoldRow = true,
+  patientGender = "",
+  patientAge = "",
 }) => {
   const $ = cheerio.load(String(rawBodyHtml || ""), null, false);
 
@@ -327,17 +362,126 @@ export const prepareFormat5BodyHtml = ({
     $(".section-heading-sub, .oh5-profile-banner, .oh5-profile-title-row").remove();
   }
 
-  if (!parseBooleanSetting(HighLow, true)) {
-    $(".HL, .oh5-flag-badge").remove();
-  } else {
-    $(".HL").each((_, el) => {
-      const $hl = $(el);
-      if (!$hl.find(".oh5-flag-badge").length) {
-        const txt = $hl.text().trim();
-        if (txt) $hl.html(`<span class="oh5-flag-badge">${escapeHtml(txt)}</span>`);
-        else $hl.remove();
+  const highLowResolved = parseBooleanSetting(HighLow, true);
+  const hlInRedResolved = parseBooleanSetting(HLinred, true);
+  const boldRowResolved = parseBooleanSetting(BoldRow, true);
+
+  $(".oh5-test-row, table.test-table tbody tr, table.oh5-results-table tbody tr").each((_, el) => {
+    const $tr = $(el);
+    if (
+      $tr.hasClass("section-heading-main") ||
+      $tr.hasClass("section-heading-sub") ||
+      $tr.hasClass("oh5-profile-title-row")
+    ) {
+      return;
+    }
+
+    const $cells = $tr.children("td");
+    if ($cells.length < 2) return;
+
+    const $nameCell = $cells.eq(0);
+    const $valCell = $cells.eq(1);
+    const $refCell = $cells.eq(3);
+
+    const $valSpan = $valCell.find(".oh5-result-value, .cell-edit").first();
+    const $flagSlot = $valCell.find(".oh5-flag-slot").first();
+    const $existingHl = $valCell.find(".HL, .oh5-flag-badge").first();
+
+    let isAbnormal = false;
+    let flag = $tr.attr("data-flag") || "";
+
+    if ($tr.attr("data-evaluated") === "v2") {
+      isAbnormal = $tr.attr("data-abnormal") === "1" || $tr.hasClass("oh5-row--abnormal");
+      if (!flag && isAbnormal) {
+        flag = $existingHl.text().trim();
       }
-    });
+    } else {
+      const $nameClone = $nameCell.clone();
+      $nameClone.find(".methods, .oh5-method-note").remove();
+      const testName = $tr.attr("data-test-name") || $nameClone.text().trim();
+
+      let valText = "";
+      if ($valSpan.length) {
+        const $valClone = $valSpan.clone();
+        $valClone.find(".HL, .oh5-flag-badge").remove();
+        valText = $valClone.text().trim();
+      } else {
+        const $cellClone = $valCell.clone();
+        $cellClone.find(".HL, .oh5-flag-badge").remove();
+        valText = $cellClone.text().trim();
+      }
+
+      const refText = $refCell.length
+        ? ($refCell.find(".oh5-ref-text").first().text() || $refCell.text()).trim()
+        : "";
+
+      const dbHint =
+        $tr.hasClass("oh5-row--abnormal") ||
+        $tr.hasClass("BoldRow") ||
+        $tr.hasClass("is-abnormal-row") ||
+        $tr.attr("data-abnormal") === "1" ||
+        $valCell.hasClass("high-low") ||
+        $valSpan.hasClass("is-abnormal") ||
+        $existingHl.length > 0;
+
+      const dbFlag = $tr.attr("data-flag") || $tr.attr("data-db-flag") || $existingHl.text().trim();
+
+      const evalRes = evaluateClinicalReferenceFlag({
+        value: valText,
+        reference: refText,
+        testName,
+        gender: patientGender,
+        age: patientAge,
+        referenceType: $tr.attr("data-ref-type") || "",
+        dbIsAbnormal: dbHint,
+        dbFlag,
+      });
+
+      isAbnormal = evalRes.isAbnormal;
+      flag = evalRes.flag || "";
+      $tr.attr("data-evaluated", "v2");
+    }
+
+    $tr.attr("data-abnormal", isAbnormal ? "1" : "0");
+    $tr.attr("data-flag", isAbnormal ? flag : "");
+
+    $tr.removeClass("oh5-row--abnormal BoldRow is-bold-row is-red-row");
+    $valCell.removeClass("high-low");
+    if ($valSpan.length) $valSpan.removeClass("is-abnormal is-red");
+
+    const buildBadgeMarkup = (flagText) =>
+      `<span class="HL"><span class="oh5-flag-badge${hlInRedResolved ? " is-red" : ""}">${escapeHtml(flagText)}</span></span>`;
+
+    if (isAbnormal) {
+      $tr.addClass("oh5-row--abnormal BoldRow");
+      if (boldRowResolved) $tr.addClass("is-bold-row");
+      if (hlInRedResolved) $tr.addClass("is-red-row");
+      $valCell.addClass("high-low");
+      if ($valSpan.length) {
+        $valSpan.addClass("is-abnormal");
+        if (hlInRedResolved) $valSpan.addClass("is-red");
+      }
+
+      if (highLowResolved && flag) {
+        if ($flagSlot.length) {
+          $flagSlot.html(buildBadgeMarkup(flag));
+        } else if ($valCell.find(".HL").length) {
+          $valCell.find(".HL").first().replaceWith(buildBadgeMarkup(flag));
+        } else {
+          $valCell.append(` ${buildBadgeMarkup(flag)}`);
+        }
+      } else {
+        if ($flagSlot.length) $flagSlot.empty();
+        else $valCell.find(".HL, .oh5-flag-badge").remove();
+      }
+    } else {
+      if ($flagSlot.length) $flagSlot.empty();
+      $valCell.find(".HL, .oh5-flag-badge").remove();
+    }
+  });
+
+  if (!highLowResolved) {
+    $(".HL, .oh5-flag-badge").remove();
   }
 
   $(".interpretation, .oh5-interpretation-card, .moreDetails, .oh5-remarks-card").each((_, el) => {
@@ -767,9 +911,13 @@ export const buildFormat5BodyCss = ({
   HighLowResolved,
 }) => {
   const abnormalColor = HLinred ? "#b91c1c" : "#0f172a";
-  const abnormalBadgeBg = HLinred ? "#fef2f2" : "#f1f5f9";
-  const abnormalBadgeBorder = HLinred ? "#fca5a5" : "#cbd5e1";
-  const abnormalRowWeight = BoldRow ? "700" : "inherit";
+  const abnormalRowText = HLinred ? "#7f1d1d" : "#0f172a";
+  const abnormalRowBg = HLinred ? "rgba(254, 226, 226, 0.72)" : "rgba(241, 245, 249, 0.92)";
+  const abnormalRowBorder = HLinred ? "#fecaca" : "#cbd5e1";
+  const abnormalRowStripe = HLinred ? "#dc2626" : "#1e3a5f";
+  const abnormalBadgeBg = HLinred ? "#fee2e2" : "#e2e8f0";
+  const abnormalBadgeBorder = HLinred ? "#ef4444" : "#94a3b8";
+  const abnormalRowWeight = BoldRow ? "700" : "400";
   const subTextSize = Math.max(8, baseFontSizePx - 2).toFixed(1);
   const headerLabelSize = Math.max(8.5, baseFontSizePx - 1.5).toFixed(1);
   const categoryTitleSize = (baseFontSizePx + 1).toFixed(1);
@@ -885,12 +1033,18 @@ export const buildFormat5BodyCss = ({
     .oh5-results-table tbody td {
       padding: ${rowSpacingPx}px 8px;
       font-size: ${baseFontSizePx}px;
+      font-weight: 400;
       line-height: 1.18;
       vertical-align: middle;
-      color: #0f172a;
+      color: #1e293b;
       border-bottom: 1px solid #eef2f6;
       word-wrap: break-word;
       overflow-wrap: break-word;
+    }
+    .test-table tbody td:first-child,
+    .oh5-results-table tbody td:first-child {
+      border-left: 3px solid transparent;
+      padding-left: 6px;
     }
     .section-heading-sub:is(tr),
     .oh5-profile-title-row {
@@ -911,7 +1065,7 @@ export const buildFormat5BodyCss = ({
       border-bottom: 1px solid #d5dde7;
     }
     .parameter-row td:first-child,
-    .oh5-param-row td:first-child { padding-left: 16px; }
+    .oh5-param-row td:first-child { padding-left: 14px; }
     .oh5-param-indent {
       display: inline-block;
       border-left: 1.5px solid #d5dde7;
@@ -919,14 +1073,14 @@ export const buildFormat5BodyCss = ({
     }
     .oh5-test-title,
     .test-name {
-      font-weight: 600;
-      color: #0f172a;
+      font-weight: 400;
+      color: #1e293b;
       font-size: ${baseFontSizePx}px;
     }
     .parameter-row .oh5-test-title,
     .oh5-param-row .oh5-test-title {
-      font-weight: 500;
-      color: #1e293b;
+      font-weight: 400;
+      color: #334155;
     }
     .methods,
     .oh5-method-note {
@@ -939,18 +1093,20 @@ export const buildFormat5BodyCss = ({
       line-height: 1.12;
     }
     .oh5-col-result-cell,
-    .test-table tbody td:nth-child(2) { text-align: center !important; }
+    .test-table tbody td:nth-child(2) { text-align: center !important; font-weight: 400; }
     .oh5-unit-cell,
     .test-table tbody td:nth-child(3) {
       text-align: center !important;
       font-size: ${Math.max(8.5, baseFontSizePx - 0.4)}px;
       color: #475569;
+      font-weight: 400;
     }
     .oh5-ref-block,
     .test-table tbody td:nth-child(4) {
       text-align: center !important;
       font-size: ${Math.max(8.5, baseFontSizePx - 0.5)}px;
-      color: #334155;
+      color: #475569;
+      font-weight: 400;
     }
     .oh5-result-header-inner,
     .oh5-result-wrap {
@@ -964,8 +1120,8 @@ export const buildFormat5BodyCss = ({
       text-align: left !important;
     }
     .oh5-result-value {
-      font-weight: 600;
-      color: #0f172a;
+      font-weight: 400;
+      color: #1e293b;
       text-align: left !important;
       display: block;
       font-variant-numeric: tabular-nums;
@@ -985,6 +1141,7 @@ export const buildFormat5BodyCss = ({
       max-width: 100%;
       margin: 0 auto;
       text-align: left !important;
+      font-weight: 400;
     }
     .oh5-ref-header-inner,
     .oh5-ref-text {
@@ -995,15 +1152,58 @@ export const buildFormat5BodyCss = ({
       text-align: left !important;
       white-space: pre-line;
       line-height: 1.2;
+      font-weight: 400;
     }
-    .oh5-row--abnormal,
-    .BoldRow,
-    tr.BoldRow td { font-weight: ${abnormalRowWeight}; }
-    .oh5-row--abnormal .oh5-result-value,
-    .high-low,
+    tr.oh5-test-row.is-normal-row td,
+    tr.oh5-test-row.is-normal-row .oh5-test-title,
+    tr.oh5-test-row.is-normal-row .oh5-result-value,
+    tr.oh5-test-row.is-normal-row .oh5-unit-cell,
+    tr.oh5-test-row.is-normal-row .oh5-unit-inner,
+    tr.oh5-test-row.is-normal-row .oh5-ref-block,
+    tr.oh5-test-row.is-normal-row .oh5-ref-text {
+      font-weight: 400 !important;
+      background-color: transparent !important;
+    }
+    tr.oh5-row--abnormal td,
+    tr.BoldRow td {
+      background-color: ${abnormalRowBg} !important;
+      border-bottom-color: ${abnormalRowBorder} !important;
+      color: ${abnormalRowText} !important;
+      font-weight: ${abnormalRowWeight} !important;
+    }
+    tr.oh5-row--abnormal td:first-child,
+    tr.BoldRow td:first-child {
+      border-left-color: ${abnormalRowStripe} !important;
+    }
+    tr.oh5-row--abnormal .oh5-test-title,
+    tr.oh5-row--abnormal .test-name,
+    tr.oh5-row--abnormal .oh5-unit-cell,
+    tr.oh5-row--abnormal .oh5-unit-inner,
+    tr.oh5-row--abnormal .oh5-ref-block,
+    tr.oh5-row--abnormal .oh5-ref-text,
+    tr.BoldRow .oh5-test-title,
+    tr.BoldRow .test-name,
+    tr.BoldRow .oh5-unit-cell,
+    tr.BoldRow .oh5-unit-inner,
+    tr.BoldRow .oh5-ref-block,
+    tr.BoldRow .oh5-ref-text {
+      color: ${abnormalRowText} !important;
+      font-weight: ${abnormalRowWeight} !important;
+    }
+    tr.oh5-row--abnormal .oh5-result-value,
+    tr.oh5-row--abnormal td.high-low,
+    tr.BoldRow .oh5-result-value,
+    tr.BoldRow td.high-low,
     .oh5-result-value.is-abnormal {
       color: ${abnormalColor} !important;
-      font-weight: 700;
+      font-weight: ${abnormalRowWeight} !important;
+    }
+    tr.oh5-row--abnormal .methods,
+    tr.oh5-row--abnormal .oh5-method-note,
+    tr.BoldRow .methods,
+    tr.BoldRow .oh5-method-note {
+      font-weight: 400 !important;
+      color: #64748b !important;
     }
     .HL {
       display: ${HighLowResolved ? "inline-flex" : "none"} !important;
@@ -1184,7 +1384,7 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
   } = helpers;
 
   const {
-    BoldRow = false,
+    BoldRow = true,
     HLinred = true,
     HighLow = true,
     RowSpacing = 1,
@@ -1244,7 +1444,7 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
   const hideTableHeadingsResolved = parseBooleanSetting(hideTableHeadings, false);
   const highLowResolved = parseBooleanSetting(HighLow, true);
   const hlInRedResolved = parseBooleanSetting(HLinred, true);
-  const boldRowResolved = parseBooleanSetting(BoldRow, false);
+  const boldRowResolved = parseBooleanSetting(BoldRow, true);
 
   const inlinedFooterInner = await prepareFormat5FooterHtml({
     rawFooterHtml: footer,
@@ -1261,11 +1461,17 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
     Rightsignpd,
   });
 
+  const { patientGender, patientAge } = extractDemographicsFromHeader(header);
+
   const cleanedBodyHtml = prepareFormat5BodyHtml({
     rawBodyHtml: htmlContent,
     showCategory: showCategoryResolved,
     showTestHeading: showTestHeadingResolved,
     HighLow: highLowResolved,
+    HLinred: hlInRedResolved,
+    BoldRow: boldRowResolved,
+    patientGender,
+    patientAge,
   });
 
   const specimenGroups = splitBodyBySpecimenGroups(cleanedBodyHtml);

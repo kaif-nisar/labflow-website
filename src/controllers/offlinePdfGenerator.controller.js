@@ -10,6 +10,10 @@ import {
 } from '../utils/pdfOfflineAssets.js';
 import { getPuppeteerLaunchOptions } from '../utils/puppeteerRuntime.js';
 import { generateFormat5PdfBuffer } from './reportFormat5Pdf.controller.js';
+import {
+    buildLegacyAbnormalHighlightCss,
+    normalizeLegacyPdfBodyHtml,
+} from '../utils/pdfAbnormalHighlight.js';
 
 const launchPdfBrowser = async () => {
     const launchOptions = getPuppeteerLaunchOptions();
@@ -114,12 +118,13 @@ const resolvePdfFontStack = (selectedFontFamily) => {
 const buildPdfBodyDocument = ({
     cssContent,
     htmlContent,
+    header = "",
     selectedFontSize,
     selectedFontFamily,
     RowSpacing,
-    HighLow,
-    HLinred,
-    BoldRow,
+    HighLow = true,
+    HLinred = true,
+    BoldRow = true,
     hideCategories,
     hideTableHeadings,
     backgroundImageUrl,
@@ -127,14 +132,25 @@ const buildPdfBodyDocument = ({
     checkBox,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
-    const safeMarkup = sanitizePdfMarkup(htmlContent);
+    const highLowResolved = HighLow !== undefined ? Boolean(HighLow) : true;
+    const hlInRedResolved = HLinred !== undefined ? Boolean(HLinred) : true;
+    const boldRowResolved = BoldRow !== undefined ? Boolean(BoldRow) : true;
+    const safeMarkup = normalizeLegacyPdfBodyHtml({
+        htmlContent: sanitizePdfMarkup(htmlContent),
+        header,
+        HighLow: highLowResolved,
+        HLinred: hlInRedResolved,
+        BoldRow: boldRowResolved,
+    });
     const fontSize = parseNumericValue(selectedFontSize, 12);
     const rowSpacing = parseNumericValue(RowSpacing, 7) / 2;
-    const showHighLow = HighLow ? 'block' : 'none';
-    const abnormalResultColor = HLinred ? 'red' : 'inherit';
-    const boldWeight = BoldRow ? 'bold' : '400';
     const fontStack = resolvePdfFontStack(selectedFontFamily);
     const categoryDisplay = hideCategories ? 'none' : 'block';
+    const abnormalHighlightCss = buildLegacyAbnormalHighlightCss({
+        HighLow: highLowResolved,
+        HLinred: hlInRedResolved,
+        BoldRow: boldRowResolved,
+    });
 
     // When a background image is present, we intentionally do NOT set it via CSS.
     // Instead we tell Puppeteer to produce a transparent PDF (omitBackground:true)
@@ -166,11 +182,9 @@ const buildPdfBodyDocument = ({
         `.middle { font-size: ${fontSize}px !important; }`,
         `.middle td, .middle th, .middle p, .middle span, .middle div, .middle li, .middle label, .middle small, .middle strong, .middle b, .middle em, .middle a { font-size: ${fontSize}px !important; }`,
         `td { padding-top: ${rowSpacing}px !important; padding-bottom: ${rowSpacing}px !important; }`,
-        `td .HL span, td .HL .high-low-marker { display: ${showHighLow}; }`,
         `.headings > h3, .headings > .category-heading, .headings h3, .category-heading { display: ${categoryDisplay} !important; text-align: center !important; width: 100% !important; margin: 0 auto !important; }`,
         `.headings > h4, .headings > .table-heading, .headings h4, .table-heading { display: ${hideTableHeadings ? 'none' : 'block'} !important; text-align: center !important; width: 100% !important; margin: 0 auto !important; }`,
-        `.abnormal-result-row .high-low > span:last-child, .abnormal-result-row .high-low .result-value, .abnormal-result-row .HL span, .abnormal-result-row .HL .high-low-marker, .BoldRow .high-low > span:last-child, .BoldRow .high-low .result-value, .BoldRow .HL span, .BoldRow .HL .high-low-marker { color: ${abnormalResultColor} !important; }`,
-        `.BoldRow { font-weight: ${boldWeight} !important; }`,
+        abnormalHighlightCss,
         '.deletion { display: none !important; }',
         'td.wrong { display: none !important; }',
         '.details-row, .details-row * { font-size: 10px !important; }',
@@ -526,6 +540,7 @@ const offlinePdfGeneratorController = async (params) => {
     });
 
     try {
+        const hasExplicitPrefs = Boolean(params?.hasUserSavedPrintSettings);
         if (pdfformat === "reportFormat5") {
             const format5Buffer = await generateFormat5PdfBuffer({
                 htmlContent,
@@ -542,12 +557,12 @@ const offlinePdfGeneratorController = async (params) => {
                 investigationmargin: rawInvestigationMargin,
                 LeftsignPd,
                 Rightsignpd,
-                selectedFontSize,
+                selectedFontSize: selectedFontSize ?? 10.5,
                 selectedFontFamily,
-                RowSpacing,
-                HighLow,
-                HLinred,
-                BoldRow,
+                RowSpacing: RowSpacing ?? 1,
+                HighLow: hasExplicitPrefs && HighLow !== undefined ? HighLow : (HighLow ?? true),
+                HLinred: hasExplicitPrefs && HLinred !== undefined ? HLinred : true,
+                BoldRow: hasExplicitPrefs && BoldRow !== undefined ? BoldRow : true,
                 showInvest,
                 hideCategories,
                 hideTableHeadings,
@@ -586,12 +601,13 @@ const offlinePdfGeneratorController = async (params) => {
             const contentWithCssAndImage = buildPdfBodyDocument({
                 cssContent,
                 htmlContent,
+                header,
                 selectedFontSize,
                 selectedFontFamily,
                 RowSpacing,
-                HighLow,
-                HLinred,
-                BoldRow,
+                HighLow: HighLow ?? true,
+                HLinred: HLinred ?? true,
+                BoldRow: BoldRow ?? true,
                 hideCategories,
                 hideTableHeadings,
                 backgroundImageUrl: '', // always empty — pdf-lib handles the bg

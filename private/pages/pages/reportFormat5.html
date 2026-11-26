@@ -519,16 +519,22 @@
     .oh5-results-table tbody td {
       padding: 0.5px 8px;
       font-size: 10.5px;
+      font-weight: 400;
       line-height: 1.18;
       vertical-align: middle;
-      color: var(--oh5-ink);
+      color: #1e293b;
       border-bottom: 1px solid var(--oh5-row-rule);
       word-wrap: break-word;
       overflow-wrap: break-word;
       font-variant-numeric: tabular-nums;
     }
 
-    .oh5-param-row td:first-child { padding-left: 16px; }
+    .oh5-results-table tbody td:first-child {
+      border-left: 3px solid transparent;
+      padding-left: 6px;
+    }
+
+    .oh5-param-row td:first-child { padding-left: 14px; }
 
     .oh5-param-indent {
       display: inline-block;
@@ -536,8 +542,8 @@
       padding-left: 7px;
     }
 
-    .oh5-test-title { font-weight: 600; color: var(--oh5-ink); }
-    .oh5-param-row .oh5-test-title { font-weight: 500; color: #1e293b; }
+    .oh5-test-title { font-weight: 400; color: #1e293b; }
+    .oh5-param-row .oh5-test-title { font-weight: 400; color: #334155; }
 
     .oh5-method-note {
       display: block;
@@ -550,9 +556,9 @@
     }
 
     /* Centered column container, left-aligned text + straight H/L column */
-    .oh5-col-result-cell { text-align: center !important; }
-    .oh5-unit-cell { text-align: center !important; color: var(--oh5-slate); }
-    .oh5-ref-block { text-align: center !important; color: #334155; }
+    .oh5-col-result-cell { text-align: center !important; font-weight: 400; }
+    .oh5-unit-cell { text-align: center !important; color: #475569; font-weight: 400; }
+    .oh5-ref-block { text-align: center !important; color: #475569; font-weight: 400; }
 
     .oh5-result-header-inner,
     .oh5-result-wrap {
@@ -567,8 +573,8 @@
     }
 
     .oh5-result-value {
-      font-weight: 600;
-      color: var(--oh5-ink);
+      font-weight: 400;
+      color: #1e293b;
       text-align: left !important;
       display: block;
       font-variant-numeric: tabular-nums;
@@ -601,25 +607,80 @@
       height: 14px;
       padding: 0;
       border-radius: 3px;
-      font-size: 8.2px;
-      font-weight: 700;
+      font-size: 8.4px;
+      font-weight: 800;
       letter-spacing: 0.02em;
-      background: #f1f5f9;
+      background: #e2e8f0;
       color: var(--oh5-ink);
-      border: 1px solid #cbd5e1;
+      border: 1px solid #94a3b8;
       line-height: 1;
       text-align: center;
     }
 
     .oh5-flag-badge.is-red {
-      background: var(--oh5-danger-bg);
-      color: var(--oh5-danger);
-      border-color: var(--oh5-danger-border);
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #ef4444;
     }
 
+    /* Routine normal rows remain unbolded & unhighlighted */
+    tr.oh5-test-row.is-normal-row td,
+    tr.oh5-test-row.is-normal-row .oh5-test-title,
+    tr.oh5-test-row.is-normal-row .oh5-result-value,
+    tr.oh5-test-row.is-normal-row .oh5-unit-cell,
+    tr.oh5-test-row.is-normal-row .oh5-unit-inner,
+    tr.oh5-test-row.is-normal-row .oh5-ref-block,
+    tr.oh5-test-row.is-normal-row .oh5-ref-text {
+      font-weight: 400 !important;
+      background-color: transparent !important;
+    }
+
+    /* Full-row clinical alert highlighting exclusively for out-of-range / abnormal findings */
+    tr.oh5-row--abnormal td {
+      background-color: rgba(254, 226, 226, 0.72);
+      border-bottom-color: #fecaca;
+      color: #7f1d1d;
+    }
+    tr.oh5-row--abnormal td:first-child {
+      border-left-color: #dc2626;
+    }
+    tr.oh5-row--abnormal.is-red-row .oh5-test-title,
+    tr.oh5-row--abnormal.is-red-row .oh5-unit-cell,
+    tr.oh5-row--abnormal.is-red-row .oh5-unit-inner,
+    tr.oh5-row--abnormal.is-red-row .oh5-ref-block,
+    tr.oh5-row--abnormal.is-red-row .oh5-ref-text {
+      color: #7f1d1d;
+    }
+    tr.oh5-row--abnormal:not(.is-red-row) td {
+      background-color: rgba(241, 245, 249, 0.92);
+      border-bottom-color: #cbd5e1;
+      color: #0f172a;
+    }
+    tr.oh5-row--abnormal:not(.is-red-row) td:first-child {
+      border-left-color: #1e3a5f;
+    }
+    tr.oh5-row--abnormal:not(.is-red-row) .oh5-test-title,
+    tr.oh5-row--abnormal:not(.is-red-row) .oh5-unit-cell,
+    tr.oh5-row--abnormal:not(.is-red-row) .oh5-unit-inner,
+    tr.oh5-row--abnormal:not(.is-red-row) .oh5-ref-block,
+    tr.oh5-row--abnormal:not(.is-red-row) .oh5-ref-text {
+      color: #0f172a;
+    }
+    tr.oh5-row--abnormal.is-bold-row td,
+    tr.oh5-row--abnormal.is-bold-row .oh5-test-title,
+    tr.oh5-row--abnormal.is-bold-row .oh5-result-value,
+    tr.oh5-row--abnormal.is-bold-row .oh5-unit-cell,
+    tr.oh5-row--abnormal.is-bold-row .oh5-unit-inner,
+    tr.oh5-row--abnormal.is-bold-row .oh5-ref-block,
+    tr.oh5-row--abnormal.is-bold-row .oh5-ref-text {
+      font-weight: 700 !important;
+    }
+    tr.oh5-row--abnormal .oh5-method-note {
+      font-weight: 400 !important;
+      color: var(--oh5-muted) !important;
+    }
     .oh5-result-value.is-abnormal { font-weight: 700; }
     .oh5-result-value.is-abnormal.is-red { color: var(--oh5-danger); }
-    .oh5-row--abnormal.is-bold-row td { font-weight: 700; }
 
     .oh5-unit-header-inner,
     .oh5-unit-inner {
@@ -1070,10 +1131,11 @@
     </div>
 
     <div class="downloadDiv">
-      <button id="enterResult" type="button" title="Enter or Update Test Results">
-        <i class="fas fa-edit"></i>
-        <span class="oh5-btn-label">Enter Result</span>
+      <button id="BrowserPrint" class="sign click" type="button" title="Generate &amp; Open Print PDF" data-default-title="Generate &amp; Open Print PDF">
+        <i class="fas fa-print"></i>
+        <span class="oh5-btn-label">Print</span>
       </button>
+      <div class="loading-overlay"><div class="lo"></div></div>
     </div>
 
     <div class="downloadDiv">
@@ -1103,11 +1165,10 @@
     </div>
 
     <div class="downloadDiv">
-      <button id="BrowserPrint" class="sign click" type="button" title="Browser Print" data-default-title="Browser Print">
-        <i class="fas fa-print"></i>
-        <span class="oh5-btn-label">Print</span>
+      <button id="enterResult" type="button" title="Enter or Update Test Results">
+        <i class="fas fa-edit"></i>
+        <span class="oh5-btn-label">Enter Result</span>
       </button>
-      <div class="loading-overlay"><div class="lo"></div></div>
     </div>
 
     <div class="downloadDiv" id="printsettingbutton">

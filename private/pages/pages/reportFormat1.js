@@ -155,10 +155,14 @@
     let value1 = urlParams.get('value1');
 
     // ─── 2. PARALLEL INITIAL FETCHES ─────────────────────────────────────────
-    const report = await fetchreport();
+    const [report] = await Promise.all([
+        fetchreport(),
+        window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
+    ]);
     const bookingTestMetaPromise = fetchBookingTestMeta(report?.bookingId);
 
     value1 = report._id;
+    window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
     const baseUrl = `${BASE_URL}/pages/pages/download_reports.html`;
     let backgroundImageUrl = null;
     const templateImagePromise = fetchTemplateImages()
@@ -1543,27 +1547,19 @@
                     if (test.pagebreak) testRow.classList.add('page-break');
                     let appendedTestRow = false;
 
-                    let isBold = Boolean(test.isBold || test.isAbnormal);
-                    let testNameSuffix = "";
-                    const refType = (test.referenceType || "").toLowerCase();
-
-                    if (test.reference && refType !== "text") {
-                        const parts = test.reference.split(" - ");
-                        if (parts.length === 2) {
-                            const lo = parseFloat(parts[0]), hi = parseFloat(parts[1]), v = parseFloat(test.value);
-                            if (!isNaN(lo) && !isNaN(hi) && !isNaN(v)) {
-                                if (v < lo) { isBold = true; testNameSuffix = "L"; }
-                                else if (v > hi) { isBold = true; testNameSuffix = "H"; }
-                            }
-                        }
-                    }
-
-                    if (typeof test.value === "string" && test.value.toLowerCase().includes("positive")) {
-                        isBold = true;
-                    }
+                    const evalRes = reportActionHelpers.evaluateLegacyTestAbnormal
+                        ? reportActionHelpers.evaluateLegacyTestAbnormal(test, report)
+                        : { isAbnormal: Boolean(test.isBold || test.isAbnormal), flag: test.highLow || "" };
+                    const isBold = Boolean(evalRes.isAbnormal);
+                    const testNameSuffix = evalRes.flag || "";
+                    if (test.referenceType) testRow.setAttribute("data-ref-type", test.referenceType);
                     if (isBold) {
-                        testRow.style.fontWeight = "bold";
                         testRow.classList.add('BoldRow', 'abnormal-result-row');
+                        testRow.setAttribute("data-abnormal", "1");
+                        if (testNameSuffix) testRow.setAttribute("data-flag", testNameSuffix);
+                    } else {
+                        testRow.classList.add('is-normal-row');
+                        testRow.setAttribute("data-abnormal", "0");
                     }
 
                     if (test.isDocumented) {
@@ -2220,7 +2216,7 @@
                     text-align: left !important;
                     padding-left: 0 !important;
                     white-space: nowrap !important;
-                    font-weight: 700 !important;
+                    font-weight: 400 !important;
                 }
 
                 table.test-table td.high-low .HL,
@@ -2295,6 +2291,7 @@
                     align-items: flex-end !important;
                     width: 100% !important;
                 }
+                ${document.getElementById('labflowLegacyAbnormalStyles')?.textContent || ''}
             `;
 
             const printWindow = window.open('', '_blank');
