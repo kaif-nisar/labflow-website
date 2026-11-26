@@ -739,20 +739,28 @@
         .report-details-innerDiv2 {
             position: relative;
             width: 100%;
-            border: 1px solid black;
-            padding: 0px 5px;
-            font-size: 16px;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            background: #ffffff;
         }
 
         .left2 {
-            display: inline-block;
+            flex: 1 1 320px;
+            min-width: 0;
         }
 
         .right2 {
-            position: absolute;
-            display: inline-block;
-            left: 55%;
-            transform: translateX(-40%);
+            position: static;
+            transform: none;
+            flex: 0 1 auto;
+            min-width: 260px;
         }
 
         .registeration-tag2 {
@@ -761,7 +769,7 @@
         }
 
         .registered-div2 {
-            padding: 5px 0px;
+            padding: 4px 0px;
         }
 
         .time-div {
@@ -773,15 +781,49 @@
         }
 
         .barcode-div2 {
-            display: inline-block;
-            position: absolute;
-            right: 1.5%;
-            top: 25%;
+            position: static;
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: auto;
+        }
+
+        .barcode2 {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 6px 10px !important;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #ffffff;
+        }
+
+        #barcodeContainer2 {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 132px;
+            min-height: 46px;
         }
 
         #barcodeImage {
-            height: 50px;
-            width: 100px;
+            display: block;
+            height: 48px;
+            width: 140px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        .lr-barcode-text {
+            margin-top: 3px;
+            font-size: 11.5px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #0f172a;
         }
 
         .footer {
@@ -1725,6 +1767,190 @@
             cursor: pointer;
         }
 
+        /* Selective Report / Print Scope Bar & Checkboxes */
+        .lr-sel-bar {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+        }
+        .lr-sel-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .lr-sel-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .lr-sel-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+        }
+        .lr-sel-badge.is-subset {
+            background: #dcfce7;
+            color: #065f46;
+            border-color: #6ee7b7;
+        }
+        .lr-sel-badge.is-empty {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+        .lr-sel-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .lr-sel-btn {
+            height: 29px;
+            padding: 0 10px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #1e293b;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .lr-sel-btn:hover { background: #eef2ff; border-color: #93c5fd; }
+        .lr-sel-btn.is-primary { background: #1e3a5f; color: #ffffff; border-color: #1e3a5f; }
+        .lr-sel-btn.is-primary:hover { background: #2b4c7e; }
+        .lr-sel-matrix {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #cbd5e1;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .lr-sel-matrix.is-open { display: flex; }
+        .lr-sel-chip-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .lr-sel-group-lbl {
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-right: 4px;
+        }
+        .lr-sel-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            padding: 3px 9px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .lr-sel-chip input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #0f766e;
+            cursor: pointer;
+            margin: 0;
+        }
+        .lr-sel-only-btn, .lr-row-only-btn {
+            border: 1px solid #cbd5e1;
+            background: #f0fdfa;
+            color: #0f766e;
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+            line-height: 1.3;
+        }
+        .lr-sel-only-btn:hover, .lr-row-only-btn:hover { background: #ccfbf1; border-color: #0d9488; }
+        .lr-sec-head-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0 6px;
+        }
+        .lr-sec-head-bar h3 { margin: 0 !important; }
+        .lr-sec-print-check, .lr-row-print-check {
+            width: 15px;
+            height: 15px;
+            accent-color: #0f766e;
+            cursor: pointer;
+            flex-shrink: 0;
+            margin: 0;
+        }
+        .lr-test-cell-wrap {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            width: 100%;
+        }
+        .lr-test-cell-wrap .test-name-cell { flex: 1 1 auto; min-width: 0; }
+        .lr-row-only-btn { opacity: 0.25; transition: opacity 0.14s ease; }
+        tr:hover .lr-row-only-btn, .lr-row-only-btn:focus { opacity: 1; }
+        tr.lr-row-excluded > td:not(:first-child) { opacity: 0.45; background-color: #f8fafc !important; }
+        .lr-doc-print-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 5px 10px;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #1e3a5f;
+        }
+        .lr-selected-report-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        #selectedReportBtn {
+            background: linear-gradient(135deg, #0f766e 0%, #047857 100%) !important;
+            color: #ffffff !important;
+        }
+        #selectedReportBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #lrSelectedFormatSelect {
+            height: 36px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            padding: 0 8px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #ffffff;
+            color: #0f172a;
+        }
+
         @media screen and (max-width: 600px) {
             .container {
                 padding: 0px;
@@ -1887,6 +2113,32 @@
                 </div>
 
             </div>
+            <div id="lrSelectiveScopeBar" class="lr-sel-bar">
+                <div class="lr-sel-top">
+                    <div class="lr-sel-title-wrap">
+                        <span id="lrSelSummaryBadge" class="lr-sel-badge">
+                            <i class="fa-solid fa-layer-group"></i>
+                            <span id="lrSelSummaryText">Report Selection: All Selected (Full Report)</span>
+                        </span>
+                        <span style="font-size:12px;color:#64748b;">Uncheck any test, panel, package, or parameter below for a separate PDF</span>
+                    </div>
+                    <div class="lr-sel-actions">
+                        <button type="button" id="lrSelAllBtn" class="lr-sel-btn is-primary" title="Select every booked test, panel, package, and parameter">
+                            <i class="fa-solid fa-check-double"></i> Full Report (All)
+                        </button>
+                        <button type="button" id="lrSelNoneBtn" class="lr-sel-btn" title="Uncheck all items so you can pick specific tests">
+                            <i class="fa-regular fa-square"></i> Clear All
+                        </button>
+                        <button type="button" id="lrSelToggleDetailsBtn" class="lr-sel-btn" title="Show quick Package & Panel selector pills">
+                            <i class="fa-solid fa-sliders"></i> Packages &amp; Panels
+                        </button>
+                    </div>
+                </div>
+                <div id="lrSelQuickMatrix" class="lr-sel-matrix">
+                    <div id="lrSelPackageRow" class="lr-sel-chip-row" style="display:none;"></div>
+                    <div id="lrSelPanelRow" class="lr-sel-chip-row"></div>
+                </div>
+            </div>
             <div class="table-div" id="tables-container">
             </div>
             <div class="moreDetailsDiv">
@@ -1897,7 +2149,18 @@
         </div>
     </div>
     <div class="final-button-div">
-        <button id="finalBtn"><i class="fa-solid fa-check"></i> <span>final</span></button>
+        <button id="finalBtn" title="Save all results & open Complete Full Report"><i class="fa-solid fa-check"></i> <span>Full Report</span></button>
+        <div class="lr-selected-report-group">
+            <button id="selectedReportBtn" type="button" title="Save all results safely & open PDF with ONLY checked Tests / Panels / Packages"><i class="fa-solid fa-filter"></i> <span id="lrSelectedReportLabel">Selected Report</span></button>
+            <select id="lrSelectedFormatSelect" title="Choose Report Format for Selected / Preview Print">
+                <option value="">Default Format</option>
+                <option value="reportFormat1">Format 1</option>
+                <option value="reportFormat">Format 2 (Standard)</option>
+                <option value="reportFormat3">Format 3</option>
+                <option value="reportFormat4">Format 4</option>
+                <option value="reportFormat5">Format 5</option>
+            </select>
+        </div>
         <button id="saveBtn"><i class="fa-solid fa-floppy-disk"></i> <span>Save only</span></button>
         <button id="getresult"><i class="fa-solid fa-square-poll-horizontal"></i><span>Get LIS</span></button>
         <button id="modifycase"><i class="fa-solid fa-file-pen"></i><span>Edit Case</span></button>

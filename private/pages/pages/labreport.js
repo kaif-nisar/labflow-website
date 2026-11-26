@@ -1967,8 +1967,41 @@ async function loadfunction() {
         return false;
     }
 
-    // const urlParams = new URLSearchParams(window.location.search);
-    const booking = JSON.parse(localStorage.getItem("booking"));
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlBookingValue = (urlParams.get("value1") || "").trim();
+    let booking = null;
+    try {
+        booking = JSON.parse(localStorage.getItem("booking") || "null")
+            || JSON.parse(sessionStorage.getItem("booking") || "null");
+    } catch {
+        booking = null;
+    }
+
+    if (urlBookingValue && (!booking || String(booking.bookingId || "") !== urlBookingValue)) {
+        try {
+            const bRes = await fetch(`${BASE_URL}/api/v1/user/getbooking`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ value1: urlBookingValue }),
+            });
+            if (bRes.ok) {
+                const fetchedBooking = await bRes.json();
+                if (fetchedBooking && (fetchedBooking.bookingId || fetchedBooking._id)) {
+                    booking = fetchedBooking;
+                    try {
+                        localStorage.setItem("booking", JSON.stringify(booking));
+                    } catch { /* ignore */ }
+                }
+            }
+        } catch (err) {
+            console.warn("[LabReport] Fallback getbooking lookup failed:", err?.message || err);
+        }
+    }
+
+    if (!booking || typeof booking !== "object") {
+        booking = { bookingId: urlBookingValue || "", acceptedbarcode: [] };
+    }
     // for getting individual parameter lower and upper value
     const patient = { age: booking.year, gender: booking.gender };
     // //for pdf only (print tale on seperate page)
@@ -3149,10 +3182,34 @@ async function loadfunction() {
             categoryHeading.setAttribute('data-order', category.orderId);
             section.appendChild(categoryHeading);
 
+            const headingBar = document.createElement("div");
+            headingBar.className = "lr-sec-head-bar";
+            const secChk = document.createElement("input");
+            secChk.type = "checkbox";
+            secChk.className = "lr-sec-print-check";
+            secChk.checked = true;
+            secChk.tabIndex = -1;
+            secChk.title = `Include "${title}" in Selected Report`;
             const heading = document.createElement("h3");
             heading.textContent = title;
-            heading.setAttribute('data-order', panelDetails?.order || 999)
-            section.appendChild(heading);
+            heading.setAttribute('data-order', panelDetails?.order || 999);
+            const secOnlyBtn = document.createElement("button");
+            secOnlyBtn.type = "button";
+            secOnlyBtn.className = "lr-sel-only-btn";
+            secOnlyBtn.tabIndex = -1;
+            secOnlyBtn.textContent = "Only This";
+            secOnlyBtn.title = `Select ONLY "${title}" for report`;
+            headingBar.appendChild(secChk);
+            headingBar.appendChild(heading);
+            headingBar.appendChild(secOnlyBtn);
+            section.appendChild(headingBar);
+
+            section.dataset.catName = String(category?.category || "");
+            section.dataset.panelTitle = String(title || "");
+            section.dataset.isPanel = isPanel ? "1" : "0";
+            if (isPanel && panelDetails?._id) {
+                section.dataset.panelId = String(panelDetails._id);
+            }
         }
 
         // Table
@@ -3205,6 +3262,18 @@ async function loadfunction() {
 
                 const detailsDiv = document.createElement("div");
                 detailsDiv.className = "editor-container";
+
+                const docPrintBar = document.createElement("div");
+                docPrintBar.className = "lr-doc-print-bar lr-print-ui";
+                const docLabel = test.Name || "Documented Report";
+                docPrintBar.innerHTML = `
+                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;margin:0;">
+                        <input type="checkbox" class="lr-row-print-check lr-print-doc-check" checked tabindex="-1" />
+                        <span>Include in Report: ${docLabel}</span>
+                    </label>
+                    <button type="button" class="lr-row-only-btn" tabindex="-1">Only</button>
+                `;
+                detailsDiv.appendChild(docPrintBar);
 
                 const editorDiv = document.createElement("div");
                 editorDiv.id = `editorContent-${uniqueTestId}`;
@@ -3310,7 +3379,7 @@ async function loadfunction() {
                 // Row for tests with multiple parameters (dragging this moves the whole test block)
                 row.innerHTML = `
                 <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
-                <td class="test-name"><div class="test-name-cell">${test.Name}</div></td>
+                <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-group-check lr-print-ui" checked tabindex="-1" title="Include this test and all its parameters in Selected Report" /><div class="test-name-cell">${test.Name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -3342,7 +3411,7 @@ async function loadfunction() {
                     paramRow.setAttribute("data-param-name", String(param.Para_name || ""));
                     paramRow.innerHTML = `
         <td>${buildPageBreakCellHtml("lr-drag-handle--param", `Drag to reorder parameter inside ${test.Name}${paramOrderLabel}`)}</td>
-        <td style="padding-left: 20px;" class="test-name" id="parameters"><div class="test-name-cell">${param.Para_name}</div></td>
+        <td style="padding-left: 20px;" class="test-name" id="parameters"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-param-check lr-print-ui" checked tabindex="-1" title="Include parameter in Selected Report" /><div class="test-name-cell">${param.Para_name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
         <td class="unit">
             <div class="value-column">
                 <div class="formulaIcon"></div>
@@ -3433,7 +3502,7 @@ async function loadfunction() {
                 row.setAttribute("data-row-role", "single-test");
                 row.innerHTML = `
     <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
-    <td class="test-name"><div class="test-name-cell">${test.Name}</div></td>
+    <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-test-check lr-print-ui" checked tabindex="-1" title="Include this test in Selected Report" /><div class="test-name-cell">${test.Name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
     <td class="unit">
         <div class="value-column">
             <div class="formulaIcon"></div>
@@ -3932,14 +4001,15 @@ async function loadfunction() {
                     categoryMap.set(category, { sections: [], dataOrder });
                 }
 
-                // Preserve the h3 tag if it exists
-                const h3Tag = section.querySelector("h3");
-                const h3DataOrder = h3Tag?.getAttribute("data-order");
+                // Preserve the section header bar (or bare h3) above the first table
+                const headBar = section.querySelector(".lr-sec-head-bar");
+                const h3Tag = headBar || section.querySelector("h3");
+                const h3DataOrder = (section.querySelector("h3") || h3Tag)?.getAttribute("data-order");
 
                 // Remove the category heading (h2)
                 categoryHeading.remove();
 
-                // Move h3 tag above the first table if it exists
+                // Move heading bar / h3 above the first table if it exists
                 const tables = section.querySelectorAll(".table");
                 if (h3Tag && tables.length > 0) {
                     section.insertBefore(h3Tag, tables[0]);
@@ -4623,7 +4693,439 @@ async function loadfunction() {
         });
     }
 
+    let selectiveReportMod = null;
+    async function loadSelectiveEngineSafe() {
+        if (selectiveReportMod) return selectiveReportMod;
+        try {
+            const origin = (typeof BASE_URL === "string" && BASE_URL) ? BASE_URL : window.location.origin;
+            selectiveReportMod = await import(`${origin}/js/selectiveReportEngine.mjs?v=1`);
+        } catch (err) {
+            console.warn("[LabReport] selectiveReportEngine unavailable:", err?.message || err);
+        }
+        return selectiveReportMod;
+    }
+
+    function normalizeSelCmp(str) {
+        return String(str ?? "")
+            .replace(/<[^>]*>/g, " ")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+    }
+
+    function getRowPrintLabel(row) {
+        if (!row) return "";
+        if (row.getAttribute("data-row-role") === "documented-test") {
+            const lbl = row.querySelector(".lr-doc-print-bar span")?.textContent || "";
+            return lbl.replace(/^Include in Report:\s*/i, "").trim();
+        }
+        return (row.querySelector(".test-name-cell")?.textContent || row.querySelector(".test-name")?.textContent || "").trim();
+    }
+
+    function getCleanTestNameHtml(row) {
+        const td = row?.querySelector(".test-name");
+        if (!td) return null;
+        const clone = td.cloneNode(true);
+        clone.querySelectorAll(".lr-print-ui").forEach((n) => n.remove());
+        const wrap = clone.querySelector(".lr-test-cell-wrap");
+        if (wrap) {
+            while (wrap.firstChild) clone.insertBefore(wrap.firstChild, wrap);
+            wrap.remove();
+        }
+        return clone.outerHTML;
+    }
+
+    function initializeSelectiveReportControls() {
+        const container = document.getElementById("tables-container");
+        if (!container || container.dataset.selInitialized === "true") return;
+        container.dataset.selInitialized = "true";
+
+        const badgeEl = document.getElementById("lrSelSummaryBadge");
+        const summaryTextEl = document.getElementById("lrSelSummaryText");
+        const pkgRowEl = document.getElementById("lrSelPackageRow");
+        const panelRowEl = document.getElementById("lrSelPanelRow");
+        const matrixEl = document.getElementById("lrSelQuickMatrix");
+        const toggleBtn = document.getElementById("lrSelToggleDetailsBtn");
+        const allBtn = document.getElementById("lrSelAllBtn");
+        const noneBtn = document.getElementById("lrSelNoneBtn");
+        const selectedReportBtn = document.getElementById("selectedReportBtn");
+        const selectedReportLbl = document.getElementById("lrSelectedReportLabel");
+        const formatSelectEl = document.getElementById("lrSelectedFormatSelect");
+
+        if (formatSelectEl) {
+            const defFormat = String(
+                user?.role === "staff"
+                    ? user?.tenantId?.adminDetails?.userId?.pdfFormat
+                    : user?.pdfFormat
+            ).trim() || "reportFormat1";
+            const opt0 = formatSelectEl.querySelector('option[value=""]');
+            if (opt0) opt0.textContent = `Default (${defFormat})`;
+        }
+
+        const getAllSections = () => Array.from(container.querySelectorAll(".section"));
+        const getSelectableRowsIn = (root) =>
+            Array.from(root.querySelectorAll("tbody tr")).filter((tr) =>
+                Boolean(tr.querySelector(".lr-row-print-check"))
+            );
+        const getLeafRowsIn = (root) =>
+            getSelectableRowsIn(root).filter((tr) => tr.getAttribute("data-row-role") !== "multi-header");
+
+        const getGroupChildParams = (groupRow) => {
+            const tbody = groupRow?.closest("tbody");
+            const blockId = groupRow?.getAttribute("data-test-block-id");
+            if (!tbody || !blockId) return [];
+            return Array.from(tbody.querySelectorAll(`tr[data-test-block-id="${CSS.escape(blockId)}"][data-row-role="param-row"]`));
+        };
+
+        const getParamParentGroup = (paramRow) => {
+            const tbody = paramRow?.closest("tbody");
+            const blockId = paramRow?.getAttribute("data-test-block-id");
+            if (!tbody || !blockId) return null;
+            return tbody.querySelector(`tr[data-test-block-id="${CSS.escape(blockId)}"][data-row-role="multi-header"]`);
+        };
+
+        // Map package memberships cleanly from testpanels.packages
+        const packages = Array.isArray(testpanels?.packages) ? testpanels.packages : [];
+        const packageMembersMap = new Map();
+
+        const findMemberCheckboxesForPackage = (pkg) => {
+            const testNameSet = new Set(
+                (pkg?.testIds || []).map((t) => normalizeSelCmp(t?.Name || t?.testName)).filter(Boolean)
+            );
+            const panelNameSet = new Set(
+                (pkg?.pannelIds || []).map((p) => normalizeSelCmp(p?.name || p?.panelName)).filter(Boolean)
+            );
+            const matchedRows = new Set();
+
+            getAllSections().forEach((sec) => {
+                const secTitleNorm = normalizeSelCmp(sec.dataset.panelTitle || "");
+                const secIsInPkg = sec.dataset.isPanel === "1" && panelNameSet.has(secTitleNorm);
+                getSelectableRowsIn(sec).forEach((tr) => {
+                    if (secIsInPkg) {
+                        matchedRows.add(tr);
+                        return;
+                    }
+                    const rowNorm = normalizeSelCmp(getRowPrintLabel(tr));
+                    if (rowNorm && testNameSet.has(rowNorm)) {
+                        matchedRows.add(tr);
+                        if (tr.getAttribute("data-row-role") === "multi-header") {
+                            getGroupChildParams(tr).forEach((ch) => matchedRows.add(ch));
+                        }
+                    }
+                });
+            });
+            return Array.from(matchedRows);
+        };
+
+        const syncAllHierarchyStates = () => {
+            // 1. Sync multi-header checkboxes from their child params
+            container.querySelectorAll('tr[data-row-role="multi-header"]').forEach((gRow) => {
+                const gCb = gRow.querySelector(".lr-row-print-check");
+                const params = getGroupChildParams(gRow);
+                if (!gCb || !params.length) return;
+                const checkedCount = params.filter((p) => p.querySelector(".lr-row-print-check")?.checked).length;
+                gCb.checked = checkedCount === params.length;
+                gCb.indeterminate = checkedCount > 0 && checkedCount < params.length;
+                gRow.classList.toggle("lr-row-excluded", checkedCount === 0);
+            });
+
+            // 2. Update row visual excluded styling
+            getSelectableRowsIn(container).forEach((tr) => {
+                if (tr.getAttribute("data-row-role") === "multi-header") return;
+                const cb = tr.querySelector(".lr-row-print-check");
+                tr.classList.toggle("lr-row-excluded", Boolean(cb && !cb.checked));
+            });
+
+            // 3. Sync section header checkboxes + panel pills
+            const sections = getAllSections();
+            sections.forEach((sec) => {
+                const secCb = sec.querySelector(".lr-sec-print-check");
+                const leafs = getLeafRowsIn(sec);
+                if (!secCb || !leafs.length) return;
+                const checkedCount = leafs.filter((tr) => tr.querySelector(".lr-row-print-check")?.checked).length;
+                secCb.checked = checkedCount === leafs.length;
+                secCb.indeterminate = checkedCount > 0 && checkedCount < leafs.length;
+            });
+
+            // 4. Sync quick panel chip checkboxes
+            if (panelRowEl) {
+                panelRowEl.querySelectorAll("input[data-sec-idx]").forEach((cb) => {
+                    const idx = Number(cb.getAttribute("data-sec-idx"));
+                    const sec = sections[idx];
+                    if (!sec) return;
+                    const leafs = getLeafRowsIn(sec);
+                    const checkedCount = leafs.filter((tr) => tr.querySelector(".lr-row-print-check")?.checked).length;
+                    cb.checked = leafs.length > 0 && checkedCount === leafs.length;
+                    cb.indeterminate = checkedCount > 0 && checkedCount < leafs.length;
+                });
+            }
+
+            // 5. Sync package chips
+            if (pkgRowEl) {
+                pkgRowEl.querySelectorAll("input[data-pkg-key]").forEach((cb) => {
+                    const key = cb.getAttribute("data-pkg-key");
+                    const rows = (packageMembersMap.get(key) || []).filter(
+                        (tr) => tr.getAttribute("data-row-role") !== "multi-header"
+                    );
+                    if (!rows.length) return;
+                    const checkedCount = rows.filter((tr) => tr.querySelector(".lr-row-print-check")?.checked).length;
+                    cb.checked = checkedCount === rows.length;
+                    cb.indeterminate = checkedCount > 0 && checkedCount < rows.length;
+                });
+            }
+
+            // 6. Update top badge & button labels
+            const allLeafs = getLeafRowsIn(container);
+            const selectedCount = allLeafs.filter((tr) => tr.querySelector(".lr-row-print-check")?.checked).length;
+            const totalCount = allLeafs.length;
+
+            if (badgeEl && summaryTextEl) {
+                badgeEl.classList.remove("is-subset", "is-empty");
+                if (selectedCount === 0) {
+                    badgeEl.classList.add("is-empty");
+                    summaryTextEl.textContent = `Report Selection: 0 / ${totalCount} items (Select at least 1)`;
+                } else if (selectedCount === totalCount) {
+                    summaryTextEl.textContent = `Report Selection: All Selected (${totalCount} / ${totalCount} — Full Report)`;
+                } else {
+                    badgeEl.classList.add("is-subset");
+                    summaryTextEl.textContent = `Selected Subset: ${selectedCount} / ${totalCount} items for Report`;
+                }
+            }
+            if (selectedReportBtn && selectedReportLbl) {
+                selectedReportBtn.disabled = selectedCount === 0;
+                selectedReportLbl.textContent =
+                    selectedCount === totalCount
+                        ? `Selected Report (${totalCount})`
+                        : `Selected Report (${selectedCount}/${totalCount})`;
+            }
+        };
+
+        const setRowsChecked = (rows, checked) => {
+            rows.forEach((tr) => {
+                const cb = tr.querySelector(".lr-row-print-check");
+                if (cb) {
+                    cb.checked = checked;
+                    cb.indeterminate = false;
+                }
+            });
+            syncAllHierarchyStates();
+        };
+
+        const selectOnlyRows = (targetRows) => {
+            setRowsChecked(getSelectableRowsIn(container), false);
+            setRowsChecked(targetRows, true);
+            syncAllHierarchyStates();
+        };
+
+        // Build Quick Package & Panel chips cleanly
+        const sections = getAllSections();
+        if (pkgRowEl && packages.length > 0) {
+            pkgRowEl.style.display = "flex";
+            pkgRowEl.innerHTML = `<span class="lr-sel-group-lbl"><i class="fa-solid fa-box-open"></i> Packages:</span>`;
+            packages.forEach((pkg, idx) => {
+                const pkgKey = String(pkg?._id || `pkg_${idx}`);
+                const members = findMemberCheckboxesForPackage(pkg);
+                packageMembersMap.set(pkgKey, members);
+                if (!members.length) return;
+
+                const chip = document.createElement("div");
+                chip.className = "lr-sel-chip";
+                chip.innerHTML = `
+                    <input type="checkbox" data-pkg-key="${pkgKey}" checked />
+                    <span>${pkg.packageName}</span>
+                    <button type="button" class="lr-sel-only-btn">Only</button>
+                `;
+                chip.querySelector("input").addEventListener("change", (e) => {
+                    setRowsChecked(members, e.target.checked);
+                });
+                chip.querySelector(".lr-sel-only-btn").addEventListener("click", () => {
+                    selectOnlyRows(members);
+                });
+                pkgRowEl.appendChild(chip);
+            });
+            if (matrixEl) matrixEl.classList.add("is-open");
+        }
+
+        if (panelRowEl && sections.length > 0) {
+            panelRowEl.innerHTML = `<span class="lr-sel-group-lbl"><i class="fa-solid fa-vials"></i> Panels / Categories:</span>`;
+            sections.forEach((sec, idx) => {
+                const label = sec.dataset.panelTitle || sec.dataset.catName || `Section ${idx + 1}`;
+                const leafs = getLeafRowsIn(sec);
+                const chip = document.createElement("div");
+                chip.className = "lr-sel-chip";
+                chip.innerHTML = `
+                    <input type="checkbox" data-sec-idx="${idx}" checked />
+                    <span>${label} (${leafs.length})</span>
+                    <button type="button" class="lr-sel-only-btn">Only</button>
+                `;
+                chip.querySelector("input").addEventListener("change", (e) => {
+                    setRowsChecked(getSelectableRowsIn(sec), e.target.checked);
+                });
+                chip.querySelector(".lr-sel-only-btn").addEventListener("click", () => {
+                    selectOnlyRows(getSelectableRowsIn(sec));
+                });
+                panelRowEl.appendChild(chip);
+            });
+            if (matrixEl && sections.length > 1) {
+                matrixEl.classList.add("is-open");
+            }
+        }
+
+        // Delegate clicks/changes inside #tables-container for sections & rows
+        container.addEventListener("change", (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            if (target.classList.contains("lr-sec-print-check")) {
+                const sec = target.closest(".section");
+                if (sec) setRowsChecked(getSelectableRowsIn(sec), target.checked);
+                return;
+            }
+            if (target.classList.contains("lr-row-print-check")) {
+                const row = target.closest("tr");
+                if (!row) return;
+                if (row.getAttribute("data-row-role") === "multi-header") {
+                    setRowsChecked(getGroupChildParams(row), target.checked);
+                } else {
+                    syncAllHierarchyStates();
+                }
+            }
+        });
+
+        container.addEventListener("click", (e) => {
+            const secOnly = e.target?.closest?.(".lr-sec-head-bar .lr-sel-only-btn");
+            if (secOnly) {
+                const sec = secOnly.closest(".section");
+                if (sec) selectOnlyRows(getSelectableRowsIn(sec));
+                return;
+            }
+            const rowOnly = e.target?.closest?.(".lr-row-only-btn");
+            if (rowOnly) {
+                const row = rowOnly.closest("tr");
+                if (!row) return;
+                const role = row.getAttribute("data-row-role");
+                if (role === "multi-header") {
+                    selectOnlyRows([row, ...getGroupChildParams(row)]);
+                } else if (role === "param-row") {
+                    const parent = getParamParentGroup(row);
+                    selectOnlyRows(parent ? [parent, row] : [row]);
+                } else {
+                    selectOnlyRows([row]);
+                }
+            }
+        });
+
+        toggleBtn?.addEventListener("click", () => {
+            matrixEl?.classList.toggle("is-open");
+        });
+        allBtn?.addEventListener("click", () => {
+            setRowsChecked(getSelectableRowsIn(container), true);
+        });
+        noneBtn?.addEventListener("click", () => {
+            setRowsChecked(getSelectableRowsIn(container), false);
+        });
+
+        syncAllHierarchyStates();
+    }
+
+    async function buildSelectionManifestForSavedReport(savedReportDoc) {
+        const mod = await loadSelectiveEngineSafe();
+        if (!mod || !savedReportDoc) return null;
+
+        const container = document.getElementById("tables-container");
+        const sections = Array.from(container?.querySelectorAll(".section") || []);
+        const tree = mod.buildReportSelectionTree(savedReportDoc, testpanels);
+        const leafItems = [];
+        tree.sections.forEach((sec) => {
+            const hasChildren = new Set(sec.items.filter((i) => i.parentKey).map((i) => i.parentKey));
+            sec.items.forEach((it) => {
+                if (it.kind === "group" && hasChildren.has(it.key)) return;
+                leafItems.push({ sec, it });
+            });
+        });
+
+        // Build per-(sectionTitle, label) queue of checked booleans from current DOM rows
+        const checkedQueueBySection = new Map();
+        sections.forEach((sec) => {
+            const catName = sec.closest(".grouped-section")?.querySelector("h2")?.textContent || sec.dataset.catName || "";
+            const panelTitle = sec.dataset.panelTitle || sec.querySelector("h3")?.textContent || "";
+            const isPanel = sec.dataset.isPanel === "1";
+            const bucketKey = `${normalizeSelCmp(catName)}::${normalizeSelCmp(isPanel ? panelTitle : catName)}`;
+            if (!checkedQueueBySection.has(bucketKey)) checkedQueueBySection.set(bucketKey, new Map());
+            const itemMap = checkedQueueBySection.get(bucketKey);
+
+            sec.querySelectorAll("tbody tr").forEach((tr) => {
+                const cb = tr.querySelector(".lr-row-print-check");
+                if (!cb) return;
+                const role = tr.getAttribute("data-row-role");
+                if (role === "multi-header") return;
+
+                let hasVal = false;
+                if (role === "documented-test") {
+                    const ed = tr.querySelector("[id^='editorContent']");
+                    const uId = ed?.id?.replace("editorContent-", "");
+                    hasVal = Boolean(uId && getEditorContent(uId));
+                } else {
+                    const inp = tr.querySelector(".value-input");
+                    hasVal = inp ? !isBlankOrDotOnlyValue(inp.value) : true;
+                }
+                if (!hasVal) return;
+
+                const lblNorm = normalizeSelCmp(getRowPrintLabel(tr));
+                if (!itemMap.has(lblNorm)) itemMap.set(lblNorm, []);
+                itemMap.get(lblNorm).push(Boolean(cb.checked));
+            });
+        });
+
+        const selectedKeys = [];
+        const selectedLabels = [];
+        let allChecked = true;
+
+        leafItems.forEach(({ sec, it }) => {
+            const bucketKey = `${normalizeSelCmp(sec.categoryName)}::${normalizeSelCmp(sec.isPanel ? sec.panelTitle : sec.categoryName)}`;
+            const itemMap = checkedQueueBySection.get(bucketKey);
+            const normLabel = normalizeSelCmp(it.label);
+            let isChecked = true;
+
+            if (itemMap && itemMap.has(normLabel) && itemMap.get(normLabel).length > 0) {
+                isChecked = itemMap.get(normLabel).shift();
+            } else {
+                // Fallback match across DOM rows by label when categorized headings were merged
+                const domMatch = Array.from(container.querySelectorAll("tbody tr")).find((tr) => {
+                    const cb = tr.querySelector(".lr-row-print-check");
+                    return cb && tr.getAttribute("data-row-role") !== "multi-header" && normalizeSelCmp(getRowPrintLabel(tr)) === normLabel;
+                });
+                if (domMatch) {
+                    isChecked = Boolean(domMatch.querySelector(".lr-row-print-check")?.checked);
+                }
+            }
+
+            if (isChecked) {
+                selectedKeys.push(it.key);
+                selectedLabels.push(it.shortLabel || it.label);
+            } else {
+                allChecked = false;
+            }
+        });
+
+        if (!allChecked && selectedKeys.length === 0) {
+            return { empty: true };
+        }
+
+        return {
+            version: 1,
+            bookingId: savedReportDoc.bookingId || booking?.bookingId || "",
+            reportId: String(savedReportDoc._id || ""),
+            mode: allChecked ? "full" : "selected",
+            allSelected: allChecked,
+            selectedItemKeys: selectedKeys,
+            selectedLabels,
+            includeMoreDetails: true,
+        };
+    }
+
     await renderData();
+    initializeSelectiveReportControls();
     initializeReportRowReordering();
     await loadTenantFormulas();
     addIconsToMatchingRows();
@@ -4932,12 +5434,13 @@ async function loadfunction() {
                 </div>
             </div>
             <div class="barcode-div2">
-    <div class="barcode2" style="padding: 8px;">
-        <div id="barcodeContainer2">
-    <img id="barcodeImage"></img>
-</div>
-    </div>
-</div>
+                <div class="barcode2">
+                    <div id="barcodeContainer2">
+                        <img id="barcodeImage" alt="Sample Barcode" />
+                        <span id="lrBarcodeNumberText" class="lr-barcode-text"></span>
+                    </div>
+                </div>
+            </div>
 `;
 
         document.querySelector(".report-details").appendChild(patientdetails);
@@ -4958,32 +5461,92 @@ async function loadfunction() {
     //initialization
     await populateHea();
 
+    function extractValidBarcodeToken(raw) {
+        if (!raw) return "";
+        if (typeof raw === "string" || typeof raw === "number") {
+            const s = String(raw).trim();
+            return s && s.toLowerCase() !== "undefined" && s.toLowerCase() !== "null" ? s : "";
+        }
+        if (typeof raw === "object") {
+            return extractValidBarcodeToken(
+                raw.barcode || raw.barcodeId || raw.confirmBarcodeId || raw.number || ""
+            );
+        }
+        return "";
+    }
+
+    function resolveLabReportBarcodeNumber() {
+        const candidates = [];
+        if (Array.isArray(booking?.acceptedbarcode)) {
+            booking.acceptedbarcode.forEach((entry) => candidates.push(extractValidBarcodeToken(entry)));
+        } else {
+            candidates.push(extractValidBarcodeToken(booking?.acceptedbarcode));
+        }
+
+        const barcodeList = testpanels?.barcodes?.barcodes;
+        if (Array.isArray(barcodeList)) {
+            barcodeList.forEach((entry) => candidates.push(extractValidBarcodeToken(entry)));
+        }
+
+        if (Array.isArray(booking?.tableData)) {
+            booking.tableData.forEach((row) => {
+                candidates.push(extractValidBarcodeToken(row?.confirmBarcodeId || row?.barcodeId || row?.barcode));
+            });
+        }
+
+        candidates.push(extractValidBarcodeToken(booking?.bookingId || booking?.reg_id));
+
+        return candidates.find(Boolean) || "";
+    }
+
     // for generating barcode
     async function barcodegenerator() {
+        const imgEl = document.getElementById("barcodeImage");
+        const textEl = document.getElementById("lrBarcodeNumberText");
+        const barcodeNumber = resolveLabReportBarcodeNumber();
+
+        if (!barcodeNumber) {
+            if (imgEl) imgEl.style.display = "none";
+            if (textEl) textEl.textContent = "Barcode N/A";
+            return;
+        }
+
+        if (!Array.isArray(booking.acceptedbarcode) || booking.acceptedbarcode.length === 0) {
+            booking.acceptedbarcode = [barcodeNumber];
+        }
+        if (textEl) textEl.textContent = barcodeNumber;
+
         try {
             const response = await fetch(`${BASE_URL}/api/v1/user/generate-barcode`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ number: booking.acceptedbarcode[0] }),
+                credentials: "include",
+                body: JSON.stringify({ number: barcodeNumber }),
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                // If your API returns an image URL
-                document.getElementById("barcodeImage").src = data.barcode; // Display the barcode image
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data?.barcode && imgEl) {
+                imgEl.style.display = "block";
+                imgEl.src = data.barcode;
+                imgEl.alt = `Barcode ${barcodeNumber}`;
             } else {
-                showStatusMessage("Failed to generate barcode!", "error");
+                throw new Error("Empty barcode image returned");
             }
         } catch (error) {
             console.error("Error generating barcode:", error);
-            showStatusMessage("An error occurred. Please try again.", "error");
+            if (imgEl) imgEl.style.display = "none";
+            showStatusMessage("Failed to generate barcode image.", "error");
         }
     }
 
     //initialization
-    barcodegenerator();
+    await barcodegenerator();
 
     async function setupInterpretationEdit(index) {
         const editButton = document.getElementById(`editButton-${index}`);
@@ -5216,7 +5779,7 @@ async function loadfunction() {
             rows.forEach((row) => {
                 const pagebreak = row?.cells[0]?.querySelector('input[type="checkbox"]')?.checked || false;
 
-                const testName = row.querySelector(".test-name")?.outerHTML || null;
+                const testName = getCleanTestNameHtml(row);
                 const inputEl = row.querySelector(".value-input");
                 const rawValue = inputEl?.value ?? "";
                 const trimmedValue = String(rawValue).trim();
@@ -5283,7 +5846,7 @@ async function loadfunction() {
                     !editorContent &&
                     !unit &&
                     !reference &&
-                    row.querySelector(".test-name")?.textContent?.trim();
+                    (row.querySelector(".test-name-cell")?.textContent?.trim() || row.querySelector(".test-name")?.textContent?.trim());
 
                 const hasValueField = Boolean(inputEl);
                 const shouldSkipBlankValueRow = hasValueField && !editorContent && isBlankOrDotOnlyValue(rawValue) && !isFirstParameterRowInGroup;
@@ -5399,7 +5962,7 @@ async function loadfunction() {
     }
 
     // for saving data 
-    async function saveTablesToDatabase(saveOnly) {
+    async function saveTablesToDatabase(saveOnly, { selective = false, formatOverride = "" } = {}) {
         const extractedData = extractTableData();
         delete booking.__v;
         delete booking.updatedAt;
@@ -5423,11 +5986,12 @@ async function loadfunction() {
         const moredetails = document.getElementById('moredetails').value;
         const completionMeta = extractedData.completionMeta;
         const completionStatus = extractedData.completionStatus;
-        const resolvedPdfFormat = String(
+        const defaultPdfFormat = String(
             user?.role === "staff"
                 ? user?.tenantId?.adminDetails?.userId?.pdfFormat
                 : user?.pdfFormat
         ).trim() || "reportFormat1";
+        const resolvedPdfFormat = String(formatOverride || defaultPdfFormat).trim() || "reportFormat1";
 
         try {
             const response = await fetch(`${BASE_URL}/api/v1/user/saveReportData`, {
@@ -5468,9 +6032,27 @@ async function loadfunction() {
                     showStatusMessage("Report saved, but redirect could not continue because report ID was missing.", "error");
                     return false;
                 }
-                showStatusMessage("Report saved successfully. Opening report page...", "success");
-                const url = `${BASE_URL}/admin/admin.html?page=${encodeURIComponent(resolvedPdfFormat)}&value1=${encodeURIComponent(barcodeId)}`;
-                window.location.assign(url);
+
+                let targetUrl = `${BASE_URL}/admin/admin.html?page=${encodeURIComponent(resolvedPdfFormat)}&value1=${encodeURIComponent(barcodeId)}`;
+                if (selective) {
+                    const mod = await loadSelectiveEngineSafe();
+                    const manifest = await buildSelectionManifestForSavedReport(result);
+                    if (manifest?.empty) {
+                        showStatusMessage("Please select at least 1 test, panel, or package for Selected Report.", "error");
+                        return false;
+                    }
+                    if (mod && manifest && manifest.mode === "selected" && !manifest.allSelected) {
+                        const selKey = mod.generateSelectiveManifestKey(barcodeId);
+                        mod.saveSelectionManifest(selKey, manifest);
+                        targetUrl += `&selKey=${encodeURIComponent(selKey)}`;
+                    }
+                }
+
+                showStatusMessage(
+                    selective ? "Full results saved safely. Opening Selected Report..." : "Report saved successfully. Opening Full Report...",
+                    "success"
+                );
+                window.location.assign(targetUrl);
                 return true;
             }
             showStatusMessage("Report saved successfully.", "success");
@@ -5632,23 +6214,48 @@ async function loadfunction() {
         }
     }
 
-    // Add an event listener for the submit button to trigger the API call
+    // Add an event listener for the Full Report submit button to trigger the API call
     document.getElementById("finalBtn").addEventListener("click", async (event) => {
         event.preventDefault(); // Prevent default form submission
-        event.target.disabled = true;
+        const btn = event.currentTarget;
+        const formatOverride = document.getElementById("lrSelectedFormatSelect")?.value || "";
+        btn.disabled = true;
         const reportedOnInput = document.getElementById('reportedOn');
         if (reportedOnInput && (!reportedOnManuallyEdited || !reportedOnInput.value)) {
             reportedOnInput.value = getCurrentReportedOnValue();
         }
         const returned = await checkFields(true);
         if (!returned) {
-            event.target.disabled = false;
+            btn.disabled = false;
             return;
         }
         await editdoctorsvisibility();
-        await saveTablesToDatabase(true);
-        event.target.disabled = false;
+        await saveTablesToDatabase(true, { selective: false, formatOverride });
+        btn.disabled = false;
     });
+
+    // Selected Subset Report button: saves FULL results safely, then opens ONLY checked tests/panels/packages
+    const selectedReportButton = document.getElementById("selectedReportBtn");
+    if (selectedReportButton) {
+        selectedReportButton.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const btn = event.currentTarget;
+            const formatOverride = document.getElementById("lrSelectedFormatSelect")?.value || "";
+            btn.disabled = true;
+            const reportedOnInput = document.getElementById('reportedOn');
+            if (reportedOnInput && (!reportedOnManuallyEdited || !reportedOnInput.value)) {
+                reportedOnInput.value = getCurrentReportedOnValue();
+            }
+            const returned = await checkFields(true);
+            if (!returned) {
+                btn.disabled = false;
+                return;
+            }
+            await editdoctorsvisibility();
+            await saveTablesToDatabase(true, { selective: true, formatOverride });
+            btn.disabled = false;
+        });
+    }
     // Add an event listener for the submit button to trigger the API call
     document.getElementById("saveBtn").addEventListener("click", async (event) => {
         event.preventDefault(); // Prevent default form submission

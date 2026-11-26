@@ -105,10 +105,15 @@
         let value1 = urlParams.get('value1');
 
         // ── 2. Fetch report ──
-        const [report] = await Promise.all([
+        const [rawReport] = await Promise.all([
             fetchreport(),
             window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
         ]);
+        const selectiveCtx = window.ReportActionHelpers?.resolveInitialSelectiveReport
+            ? await window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
+            : { fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false };
+        const fullReport = selectiveCtx?.fullReport || rawReport;
+        let report = selectiveCtx?.activeReport || rawReport;
         value1 = report._id;
         window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
 
@@ -224,6 +229,25 @@
         sendReport();
         hidecontent();
         markPageReady();
+
+        reportActionHelpers.mountReportFilterDrawer?.({
+            fullReport,
+            initialManifest: selectiveCtx?.initialManifest || null,
+            barcodeMeta: selectiveCtx?.barcodeMeta || null,
+            dockEl: document.querySelector('.download-pdf-div'),
+            onSelectionApplied: async ({ filteredReport }) => {
+                report = filteredReport;
+                if (prefetchedViewBlobUrl) {
+                    URL.revokeObjectURL(prefetchedViewBlobUrl);
+                    prefetchedViewBlobUrl = null;
+                }
+                prefetchedPayloadKey = '';
+                renderTask = renderData(filteredReport);
+                await renderTask;
+                await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+                setTimeout(() => prewarmPdfInBackground(), 0);
+            },
+        });
 
         const defer = cb => {
             if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => cb(), { timeout: 1200 });
@@ -369,11 +393,14 @@
                 reportId:           value1,
                 backgroundImageUrl: bgUrl,
                 investigationmargin: countLines(),
+                skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
+                isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
                 ...extras
             };
         }
 
         async function savePdfData(extras = {}) {
+            if (reportActionHelpers.isSelectivePrintActive?.()) return;
             const r = await fetch(`/api/v1/user/adding-pdf-data`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await collectPdfPayload(extras)) });
             if (!r.ok) throw new Error('data not saved');
         }

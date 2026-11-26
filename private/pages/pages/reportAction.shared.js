@@ -1124,6 +1124,735 @@
         }
     }
 
+    let cachedSelectiveMod = null;
+    let selectiveModPromise = null;
+    let activeSelectiveState = { active: false, manifest: null };
+
+    async function loadSelectiveReportEngine() {
+        if (cachedSelectiveMod) return cachedSelectiveMod;
+        if (!selectiveModPromise) {
+            selectiveModPromise = (async () => {
+                const candidateOrigins = [];
+                if (typeof BASE_URL === "string" && BASE_URL) candidateOrigins.push(BASE_URL);
+                if (typeof window !== "undefined" && window.location?.origin && !candidateOrigins.includes(window.location.origin)) {
+                    candidateOrigins.push(window.location.origin);
+                }
+                for (const origin of candidateOrigins) {
+                    try {
+                        const mod = await import(`${origin}/js/selectiveReportEngine.mjs?v=1`);
+                        if (typeof mod?.filterReportBySelection === "function") {
+                            cachedSelectiveMod = mod;
+                            return mod;
+                        }
+                    } catch (err) {
+                        console.warn("[ReportActionHelpers] Could not load selectiveReportEngine.mjs:", err?.message || err);
+                    }
+                }
+                return null;
+            })();
+        }
+        return selectiveModPromise;
+    }
+
+    function setActiveSelectiveState(active, manifest = null) {
+        activeSelectiveState = { active: Boolean(active), manifest: active ? manifest : null };
+        if (typeof window !== "undefined") {
+            window.__labflowSelectiveMode = Boolean(active);
+        }
+    }
+
+    function isSelectivePrintActive() {
+        return Boolean(activeSelectiveState.active);
+    }
+
+    async function resolveInitialSelectiveReport(fullReport, bookingId = "") {
+        const mod = await loadSelectiveReportEngine();
+        let initialManifest = null;
+        let barcodeMeta = null;
+
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const selKey = urlParams.get("selKey") || "";
+            if (selKey && mod?.loadSelectionManifest) {
+                initialManifest = mod.loadSelectionManifest(selKey);
+            }
+        } catch { /* ignore */ }
+
+        const bId = bookingId || fullReport?.bookingId || "";
+        if (bId) {
+            try {
+                const res = await fetch("/api/v1/user/getbarcodeTests", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ bookingId: bId }),
+                    __topLoaderSilent: true,
+                });
+                if (res.ok) barcodeMeta = await res.json();
+            } catch { /* optional enrichment */ }
+        }
+
+        const isSelective = Boolean(initialManifest && initialManifest.mode === "selected" && !initialManifest.allSelected);
+        setActiveSelectiveState(isSelective, initialManifest);
+
+        const activeReport = isSelective && mod?.filterReportBySelection
+            ? mod.filterReportBySelection(fullReport, initialManifest, barcodeMeta)
+            : fullReport;
+
+        return {
+            mod,
+            fullReport,
+            activeReport,
+            initialManifest,
+            barcodeMeta,
+            isSelective,
+        };
+    }
+
+    function ensureSelectiveFilterStyles() {
+        if (typeof document === "undefined" || document.getElementById("lfSelectiveFilterStyles")) return;
+        const style = document.createElement("style");
+        style.id = "lfSelectiveFilterStyles";
+        style.textContent = `
+            .lf-filter-trigger-btn {
+                display: inline-flex !important;
+                align-items: center;
+                gap: 6px;
+                background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%) !important;
+                color: #ffffff !important;
+                border: 1px solid rgba(148, 163, 184, 0.35) !important;
+                border-radius: 999px !important;
+                padding: 0 12px !important;
+                height: 32px !important;
+                font: 600 12px/1 'Segoe UI', Arial, sans-serif !important;
+                cursor: pointer;
+                white-space: nowrap;
+                box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+                transition: transform 0.14s ease, filter 0.14s ease;
+            }
+            .lf-filter-trigger-btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+            .lf-filter-trigger-btn.is-selective {
+                background: linear-gradient(135deg, #0f766e 0%, #047857 100%) !important;
+                border-color: #34d399 !important;
+            }
+            .lf-filter-badge {
+                background: rgba(255, 255, 255, 0.22);
+                color: #ffffff;
+                border-radius: 999px;
+                padding: 2px 7px;
+                font-size: 10.5px;
+                font-weight: 700;
+            }
+            .lf-filter-backdrop {
+                position: fixed;
+                inset: 0;
+                z-index: 2147483640;
+                background: rgba(15, 23, 42, 0.45);
+                backdrop-filter: blur(3px);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+            }
+            .lf-filter-backdrop.is-open { display: flex; }
+            .lf-filter-modal {
+                width: min(680px, 100%);
+                height: min(86vh, 720px);
+                max-height: 90dvh;
+                background: #ffffff;
+                color: #0f172a;
+                border-radius: 14px;
+                box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+                border: 1px solid #cbd5e1;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            .lf-filter-head {
+                flex: 0 0 auto;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 14px 18px;
+                background: #0f172a;
+                color: #ffffff;
+            }
+            .lf-filter-head h3 {
+                margin: 0;
+                font-size: 15px;
+                font-weight: 700;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .lf-filter-head small {
+                display: block;
+                font-size: 11.5px;
+                color: #94a3b8;
+                font-weight: 400;
+                margin-top: 2px;
+            }
+            .lf-filter-close {
+                background: rgba(255, 255, 255, 0.14);
+                border: none;
+                color: #ffffff;
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                font-size: 18px;
+                cursor: pointer;
+                line-height: 1;
+            }
+            .lf-filter-controls {
+                flex: 0 0 auto;
+                padding: 10px 18px;
+                background: #f8fafc;
+                border-bottom: 1px solid #e2e8f0;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px;
+            }
+            .lf-filter-search {
+                flex: 1 1 200px;
+                min-width: 160px;
+                height: 32px;
+                padding: 0 10px;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                font-size: 12.5px;
+                outline: none;
+            }
+            .lf-filter-search:focus { border-color: #1e3a5f; box-shadow: 0 0 0 2px rgba(30,58,95,.15); }
+            .lf-filter-pill-btn {
+                height: 30px;
+                padding: 0 11px;
+                border-radius: 8px;
+                border: 1px solid #cbd5e1;
+                background: #ffffff;
+                color: #1e293b;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .lf-filter-pill-btn:hover { background: #eef2ff; border-color: #93c5fd; }
+            .lf-filter-pill-btn.is-primary { background: #1e3a5f; color: #ffffff; border-color: #1e3a5f; }
+            .lf-filter-pkgs {
+                flex: 0 0 auto;
+                max-height: 104px;
+                overflow-y: auto;
+                padding: 8px 18px 8px;
+                background: #f1f5f9;
+                border-bottom: 1px solid #e2e8f0;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }
+            .lf-filter-pkg-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                background: #ffffff;
+                border: 1px solid #94a3b8;
+                border-radius: 999px;
+                padding: 3px 10px;
+                font-size: 11.5px;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .lf-filter-body {
+                flex: 1 1 0%;
+                min-height: 120px;
+                overflow-y: auto !important;
+                overflow-x: hidden;
+                overscroll-behavior: contain;
+                padding: 12px 18px;
+                display: block;
+                scrollbar-width: thin;
+                scrollbar-color: #94a3b8 #f1f5f9;
+            }
+            .lf-filter-body::-webkit-scrollbar { width: 8px; }
+            .lf-filter-body::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+            .lf-filter-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 8px; }
+            .lf-filter-body::-webkit-scrollbar-thumb:hover { background: #64748b; }
+            .lf-filter-sec {
+                flex: 0 0 auto;
+                margin-bottom: 10px;
+                border: 1px solid #cbd5e1;
+                border-radius: 10px;
+                overflow: visible;
+                background: #ffffff;
+            }
+            .lf-filter-sec:last-child { margin-bottom: 0; }
+            .lf-filter-sec-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 8px 12px;
+                background: #f1f5f9;
+                border-bottom: 1px solid #e2e8f0;
+                border-radius: 9px 9px 0 0;
+                font-weight: 700;
+                font-size: 12.5px;
+                color: #1e3a5f;
+            }
+            .lf-filter-check-lbl {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                flex: 1 1 auto;
+                min-width: 0;
+                margin: 0;
+            }
+            .lf-filter-check-lbl input[type="checkbox"] {
+                width: 15px;
+                height: 15px;
+                accent-color: #0f766e;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            .lf-filter-only-btn {
+                border: 1px solid #cbd5e1;
+                background: #ffffff;
+                color: #0f766e;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            .lf-filter-only-btn:hover { background: #ecfdf5; border-color: #10b981; }
+            .lf-filter-items {
+                display: flex;
+                flex-direction: column;
+            }
+            .lf-filter-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 6px 12px;
+                border-bottom: 1px solid #f1f5f9;
+                font-size: 12.5px;
+                color: #1e293b;
+            }
+            .lf-filter-row:last-child { border-bottom: none; border-radius: 0 0 9px 9px; }
+            .lf-filter-row.is-group { background: #fafcfe; font-weight: 600; color: #0f172a; }
+            .lf-filter-row.is-param { padding-left: 30px; color: #334155; font-size: 12px; }
+            .lf-filter-foot {
+                flex: 0 0 auto;
+                padding: 12px 18px;
+                background: #f8fafc;
+                border-top: 1px solid #e2e8f0;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            .lf-filter-foot-summary { font-size: 12px; color: #475569; font-weight: 600; }
+            .lf-filter-foot-actions { display: flex; align-items: center; gap: 8px; }
+            .lf-filter-apply-btn {
+                height: 34px;
+                padding: 0 16px;
+                border-radius: 8px;
+                border: none;
+                background: #0f766e;
+                color: #ffffff;
+                font-size: 12.5px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .lf-filter-apply-btn:hover { background: #0d9488; }
+            @media print {
+                .lf-filter-trigger-btn, .lf-filter-backdrop { display: none !important; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function escapeFilterHtml(str) {
+        return String(str ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    /**
+     * Mounts a unified non-destructive "Filter Tests / Print Scope" button & modal
+     * onto ANY LabFlow Report Format page (Formats 1, 2/Standard, 3, 4, 5).
+     */
+    async function mountReportFilterDrawer({
+        fullReport,
+        initialManifest = null,
+        barcodeMeta = null,
+        dockEl = null,
+        onSelectionApplied,
+    }) {
+        const mod = await loadSelectiveReportEngine();
+        if (!mod || !fullReport) return null;
+
+        ensureSelectiveFilterStyles();
+        const tree = mod.buildReportSelectionTree(fullReport, barcodeMeta);
+        const leafItems = [];
+        tree.sections.forEach((sec) => {
+            const hasChildren = new Set(sec.items.filter((i) => i.parentKey).map((i) => i.parentKey));
+            sec.items.forEach((it) => {
+                if (it.kind === "group" && hasChildren.has(it.key)) return;
+                leafItems.push({ sec, it });
+            });
+        });
+
+        const selectedSet = new Set();
+        const initAll = () => {
+            selectedSet.clear();
+            leafItems.forEach(({ it }) => selectedSet.add(it.key));
+        };
+
+        if (initialManifest && initialManifest.mode === "selected" && !initialManifest.allSelected) {
+            const mKeys = new Set(initialManifest.selectedItemKeys || []);
+            const mSec = new Set(initialManifest.selectedSectionKeys || []);
+            const mPanels = new Set((initialManifest.selectedPanelNames || []).map(mod.normalizeSelText));
+            const mLabels = new Set((initialManifest.selectedLabels || []).map(mod.normalizeSelText));
+            leafItems.forEach(({ sec, it }) => {
+                if (
+                    mKeys.has(it.key) ||
+                    mSec.has(sec.sectionKey) ||
+                    (sec.panelTitle && mPanels.has(mod.normalizeSelText(sec.panelTitle))) ||
+                    mLabels.has(mod.normalizeSelText(it.label))
+                ) {
+                    selectedSet.add(it.key);
+                }
+            });
+            if (selectedSet.size === 0) initAll();
+        } else {
+            initAll();
+        }
+
+        let includeMoreDetails = initialManifest?.includeMoreDetails !== false;
+
+        // Build trigger button
+        const targetDock = dockEl || document.querySelector(".oh5-dock, .download-pdf-div");
+        const existingBtn = document.getElementById("lfSelectiveFilterBtn");
+        if (existingBtn) existingBtn.remove();
+        const existingWrap = document.getElementById("lfSelectiveFilterWrap");
+        if (existingWrap) existingWrap.remove();
+
+        const triggerWrap = document.createElement("div");
+        triggerWrap.id = "lfSelectiveFilterWrap";
+        triggerWrap.className = targetDock?.classList.contains("oh5-dock") ? "downloadDiv no-print" : "downloadDiv no-print";
+        triggerWrap.style.display = "inline-flex";
+        triggerWrap.style.alignItems = "center";
+
+        const triggerBtn = document.createElement("button");
+        triggerBtn.id = "lfSelectiveFilterBtn";
+        triggerBtn.type = "button";
+        triggerBtn.className = "lf-filter-trigger-btn no-print";
+        triggerBtn.title = "Select specific Tests / Panels / Packages to print separately";
+        triggerWrap.appendChild(triggerBtn);
+
+        if (targetDock) {
+            const anchorSetting = targetDock.querySelector("#printsettingbutton");
+            if (anchorSetting) targetDock.insertBefore(triggerWrap, anchorSetting);
+            else targetDock.appendChild(triggerWrap);
+        }
+
+        // Build portal modal
+        document.getElementById("lfSelectiveBackdrop")?.remove();
+        const backdrop = document.createElement("div");
+        backdrop.id = "lfSelectiveBackdrop";
+        backdrop.className = "lf-filter-backdrop no-print";
+        backdrop.innerHTML = `
+            <div class="lf-filter-modal" role="dialog" aria-modal="true" aria-label="Select Tests for Report PDF">
+                <div class="lf-filter-head">
+                    <div>
+                        <h3><i class="fas fa-filter"></i> Select Tests / Panels / Packages for Report</h3>
+                        <small>Full data stays safe in database. Pick individual tests, panels, packages, or parameters to print separately.</small>
+                    </div>
+                    <button type="button" class="lf-filter-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="lf-filter-controls">
+                    <input type="search" class="lf-filter-search" placeholder="Search test, panel, category..." />
+                    <button type="button" class="lf-filter-pill-btn is-primary" data-action="full">Full Report (All)</button>
+                    <button type="button" class="lf-filter-pill-btn" data-action="none">Clear All</button>
+                </div>
+                <div class="lf-filter-pkgs" style="${tree.packages.length ? "" : "display:none;"}"></div>
+                <div class="lf-filter-body"></div>
+                <div class="lf-filter-foot">
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="lfFilterMoreDetailsChk" ${includeMoreDetails ? "checked" : ""} />
+                            <span>Include Additional Findings</span>
+                        </label>
+                        <span class="lf-filter-foot-summary"></span>
+                    </div>
+                    <div class="lf-filter-foot-actions">
+                        <button type="button" class="lf-filter-pill-btn" data-action="reset-full">Reset Full Report</button>
+                        <button type="button" class="lf-filter-apply-btn" data-action="apply">Apply &amp; Update Report</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+
+        const bodyEl = backdrop.querySelector(".lf-filter-body");
+        const pkgsEl = backdrop.querySelector(".lf-filter-pkgs");
+        const searchInput = backdrop.querySelector(".lf-filter-search");
+        const summaryEl = backdrop.querySelector(".lf-filter-foot-summary");
+        const moreDetailsChk = backdrop.querySelector("#lfFilterMoreDetailsChk");
+
+        const updateTriggerText = () => {
+            const total = leafItems.length;
+            const selectedCount = selectedSet.size;
+            const isFull = selectedCount === total;
+            triggerBtn.classList.toggle("is-selective", !isFull);
+            triggerBtn.innerHTML = `<i class="fas fa-tasks"></i><span>${isFull ? "All Tests" : "Selected Tests"}</span><span class="lf-filter-badge">${selectedCount}/${total}</span>`;
+            if (summaryEl) {
+                summaryEl.textContent = isFull
+                    ? `Full Report (${total} / ${total} items selected)`
+                    : `Selective Subset (${selectedCount} / ${total} items selected — DB full data preserved)`;
+            }
+        };
+
+        const buildCurrentManifest = () => {
+            const isFull = selectedSet.size === leafItems.length && includeMoreDetails;
+            const selectedLabels = [];
+            leafItems.forEach(({ sec, it }) => {
+                if (selectedSet.has(it.key)) {
+                    selectedLabels.push(it.shortLabel || it.label);
+                }
+            });
+            return {
+                version: 1,
+                mode: isFull ? "full" : "selected",
+                allSelected: isFull,
+                selectedItemKeys: Array.from(selectedSet),
+                selectedLabels,
+                includeMoreDetails,
+            };
+        };
+
+        const renderChecklist = (query = "") => {
+            const q = mod.normalizeSelText(query);
+
+            if (tree.packages.length && pkgsEl) {
+                pkgsEl.innerHTML = `<span style="font-size:11px;font-weight:700;color:#475569;">Packages:</span>` + tree.packages.map((pkg) => {
+                    const pkgLeafs = leafItems.filter(({ it }) => Array.isArray(it.packageIds) && it.packageIds.includes(pkg.id));
+                    const checkedCount = pkgLeafs.filter(({ it }) => selectedSet.has(it.key)).length;
+                    const allChecked = pkgLeafs.length > 0 && checkedCount === pkgLeafs.length;
+                    return `
+                        <div class="lf-filter-pkg-chip">
+                            <label class="lf-filter-check-lbl">
+                                <input type="checkbox" data-pkg-id="${escapeFilterHtml(pkg.id)}" ${allChecked ? "checked" : ""} />
+                                <span>${escapeFilterHtml(pkg.name)} (${checkedCount}/${pkgLeafs.length})</span>
+                            </label>
+                            <button type="button" class="lf-filter-only-btn" data-only-pkg="${escapeFilterHtml(pkg.id)}">Only</button>
+                        </div>
+                    `;
+                }).join("");
+
+                pkgsEl.querySelectorAll("input[data-pkg-id]").forEach((cb) => {
+                    const pkgId = cb.getAttribute("data-pkg-id");
+                    const pkgLeafs = leafItems.filter(({ it }) => Array.isArray(it.packageIds) && it.packageIds.includes(pkgId));
+                    const checkedCount = pkgLeafs.filter(({ it }) => selectedSet.has(it.key)).length;
+                    cb.indeterminate = checkedCount > 0 && checkedCount < pkgLeafs.length;
+                    cb.addEventListener("change", () => {
+                        pkgLeafs.forEach(({ it }) => {
+                            if (cb.checked) selectedSet.add(it.key);
+                            else selectedSet.delete(it.key);
+                        });
+                        renderChecklist(searchInput?.value || "");
+                        updateTriggerText();
+                    });
+                });
+
+                pkgsEl.querySelectorAll("button[data-only-pkg]").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        const pkgId = btn.getAttribute("data-only-pkg");
+                        selectedSet.clear();
+                        leafItems.forEach(({ it }) => {
+                            if (Array.isArray(it.packageIds) && it.packageIds.includes(pkgId)) selectedSet.add(it.key);
+                        });
+                        renderChecklist(searchInput?.value || "");
+                        updateTriggerText();
+                    });
+                });
+            }
+
+            bodyEl.innerHTML = "";
+            tree.sections.forEach((sec) => {
+                const secLeafs = leafItems.filter((x) => x.sec.sectionKey === sec.sectionKey).map((x) => x.it);
+                if (!secLeafs.length) return;
+                const matchingItems = sec.items.filter((it) => {
+                    if (!q) return true;
+                    return mod.normalizeSelText(sec.displayTitle).includes(q) || mod.normalizeSelText(it.label).includes(q);
+                });
+                if (!matchingItems.length) return;
+
+                const secDiv = document.createElement("div");
+                secDiv.className = "lf-filter-sec";
+                const secCheckedCount = secLeafs.filter((it) => selectedSet.has(it.key)).length;
+                const secAllChecked = secCheckedCount === secLeafs.length;
+
+                secDiv.innerHTML = `
+                    <div class="lf-filter-sec-head">
+                        <label class="lf-filter-check-lbl">
+                            <input type="checkbox" class="lf-sec-cb" ${secAllChecked ? "checked" : ""} />
+                            <span>${escapeFilterHtml(sec.isPanel ? `${sec.displayTitle} (${sec.categoryName})` : sec.displayTitle)}</span>
+                        </label>
+                        <button type="button" class="lf-filter-only-btn" title="Print ONLY this section">Only This</button>
+                    </div>
+                    <div class="lf-filter-items"></div>
+                `;
+
+                const secCb = secDiv.querySelector(".lf-sec-cb");
+                secCb.indeterminate = secCheckedCount > 0 && secCheckedCount < secLeafs.length;
+                secCb.addEventListener("change", () => {
+                    secLeafs.forEach((it) => {
+                        if (secCb.checked) selectedSet.add(it.key);
+                        else selectedSet.delete(it.key);
+                    });
+                    renderChecklist(searchInput?.value || "");
+                    updateTriggerText();
+                });
+
+                secDiv.querySelector(".lf-filter-only-btn").addEventListener("click", () => {
+                    selectedSet.clear();
+                    secLeafs.forEach((it) => selectedSet.add(it.key));
+                    renderChecklist(searchInput?.value || "");
+                    updateTriggerText();
+                });
+
+                const itemsWrap = secDiv.querySelector(".lf-filter-items");
+                const childrenByGroup = new Map();
+                sec.items.forEach((it) => {
+                    if (it.kind === "param" && it.parentKey) {
+                        if (!childrenByGroup.has(it.parentKey)) childrenByGroup.set(it.parentKey, []);
+                        childrenByGroup.get(it.parentKey).push(it);
+                    }
+                });
+
+                matchingItems.forEach((it) => {
+                    const rowDiv = document.createElement("div");
+                    rowDiv.className = `lf-filter-row${it.kind === "group" ? " is-group" : it.kind === "param" ? " is-param" : ""}`;
+
+                    const isGroupWithKids = it.kind === "group" && childrenByGroup.has(it.key);
+                    const kids = isGroupWithKids ? childrenByGroup.get(it.key) : [];
+                    const checked = isGroupWithKids
+                        ? kids.length > 0 && kids.every((k) => selectedSet.has(k.key))
+                        : selectedSet.has(it.key);
+
+                    rowDiv.innerHTML = `
+                        <label class="lf-filter-check-lbl">
+                            <input type="checkbox" ${checked ? "checked" : ""} />
+                            <span>${escapeFilterHtml(it.label)}</span>
+                        </label>
+                        <button type="button" class="lf-filter-only-btn">Only</button>
+                    `;
+
+                    const rowCb = rowDiv.querySelector('input[type="checkbox"]');
+                    if (isGroupWithKids) {
+                        const kCount = kids.filter((k) => selectedSet.has(k.key)).length;
+                        rowCb.indeterminate = kCount > 0 && kCount < kids.length;
+                    }
+
+                    rowCb.addEventListener("change", () => {
+                        if (isGroupWithKids) {
+                            kids.forEach((k) => {
+                                if (rowCb.checked) selectedSet.add(k.key);
+                                else selectedSet.delete(k.key);
+                            });
+                        } else {
+                            if (rowCb.checked) selectedSet.add(it.key);
+                            else selectedSet.delete(it.key);
+                        }
+                        renderChecklist(searchInput?.value || "");
+                        updateTriggerText();
+                    });
+
+                    rowDiv.querySelector(".lf-filter-only-btn").addEventListener("click", () => {
+                        selectedSet.clear();
+                        if (isGroupWithKids) kids.forEach((k) => selectedSet.add(k.key));
+                        else selectedSet.add(it.key);
+                        renderChecklist(searchInput?.value || "");
+                        updateTriggerText();
+                    });
+
+                    itemsWrap.appendChild(rowDiv);
+                });
+
+                bodyEl.appendChild(secDiv);
+            });
+            updateTriggerText();
+        };
+
+        const applySelectionNow = async () => {
+            if (selectedSet.size === 0) {
+                alert("Please select at least 1 test, panel, or parameter before applying.");
+                return;
+            }
+            includeMoreDetails = Boolean(moreDetailsChk?.checked);
+            const manifest = buildCurrentManifest();
+            const isSelective = manifest.mode === "selected" && !manifest.allSelected;
+            setActiveSelectiveState(isSelective, manifest);
+            const filteredReport = isSelective
+                ? mod.filterReportBySelection(fullReport, manifest, barcodeMeta)
+                : fullReport;
+            backdrop.classList.remove("is-open");
+            updateTriggerText();
+            if (typeof onSelectionApplied === "function") {
+                await onSelectionApplied({
+                    fullReport,
+                    filteredReport,
+                    manifest,
+                    isSelective,
+                });
+            }
+        };
+
+        triggerBtn.addEventListener("click", () => {
+            renderChecklist(searchInput?.value || "");
+            backdrop.classList.add("is-open");
+        });
+        backdrop.querySelector(".lf-filter-close").addEventListener("click", () => backdrop.classList.remove("is-open"));
+        backdrop.addEventListener("click", (e) => {
+            if (e.target === backdrop) backdrop.classList.remove("is-open");
+        });
+        searchInput?.addEventListener("input", () => renderChecklist(searchInput.value));
+        backdrop.querySelector('[data-action="full"]')?.addEventListener("click", () => {
+            initAll();
+            if (moreDetailsChk) moreDetailsChk.checked = true;
+            renderChecklist(searchInput?.value || "");
+        });
+        backdrop.querySelector('[data-action="none"]')?.addEventListener("click", () => {
+            selectedSet.clear();
+            renderChecklist(searchInput?.value || "");
+        });
+        backdrop.querySelector('[data-action="apply"]')?.addEventListener("click", applySelectionNow);
+        backdrop.querySelector('[data-action="reset-full"]')?.addEventListener("click", async () => {
+            initAll();
+            if (moreDetailsChk) moreDetailsChk.checked = true;
+            renderChecklist(searchInput?.value || "");
+            await applySelectionNow();
+        });
+
+        updateTriggerText();
+        return {
+            getManifest: buildCurrentManifest,
+            cleanup() {
+                triggerWrap.remove();
+                backdrop.remove();
+            },
+        };
+    }
+
     window.ReportActionHelpers = {
         normalizeCounters,
         normalizeActionHistory,
@@ -1146,5 +1875,10 @@
         evaluateLegacyTestAbnormal,
         applyLegacyAbnormalHighlightStyles,
         fetchAndApplyLegacyPrintSettings,
+        loadSelectiveReportEngine,
+        resolveInitialSelectiveReport,
+        mountReportFilterDrawer,
+        isSelectivePrintActive,
+        setActiveSelectiveState,
     };
 })();

@@ -525,7 +525,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
     cssContent, header, footer, backgroundImageUrl, headermargin, footermargin, marginRight,
     marginLeft, investigationmargin, showlab, showdoctorfirst,
     showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
-    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, explicitPrintSettingsSave = false, res }) => {
+    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, explicitPrintSettingsSave = false, skipCustomizationSave = false, isSelectivePrint = false, res }) => {
 
     const rawInvestigationMargin = investigationmargin;
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
@@ -656,59 +656,63 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 finalpdfbufferwithmargin = await adjustPdfMargins(finalPdfBuffer, marginRightPx, marginLeftPx);
             }
 
-            // Dynamically build the update object
-            const updateData = {
-                showInvest: showInvest,
-                BoldRow: BoldRow,
-                HLinred: HLinred,
-                HighLow: HighLow,
-                RowSpacing: parseNumericValue(RowSpacing, pdfformat === "reportFormat5" ? 1 : 7),
-                selectedFontSize: parseNumericValue(selectedFontSize, pdfformat === "reportFormat5" ? 10.5 : 12),
-                selectedFontFamily: selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
-                hideCategories: Boolean(hideCategories),
-                hideTableHeadings: Boolean(hideTableHeadings),
-                reportId: reportId,
-                htmlContent: htmlContent,
-                cssContent: cssContent,
-                header: header,
-                footer: footer,
-                headermargin: headermargin,
-                footermargin: footermargin,
-                marginRight: marginRight,
-                marginLeft: marginLeft,
-                LeftsignPd: LeftsignPd,
-                Rightsignpd: Rightsignpd,
-                investigationmargin: investigationmargin,
-                showlab: showlab,
-                showdoctorfirst: showdoctorfirst,
-                showdoctorsecond: showdoctorsecond,
-                fileInputLab: fileInputLab,
-                fileInputDoctorleft: fileInputDoctorleft,
-                fileInputDoctorright: fileInputDoctorright,
-                fileInputLabtext: fileInputLabtext,
-                fileInputDoctorlefttext: fileInputDoctorlefttext,
-                fileInputDoctorrighttext: fileInputDoctorrighttext,
-                updatedAt: new Date()
-            };
+            const shouldSkipCustomizationSave = Boolean(skipCustomizationSave || isSelectivePrint);
 
-            if (explicitPrintSettingsSave) {
-                updateData.hasUserSavedPrintSettings = true;
-            }
+            if (!shouldSkipCustomizationSave) {
+                // Dynamically build the update object
+                const updateData = {
+                    showInvest: showInvest,
+                    BoldRow: BoldRow,
+                    HLinred: HLinred,
+                    HighLow: HighLow,
+                    RowSpacing: parseNumericValue(RowSpacing, pdfformat === "reportFormat5" ? 1 : 7),
+                    selectedFontSize: parseNumericValue(selectedFontSize, pdfformat === "reportFormat5" ? 10.5 : 12),
+                    selectedFontFamily: selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
+                    hideCategories: Boolean(hideCategories),
+                    hideTableHeadings: Boolean(hideTableHeadings),
+                    reportId: reportId,
+                    htmlContent: htmlContent,
+                    cssContent: cssContent,
+                    header: header,
+                    footer: footer,
+                    headermargin: headermargin,
+                    footermargin: footermargin,
+                    marginRight: marginRight,
+                    marginLeft: marginLeft,
+                    LeftsignPd: LeftsignPd,
+                    Rightsignpd: Rightsignpd,
+                    investigationmargin: investigationmargin,
+                    showlab: showlab,
+                    showdoctorfirst: showdoctorfirst,
+                    showdoctorsecond: showdoctorsecond,
+                    fileInputLab: fileInputLab,
+                    fileInputDoctorleft: fileInputDoctorleft,
+                    fileInputDoctorright: fileInputDoctorright,
+                    fileInputLabtext: fileInputLabtext,
+                    fileInputDoctorlefttext: fileInputDoctorlefttext,
+                    fileInputDoctorrighttext: fileInputDoctorrighttext,
+                    updatedAt: new Date()
+                };
 
-            // Add backgroundImageUrl to the update object only if it is not empty
-            if (backgroundImageUrl) {
-                updateData.backgroundImageUrl = normalizeStoredUploadUrl(backgroundImageUrl) || backgroundImageUrl;
-            }
-
-            // Save the path to the database
-            await customization.findOneAndUpdate(
-                { reportId: reportId },
-                updateData,
-                {
-                    new: true,
-                    upsert: true,
+                if (explicitPrintSettingsSave) {
+                    updateData.hasUserSavedPrintSettings = true;
                 }
-            );
+
+                // Add backgroundImageUrl to the update object only if it is not empty
+                if (backgroundImageUrl) {
+                    updateData.backgroundImageUrl = normalizeStoredUploadUrl(backgroundImageUrl) || backgroundImageUrl;
+                }
+
+                // Save the path to the database
+                await customization.findOneAndUpdate(
+                    { reportId: reportId },
+                    updateData,
+                    {
+                        new: true,
+                        upsert: true,
+                    }
+                );
+            }
 
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'attachment; filename="final_report.pdf"');
@@ -766,8 +770,11 @@ const getpdfcontroller = async (req, res) => {
         const explicitPrintSettingsSave = Boolean(
             req.body.persistCustomization || req.body.explicitPrintSettingsSave
         );
+        const isSelectivePrintRequest = Boolean(
+            req.body.skipCustomizationSave || req.body.isSelectivePrint
+        );
         const shouldPersistDefaultSettings =
-            pdfformat !== "reportFormat5" || explicitPrintSettingsSave;
+            !isSelectivePrintRequest && (pdfformat !== "reportFormat5" || explicitPrintSettingsSave);
 
         const defaultSettingDoc = shouldPersistDefaultSettings
             ? await saveOrUpdatePdfSetting({
@@ -820,6 +827,8 @@ const getpdfcontroller = async (req, res) => {
             fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
             fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
             explicitPrintSettingsSave,
+            skipCustomizationSave: isSelectivePrintRequest,
+            isSelectivePrint: isSelectivePrintRequest,
             res
         };
 
@@ -1321,6 +1330,10 @@ const getpdfcontrolleruser = async (req, res) => {
 };
 
 const savingPdfDatacontroller = async (req, res) => {
+
+    if (req.body?.skipCustomizationSave || req.body?.isSelectivePrint) {
+        return res.status(200).json({ skipped: true, reason: "selective_print_non_destructive" });
+    }
 
     const tenantId = req.user.tenantId._id;
     let userId;

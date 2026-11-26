@@ -35,10 +35,15 @@
     await ensureReportActionHelpersLoaded();
     const urlParams = await new URLSearchParams(window.location.search);
     let value1 = await urlParams.get('value1');
-    const [report] = await Promise.all([
+    const [rawReport] = await Promise.all([
         fetchreport(value1),
         window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
     ]);
+    const selectiveCtx = window.ReportActionHelpers?.resolveInitialSelectiveReport
+        ? await window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
+        : { fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false };
+    const fullReport = selectiveCtx?.fullReport || rawReport;
+    let report = selectiveCtx?.activeReport || rawReport;
     const backgroundImageUrl = await fetchTemplateImages();
     value1 = report._id;
     window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
@@ -269,7 +274,9 @@
                     footer,
                     reportId: value1,
                     backgroundImageUrl,
-                    investigationmargin
+                    investigationmargin,
+                    skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
+                    isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
                 }),
             });
 
@@ -331,7 +338,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin }),
+                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin, skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()), isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()) }),
                 });
 
                 if (!response.ok) throw new Error('data not saved');
@@ -348,7 +355,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ value1 })
+                    body: JSON.stringify({ value1, htmlContent, cssContent, header, footer, skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()), isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()) })
                 });
                 if (!response.ok) throw new Error('PDF generation failed');
                 popupModal.style.display = 'block';
@@ -851,6 +858,23 @@
     await signoffdivfunction();
     reportActionHelpers.bindPageLevelEnterShortcut?.({ buttonId: "signOff" });
     downloadpdffunction();
+    reportActionHelpers.mountReportFilterDrawer?.({
+        fullReport,
+        initialManifest: selectiveCtx?.initialManifest || null,
+        barcodeMeta: selectiveCtx?.barcodeMeta || null,
+        dockEl: document.querySelector('.download-pdf-div'),
+        onSelectionApplied: async ({ filteredReport }) => {
+            report = filteredReport;
+            const investEl = document.querySelector('#investDiv .value');
+            if (investEl) {
+                investEl.textContent = Array.isArray(filteredReport?.uniquetestArray)
+                    ? filteredReport.uniquetestArray.join(', ')
+                    : String(filteredReport?.uniquetestArray || '');
+            }
+            renderData(filteredReport);
+            await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+        },
+    });
 
     async function signoffdivfunction() {
         if (report.signOff) {
@@ -925,12 +949,13 @@
             }
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`${BASE_URL}/api/v1/user/adding-pdf-data`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin, bookingId: report.bookingId, isdocumented: report.isDocumented }),
+                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin, bookingId: report.bookingId, isdocumented: report.isDocumented, skipCustomizationSave: isSelective, isSelectivePrint: isSelective }),
                 });
 
                 if (!response.ok) throw new Error('data not saved');
@@ -1025,12 +1050,13 @@
             const footer = document.querySelector('.signed-off-div').outerHTML;
             investigationmargin = countLines();
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`${BASE_URL}/api/v1/user/adding-pdf-data`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin }),
+                    body: JSON.stringify({ labinchargesign: report.showLabIncharge, htmlContent, cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin, skipCustomizationSave: isSelective, isSelectivePrint: isSelective }),
                 });
 
                 if (!response.ok) throw new Error('data not saved');
@@ -1042,6 +1068,7 @@
             }
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`${BASE_URL}/api/v1/user/get-pdf`, {
                     method: 'POST',
                     headers: {
@@ -1051,7 +1078,9 @@
                         value1, labinchargesign, checkBox, backgroundImageUrl,
                         headermargin, footermargin, marginRight, marginLeft, labinchargeinfo: labinchargeinfo,
                         labinchargesignurl: sign, selectedFontSize, RowSpacing, HighLow, HLinred,
-                        BoldRow, showInvest, DownloadPdf
+                        BoldRow, showInvest, DownloadPdf,
+                        htmlContent, cssContent, header, footer, investigationmargin,
+                        skipCustomizationSave: isSelective, isSelectivePrint: isSelective
                     }),
                 });
 

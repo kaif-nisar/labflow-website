@@ -155,11 +155,16 @@
     let value1 = urlParams.get('value1');
 
     // ─── 2. PARALLEL INITIAL FETCHES ─────────────────────────────────────────
-    const [report] = await Promise.all([
+    const [rawReport] = await Promise.all([
         fetchreport(),
         window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
     ]);
-    const bookingTestMetaPromise = fetchBookingTestMeta(report?.bookingId);
+    const bookingTestMetaPromise = fetchBookingTestMeta(rawReport?.bookingId);
+    const selectiveCtx = window.ReportActionHelpers?.resolveInitialSelectiveReport
+        ? await window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
+        : { fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false };
+    const fullReport = selectiveCtx?.fullReport || rawReport;
+    let report = selectiveCtx?.activeReport || rawReport;
 
     value1 = report._id;
     window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
@@ -494,6 +499,38 @@
     hidecontent();
     markPageReady();
 
+    reportActionHelpers.mountReportFilterDrawer?.({
+        fullReport,
+        initialManifest: selectiveCtx?.initialManifest || null,
+        barcodeMeta: selectiveCtx?.barcodeMeta || null,
+        dockEl: document.querySelector('.download-pdf-div'),
+        onSelectionApplied: async ({ filteredReport, isSelective }) => {
+            report = filteredReport;
+            const investEl = document.getElementById('investigationarray') || document.querySelector('#investDiv .value');
+            if (investEl) {
+                investEl.textContent = Array.isArray(filteredReport?.uniquetestArray)
+                    ? filteredReport.uniquetestArray.join(', ')
+                    : String(filteredReport?.uniquetestArray || '');
+            }
+            if (prefetchedViewBlobUrl) {
+                URL.revokeObjectURL(prefetchedViewBlobUrl);
+                prefetchedViewBlobUrl = null;
+            }
+            prefetchedViewBlob = null;
+            prefetchedPayloadKey = '';
+            renderTask = renderData(filteredReport);
+            await renderTask;
+            await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+            setActionFeedback(
+                isSelective
+                    ? 'Selected tests/panels report par apply ho gaye. Print ya Download karein.'
+                    : 'Complete Full Report restore ho gayi.',
+                'success'
+            );
+            setTimeout(() => { prewarmPdfInBackground(); }, 0);
+        },
+    });
+
     const defer = (cb) => {
         if (typeof window.requestIdleCallback === 'function') {
             window.requestIdleCallback(() => cb(), { timeout: 1200 });
@@ -710,11 +747,14 @@
             checkBox:            !withBackground,       // true = no background (server side flag)
             disableBackgroundImage: !withBackground,    // extra safety flag for server
             investigationmargin: countLines(),
+            skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
+            isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
             ...extras
         };
     }
 
     async function savePdfData(extras = {}) {
+        if (reportActionHelpers.isSelectivePrintActive?.()) return;
         const response = await fetch(`/api/v1/user/adding-pdf-data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

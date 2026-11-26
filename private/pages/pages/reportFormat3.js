@@ -36,10 +36,15 @@
     await ensureReportActionHelpersLoaded();
     const urlParams = await new URLSearchParams(window.location.search);
     let value1 = await urlParams.get('value1');
-    const [report] = await Promise.all([
+    const [rawReport] = await Promise.all([
         fetchreport(),
         window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
     ]);
+    const selectiveCtx = window.ReportActionHelpers?.resolveInitialSelectiveReport
+        ? await window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
+        : { fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false };
+    const fullReport = selectiveCtx?.fullReport || rawReport;
+    let report = selectiveCtx?.activeReport || rawReport;
     const backgroundImageUrl = await fetchTemplateImages();
     value1 = report._id;
     window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
@@ -252,7 +257,9 @@
                     footer,
                     reportId: value1,
                     backgroundImageUrl,
-                    investigationmargin
+                    investigationmargin,
+                    skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
+                    isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
                 }),
             });
 
@@ -307,7 +314,9 @@
                     },
                     body: JSON.stringify({
                         labinchargesign: report.showLabIncharge, htmlContent, cssContent, header,
-                        footer, reportId: value1, backgroundImageUrl, investigationmargin
+                        footer, reportId: value1, backgroundImageUrl, investigationmargin,
+                        skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
+                        isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
                     }),
                 });
 
@@ -320,12 +329,13 @@
             }
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`/api/v1/user/get-pdf`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ value1, bookingId: report.bookingId }),
+                    body: JSON.stringify({ value1, bookingId: report.bookingId, htmlContent, cssContent, header, footer, investigationmargin, skipCustomizationSave: isSelective, isSelectivePrint: isSelective }),
                 });
 
                 if (!response.ok) throw new Error('PDF generation failed');
@@ -815,6 +825,23 @@
     // await convertAllImagesToBase64();
     await signoffdivfunction();
     downloadpdffunction();
+    reportActionHelpers.mountReportFilterDrawer?.({
+        fullReport,
+        initialManifest: selectiveCtx?.initialManifest || null,
+        barcodeMeta: selectiveCtx?.barcodeMeta || null,
+        dockEl: document.querySelector('.download-pdf-div'),
+        onSelectionApplied: async ({ filteredReport }) => {
+            report = filteredReport;
+            const investEl = document.getElementById('investigationarray') || document.querySelector('#investDiv .value');
+            if (investEl) {
+                investEl.textContent = Array.isArray(filteredReport?.uniquetestArray)
+                    ? filteredReport.uniquetestArray.join(', ')
+                    : String(filteredReport?.uniquetestArray || '');
+            }
+            renderData(filteredReport);
+            await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+        },
+    });
 
     function countLines() {
         const span = document.querySelector(".report-details");
@@ -925,12 +952,13 @@
             console.log("updateData is:", updateData);
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`/api/v1/user/adding-pdf-data`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(updateData),
+                    body: JSON.stringify({ ...updateData, skipCustomizationSave: isSelective, isSelectivePrint: isSelective }),
                 });
 
                 if (!response.ok) throw new Error('data not saved');
@@ -1019,6 +1047,7 @@
 
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`/api/v1/user/adding-pdf-data`, {
                     method: 'POST',
                     headers: {
@@ -1026,7 +1055,8 @@
                     },
                     body: JSON.stringify({
                         labinchargesign: report.showLabIncharge, htmlContent,
-                        cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin
+                        cssContent, header, footer, reportId: value1, backgroundImageUrl, investigationmargin,
+                        skipCustomizationSave: isSelective, isSelectivePrint: isSelective
                     }),
                 });
 
@@ -1039,6 +1069,7 @@
             }
 
             try {
+                const isSelective = Boolean(reportActionHelpers.isSelectivePrintActive?.());
                 const response = await fetch(`/api/v1/user/get-pdf`, {
                     method: 'POST',
                     headers: {
@@ -1048,7 +1079,9 @@
                         value1, labinchargesign, checkBox, backgroundImageUrl,
                         headermargin, footermargin, marginRight, marginLeft, labinchargeinfo: labinchargeinfo,
                         labinchargesignurl: sign, selectedFontSize, RowSpacing, HighLow, HLinred,
-                        BoldRow, showInvest, DownloadPdf, bookingId: report.bookingId
+                        BoldRow, showInvest, DownloadPdf, bookingId: report.bookingId,
+                        htmlContent, cssContent, header, footer, investigationmargin,
+                        skipCustomizationSave: isSelective, isSelectivePrint: isSelective
                     }),
                 });
 

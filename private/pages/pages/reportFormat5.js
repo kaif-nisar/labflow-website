@@ -66,7 +66,10 @@
     value1: urlValue1,
     reportId: "",
     bookingId: "",
+    fullReport: null,
     report: null,
+    isSelectiveMode: false,
+    filterDrawerController: null,
     bookingData: null,
     barcodeMetaEntries: [],
     testMethodMap: new Map(),
@@ -879,17 +882,22 @@
       }
     };
 
-    // Priority 1: Exact selectedItems from booking (contains tests, panels, and packages with shortName fallback to itemName)
-    if (selectedItems.length > 0) {
+    // Priority 1: Exact selectedItems from booking (skipped in Selective Mode so filtered header reflects selected tests/panels only)
+    if (!report?.isSelectiveReport && selectedItems.length > 0) {
       selectedItems.forEach((item) => {
         pushToken(item?.itemName || item?.shortName, item?.shortName || "");
       });
       if (tokens.length) return tokens.join(", ");
     }
 
-    // Priority 2: Report uniquetestArray mapped against shortLookup
-    if (Array.isArray(report?.uniquetestArray) && report.uniquetestArray.length) {
-      report.uniquetestArray.forEach((item) => {
+    // Priority 2: Selected investigations (when selective subset active) or full uniquetestArray mapped against shortLookup
+    const sourceInvestList =
+      report?.isSelectiveReport && Array.isArray(report?.investigationShortNames)
+        ? report.investigationShortNames
+        : report?.uniquetestArray;
+
+    if (Array.isArray(sourceInvestList) && sourceInvestList.length) {
+      sourceInvestList.forEach((item) => {
         const whole = String(item ?? "").trim();
         if (!whole) return;
         if (shortLookup.has(normalizeText(whole))) {
@@ -898,8 +906,8 @@
           whole.split(",").map((s) => s.trim()).filter(Boolean).forEach((part) => pushToken(part));
         }
       });
-    } else if (typeof report?.uniquetestArray === "string" && report.uniquetestArray.trim()) {
-      report.uniquetestArray.split(",").map((s) => s.trim()).filter(Boolean).forEach((part) => pushToken(part));
+    } else if (typeof sourceInvestList === "string" && sourceInvestList.trim()) {
+      sourceInvestList.split(",").map((s) => s.trim()).filter(Boolean).forEach((part) => pushToken(part));
     }
 
     // Priority 3: Fall back to CategoryAndTest if still empty
@@ -1855,6 +1863,10 @@
 
   async function saveCurrentSnapshot({ silent = false } = {}) {
     if (!state.reportId) return false;
+    if (state.isSelectiveMode) {
+      if (!silent) toast("Selective Subset active — full saved report remains safe in DB.", "info");
+      return true;
+    }
     const s = state.settings;
     const snapshot = buildSemanticSnapshotParts();
     const investigationMargin = Math.round(s.headermargin * CM_TO_PX + 115);
@@ -1953,6 +1965,8 @@
       footer: snapshot.footer,
       DownloadPdf: Boolean(download),
       explicitPrintSettingsSave: false,
+      skipCustomizationSave: Boolean(state.isSelectiveMode),
+      isSelectivePrint: Boolean(state.isSelectiveMode),
       investigationmargin: Math.round(s.headermargin * CM_TO_PX + 115),
     };
 
@@ -2531,17 +2545,24 @@
         throw new Error("Report data not found for this booking.");
       }
 
-      state.report = reportData;
+      state.fullReport = reportData;
       state.reportId = String(reportData._id);
       state.bookingId = String(reportData.bookingId || state.value1);
       state.backgroundImageUrl = templateBg || "";
       state.doctorsSign = doctorsSign;
 
-      const [, , savedCustomization] = await Promise.all([
+      const [, , savedCustomization, selectiveCtx] = await Promise.all([
         fetchBookingDetailsSafe(state.bookingId).then((b) => { state.bookingData = b; }),
         fetchBarcodeTestMetadataSafe(state.bookingId),
         fetchPrintSettingsSafe(state.reportId),
+        global.ReportActionHelpers?.resolveInitialSelectiveReport
+          ? global.ReportActionHelpers.resolveInitialSelectiveReport(reportData, state.bookingId)
+          : Promise.resolve({ fullReport: reportData, activeReport: reportData, initialManifest: null, barcodeMeta: null, isSelective: false }),
       ]);
+
+      state.isSelectiveMode = Boolean(selectiveCtx?.isSelective);
+      state.report = selectiveCtx?.activeReport || reportData;
+      const activeReport = state.report;
 
       localStorage.setItem("myKey", state.reportId);
       localStorage.setItem("value1", state.reportId);
@@ -2561,8 +2582,8 @@
 
       const allSpecimens = collectAllSpecimenEntries(reportData, state.bookingData, state.barcodeMetaEntries);
       const primaryCatSpec =
-        Array.isArray(reportData.CategoryAndTest) && reportData.CategoryAndTest.length
-          ? resolveSpecimenForCategory(reportData.CategoryAndTest[0], reportData, state.bookingData)
+        Array.isArray(activeReport.CategoryAndTest) && activeReport.CategoryAndTest.length
+          ? resolveSpecimenForCategory(activeReport.CategoryAndTest[0], activeReport, state.bookingData)
           : (allSpecimens.find((e) => e.barcodeId) || { barcodeId: state.bookingId, sampleType: "" });
 
       state.defaultSpecimen = primaryCatSpec;
@@ -2592,15 +2613,44 @@
       if (b64Doc1) state.settings.fileInputDoctorleft = b64Doc1;
       if (b64Doc2) state.settings.fileInputDoctorright = b64Doc2;
 
-      state.headerElement = buildHeaderElement(reportData, state.defaultSpecimen);
+      state.headerElement = buildHeaderElement(activeReport, state.defaultSpecimen);
       state.footerElement = buildFooterElement();
-      buildBodySections(reportData);
+      buildBodySections(activeReport);
 
       if (skeleton) skeleton.style.display = "none";
       renderPaginatedSheets();
       applyLayerOneRules();
       updateSignOffUI(Boolean(reportData.signOff));
       bindEventHandlers();
+
+      if (global.ReportActionHelpers?.mountReportFilterDrawer) {
+        const drawerBarcodeMeta = state.barcodeMetaEntries.length ? state.barcodeMetaEntries : selectiveCtx?.barcodeMeta;
+        state.filterDrawerController = await global.ReportActionHelpers.mountReportFilterDrawer({
+          fullReport: state.fullReport,
+          initialManifest: selectiveCtx?.initialManifest || null,
+          barcodeMeta: drawerBarcodeMeta,
+          dockEl: document.querySelector(".oh5-dock"),
+          onSelectionApplied: async ({ filteredReport, isSelective }) => {
+            state.isSelectiveMode = Boolean(isSelective);
+            state.report = filteredReport;
+            const nextPrimarySpec =
+              Array.isArray(filteredReport.CategoryAndTest) && filteredReport.CategoryAndTest.length
+                ? resolveSpecimenForCategory(filteredReport.CategoryAndTest[0], filteredReport, state.bookingData)
+                : (allSpecimens.find((e) => e.barcodeId) || state.defaultSpecimen);
+            state.defaultSpecimen = nextPrimarySpec;
+            state.headerElement = buildHeaderElement(filteredReport, state.defaultSpecimen);
+            buildBodySections(filteredReport);
+            renderPaginatedSheets();
+            applyLayerOneRules();
+            toast(
+              isSelective
+                ? "Report updated with selected tests/panels cleanly."
+                : "Restored complete Full Report.",
+              "success"
+            );
+          },
+        });
+      }
 
       if (global.ReportActionHelpers) {
         sanitizeActionQueueStorage();
@@ -2662,6 +2712,10 @@
     if (typeof state.unsubscribeActions === "function") {
       state.unsubscribeActions();
       state.unsubscribeActions = null;
+    }
+    if (typeof state.filterDrawerController?.cleanup === "function") {
+      state.filterDrawerController.cleanup();
+      state.filterDrawerController = null;
     }
     if (state.currentPreviewPdfUrl) {
       URL.revokeObjectURL(state.currentPreviewPdfUrl);
