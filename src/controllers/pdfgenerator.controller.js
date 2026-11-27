@@ -4,6 +4,7 @@ import { customization } from '../models/printsetting.model.js';
 import { invoices } from '../models/invoicepdf.model.js';
 import { certificates } from '../models/certificate.model.js';
 import { defaultpdfsetting } from '../models/defaultpdfsettings.model.js';
+import { doctorsign } from '../models/labinchargesign.model.js';
 import { Template } from '../models/template.model.js';
 import {
     convertImageToPngBuffer,
@@ -20,6 +21,18 @@ import {
     buildLegacyAbnormalHighlightCss,
     normalizeLegacyPdfBodyHtml,
 } from '../utils/pdfAbnormalHighlight.js';
+import {
+    generateFormat1PagePdf,
+    isReportFormat1,
+} from '../utils/pdfFormat1Helpers.js';
+import {
+    applySignatureLayoutToFooterHtml,
+    resolveEffectiveSignatureLayout,
+} from '../utils/pdfSignatureLayout.js';
+import {
+    computeSignatureStageHeightPx,
+    normalizeSignatureLayout,
+} from '../../public/js/signatureLayoutEngine.mjs';
 
 // second try=====================================================================
 
@@ -102,7 +115,14 @@ const resolveFormatAwarePreferences = ({
     reqBody = {},
     gettingcustomization = null,
     defaultpdfsetting = null,
+    doctorsignDoc = null,
 }) => {
+    const resolvedSignatureLayout = resolveEffectiveSignatureLayout({
+        reqBody,
+        doctorsignDoc,
+        defaultpdfsetting,
+        customizationDoc: gettingcustomization,
+    });
     const isFormat5 = pdfformat === "reportFormat5";
     const explicitUserSaved = Boolean(
         reqBody.explicitPrintSettingsSave ||
@@ -186,11 +206,25 @@ const resolveFormatAwarePreferences = ({
                 defaultpdfsetting?.investigationmargin,
                 DEFAULT_PDF_PREFERENCES.investigationmargin
             ),
+            signatureLayout: resolvedSignatureLayout,
         };
     }
 
+    const isExplicitInvestSetting = Boolean(
+        reqBody.showInvestExplicit
+        || reqBody.explicitPrintSettingsSave
+        || reqBody.persistCustomization
+        || defaultpdfsetting?.showInvestExplicit
+        || gettingcustomization?.showInvestExplicit
+    );
+
     return {
-        showInvest: reqBody.showInvest ?? defaultpdfsetting?.showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+        showInvest: reqBody.showInvest !== undefined
+            ? reqBody.showInvest
+            : (isExplicitInvestSetting
+                ? (defaultpdfsetting?.showInvest ?? gettingcustomization?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest)
+                : DEFAULT_PDF_PREFERENCES.showInvest),
+        showInvestExplicit: isExplicitInvestSetting,
         BoldRow: explicitUserSaved
             ? (reqBody.BoldRow ?? defaultpdfsetting?.BoldRow ?? gettingcustomization?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
             : (reqBody.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
@@ -200,9 +234,9 @@ const resolveFormatAwarePreferences = ({
         HighLow: explicitUserSaved
             ? (reqBody.HighLow ?? defaultpdfsetting?.HighLow ?? gettingcustomization?.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow)
             : (reqBody.HighLow ?? DEFAULT_PDF_PREFERENCES.HighLow),
-        RowSpacing: resolveNumericPref(defaultpdfsetting?.RowSpacing, gettingcustomization?.RowSpacing, DEFAULT_PDF_PREFERENCES.RowSpacing),
-        selectedFontSize: resolveNumericPref(defaultpdfsetting?.selectedFontSize, gettingcustomization?.selectedFontSize, DEFAULT_PDF_PREFERENCES.selectedFontSize),
-        selectedFontFamily: defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
+        RowSpacing: resolveNumericPref(reqBody.RowSpacing, defaultpdfsetting?.RowSpacing, gettingcustomization?.RowSpacing, DEFAULT_PDF_PREFERENCES.RowSpacing),
+        selectedFontSize: resolveNumericPref(reqBody.selectedFontSize, defaultpdfsetting?.selectedFontSize, gettingcustomization?.selectedFontSize, DEFAULT_PDF_PREFERENCES.selectedFontSize),
+        selectedFontFamily: reqBody.selectedFontFamily || defaultpdfsetting?.selectedFontFamily || gettingcustomization?.selectedFontFamily || DEFAULT_PDF_FONT_FAMILY,
         hideCategories: defaultpdfsetting?.hideCategories ?? gettingcustomization?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
         hideTableHeadings: defaultpdfsetting?.hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
         headermargin: defaultpdfsetting?.headermargin || gettingcustomization?.headermargin || DEFAULT_PDF_PREFERENCES.headermargin,
@@ -212,6 +246,7 @@ const resolveFormatAwarePreferences = ({
         LeftsignPd: defaultpdfsetting?.LeftsignPd ?? gettingcustomization?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
         Rightsignpd: defaultpdfsetting?.Rightsignpd ?? gettingcustomization?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
         investigationmargin: resolveNumericPref(defaultpdfsetting?.investigationmargin, gettingcustomization?.investigationmargin, DEFAULT_PDF_PREFERENCES.investigationmargin),
+        signatureLayout: resolvedSignatureLayout,
     };
 };
 
@@ -333,6 +368,10 @@ const buildPdfFooterTemplate = async ({
     Rightsignpd = 0,
     selectedFontSize,
     selectedFontFamily,
+    signatureLayout = null,
+    showlab,
+    showdoctorfirst,
+    showdoctorsecond,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
     const safeFooter = sanitizePdfMarkup(footer);
@@ -340,6 +379,16 @@ const buildPdfFooterTemplate = async ({
     const rightPadding = parseNumericValue(Rightsignpd, 0);
     const fontSize = parseNumericValue(selectedFontSize, 12);
     const fontStack = resolvePdfFontStack(selectedFontFamily);
+    const sigResult = applySignatureLayoutToFooterHtml({
+        rawFooterHtml: safeFooter,
+        signatureLayout,
+        baseFontSizePx: fontSize,
+        isFormat5: false,
+        showLab: showlab,
+        showDoc1: showdoctorfirst,
+        showDoc2: showdoctorsecond,
+    });
+    const resolvedFooter = sigResult.footerHtml || safeFooter;
 
     return rewriteHtmlForOfflinePdf([
         '<!DOCTYPE html>',
@@ -351,11 +400,12 @@ const buildPdfFooterTemplate = async ({
         safeCss,
         `.pdf-footer-div { width: 92%; display: flex; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
         `.pdf-footer-div, .pdf-footer-div td, .pdf-footer-div th, .pdf-footer-div p, .pdf-footer-div span, .pdf-footer-div div, .pdf-footer-div label, .pdf-footer-div small, .pdf-footer-div strong { font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
+        sigResult.layoutCss || '',
         '</style>',
         '</head>',
         '<body>',
         '<div class="pdf-footer-div">',
-        safeFooter,
+        resolvedFooter,
         '</div>',
         '</body>',
         '</html>',
@@ -520,12 +570,12 @@ const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
     }
 };
 
-const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRow, HLinred, HighLow, RowSpacing,
+const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showInvestExplicit = false, BoldRow, HLinred, HighLow, RowSpacing,
     selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
     cssContent, header, footer, backgroundImageUrl, headermargin, footermargin, marginRight,
     marginLeft, investigationmargin, showlab, showdoctorfirst,
     showdoctorsecond, fileInputLab, fileInputDoctorleft, fileInputDoctorright, fileInputLabtext,
-    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, explicitPrintSettingsSave = false, skipCustomizationSave = false, isSelectivePrint = false, res }) => {
+    fileInputDoctorlefttext, fileInputDoctorrighttext, LeftsignPd, Rightsignpd, signatureLayout = null, explicitPrintSettingsSave = false, skipCustomizationSave = false, isSelectivePrint = false, res }) => {
 
     const rawInvestigationMargin = investigationmargin;
     investigationmargin = parseNumericValue(investigationmargin, 40) + 20;
@@ -588,6 +638,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                     fileInputDoctorlefttext,
                     fileInputDoctorrighttext,
                     layerone,
+                    signatureLayout,
                 }, {
                     launchPdfBrowser,
                     addBackgroundToPdf,
@@ -596,54 +647,105 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 browser = await launchPdfBrowser();
                 const page = await browser.newPage();
 
-                const contentWithCssAndImage = buildPdfBodyDocument({
-                    cssContent,
-                    htmlContent,
-                    header,
-                    selectedFontSize,
-                    selectedFontFamily,
-                    RowSpacing,
-                    HighLow,
-                    HLinred,
-                    BoldRow,
-                    hideCategories,
-                    hideTableHeadings,
-                });
-
-                cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
-
-                const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+                const useFormat1Engine = isReportFormat1({
+                    pdfformat,
                     format3,
-                    headermargin,
-                    showInvest,
                     header,
-                    selectedFontSize,
-                    selectedFontFamily,
-                });
-
-                const offlineFooterTemplate = await buildPdfFooterTemplate({
+                    htmlContent,
                     cssContent,
-                    footer,
-                    footermarginPx,
-                    LeftsignPd,
-                    Rightsignpd,
-                    selectedFontSize,
-                    selectedFontFamily,
                 });
 
-                const pdfBuffer = await page.pdf({
-                    format: 'A4',
-                    printBackground: true,
-                    displayHeaderFooter: true,
-                    headerTemplate: offlineHeaderTemplate,
-                    footerTemplate: offlineFooterTemplate,
-                    margin: {
-                        top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
-                        bottom: '175px',
-                        left: '10px',
-                        right: '10px',
-                    },
-                });
+                let pdfBuffer;
+                if (useFormat1Engine) {
+                    pdfBuffer = await generateFormat1PagePdf({
+                        page,
+                        htmlContent,
+                        cssContent,
+                        header,
+                        footer,
+                        selectedFontSize,
+                        selectedFontFamily,
+                        RowSpacing,
+                        HighLow,
+                        HLinred,
+                        BoldRow,
+                        hideCategories,
+                        hideTableHeadings,
+                        headermargin,
+                        footermarginPx,
+                        LeftsignPd,
+                        Rightsignpd,
+                        showInvest,
+                        layerone,
+                        omitBackground: false,
+                        signatureLayout,
+                        showlab,
+                        showdoctorfirst,
+                        showdoctorsecond,
+                    });
+                } else {
+                    const contentWithCssAndImage = buildPdfBodyDocument({
+                        cssContent,
+                        htmlContent,
+                        header,
+                        selectedFontSize,
+                        selectedFontFamily,
+                        RowSpacing,
+                        HighLow,
+                        HLinred,
+                        BoldRow,
+                        hideCategories,
+                        hideTableHeadings,
+                    });
+
+                    cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
+
+                    const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+                        format3,
+                        headermargin,
+                        showInvest,
+                        header,
+                        selectedFontSize,
+                        selectedFontFamily,
+                    });
+
+                    const offlineFooterTemplate = await buildPdfFooterTemplate({
+                        cssContent,
+                        footer,
+                        footermarginPx,
+                        LeftsignPd,
+                        Rightsignpd,
+                        selectedFontSize,
+                        selectedFontFamily,
+                        signatureLayout,
+                        showlab,
+                        showdoctorfirst,
+                        showdoctorsecond,
+                    });
+
+                    const normalizedSig = normalizeSignatureLayout(signatureLayout);
+                    const dynamicBottomPx = normalizedSig.isCustom
+                        ? Math.max(175, computeSignatureStageHeightPx(normalizedSig, {
+                            lab: showlab !== false,
+                            doc1: showdoctorfirst !== false,
+                            doc2: showdoctorsecond !== false,
+                        }) + footermarginPx + 45)
+                        : 175;
+
+                    pdfBuffer = await page.pdf({
+                        format: 'A4',
+                        printBackground: true,
+                        displayHeaderFooter: true,
+                        headerTemplate: offlineHeaderTemplate,
+                        footerTemplate: offlineFooterTemplate,
+                        margin: {
+                            top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
+                            bottom: `${dynamicBottomPx}px`,
+                            left: '10px',
+                            right: '10px',
+                        },
+                    });
+                }
 
                 const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, backgroundImageUrl);
 
@@ -662,6 +764,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                 // Dynamically build the update object
                 const updateData = {
                     showInvest: showInvest,
+                    showInvestExplicit: Boolean(explicitPrintSettingsSave || showInvestExplicit),
                     BoldRow: BoldRow,
                     HLinred: HLinred,
                     HighLow: HighLow,
@@ -691,11 +794,15 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, BoldRo
                     fileInputLabtext: fileInputLabtext,
                     fileInputDoctorlefttext: fileInputDoctorlefttext,
                     fileInputDoctorrighttext: fileInputDoctorrighttext,
+                    ...(signatureLayout !== undefined && signatureLayout !== null
+                        ? { signatureLayout: normalizeSignatureLayout(signatureLayout) }
+                        : {}),
                     updatedAt: new Date()
                 };
 
                 if (explicitPrintSettingsSave) {
                     updateData.hasUserSavedPrintSettings = true;
+                    updateData.showInvestExplicit = true;
                 }
 
                 // Add backgroundImageUrl to the update object only if it is not empty
@@ -766,7 +873,10 @@ const getpdfcontroller = async (req, res) => {
 
     try {
         // Attempt to fetch data from the database
-        const gettingcustomization = await customization.findOne({ reportId: effectiveReportId });
+        const [gettingcustomization, doctorsignDoc] = await Promise.all([
+            customization.findOne({ reportId: effectiveReportId }),
+            doctorsign.findOne({ tenantId: tid }).select('signatureLayout').lean(),
+        ]);
         const explicitPrintSettingsSave = Boolean(
             req.body.persistCustomization || req.body.explicitPrintSettingsSave
         );
@@ -796,7 +906,11 @@ const getpdfcontroller = async (req, res) => {
                 hideTableHeadings,
                 LeftsignPd,
                 Rightsignpd,
+                ...(req.body.signatureLayout !== undefined
+                    ? { signatureLayout: req.body.signatureLayout ? normalizeSignatureLayout(req.body.signatureLayout) : null }
+                    : {}),
                 hasUserSavedPrintSettings: explicitPrintSettingsSave ? true : undefined,
+                showInvestExplicit: explicitPrintSettingsSave ? true : undefined,
             })
             : await saveOrUpdatePdfSetting({ tenantId: tid, createdBy: userId });
 
@@ -805,6 +919,7 @@ const getpdfcontroller = async (req, res) => {
             reqBody: req.body,
             gettingcustomization,
             defaultpdfsetting: defaultSettingDoc,
+            doctorsignDoc,
         });
 
         const mergedValues = {
@@ -833,8 +948,12 @@ const getpdfcontroller = async (req, res) => {
         };
 
         if (req.user.tenantId.modelType === "1layer") {
-            mergedValues.showInvest = false;
             mergedValues.layerone = true;
+            if (!["reportFormat1", "reportFormat5"].includes(pdfformat)) {
+                mergedValues.showInvest = false;
+            } else if (!mergedValues.showInvestExplicit && req.body.showInvest === undefined) {
+                mergedValues.showInvest = true;
+            }
         }
 
         const shouldDisableResolvedBackground = Boolean(disableBackgroundImage || checkBox);
@@ -863,6 +982,7 @@ const saveOrUpdatePdfSetting = async ({
     marginLeft,
     investigationmargin,
     showInvest,
+    showInvestExplicit,
     BoldRow,
     HLinred,
     HighLow,
@@ -873,6 +993,7 @@ const saveOrUpdatePdfSetting = async ({
     hideTableHeadings,
     LeftsignPd,
     Rightsignpd,
+    signatureLayout,
     hasUserSavedPrintSettings
 }) => {
     try {
@@ -892,6 +1013,7 @@ const saveOrUpdatePdfSetting = async ({
                 marginLeft,
                 investigationmargin,
                 showInvest,
+                ...(showInvestExplicit !== undefined ? { showInvestExplicit } : {}),
                 BoldRow,
                 HLinred,
                 HighLow,
@@ -902,6 +1024,7 @@ const saveOrUpdatePdfSetting = async ({
                 hideTableHeadings,
                 LeftsignPd,
                 Rightsignpd,
+                ...(signatureLayout !== undefined ? { signatureLayout } : {}),
                 ...(hasUserSavedPrintSettings !== undefined ? { hasUserSavedPrintSettings } : {}),
             });
 
@@ -917,6 +1040,7 @@ const saveOrUpdatePdfSetting = async ({
                 marginLeft,
                 investigationmargin,
                 showInvest,
+                showInvestExplicit,
                 BoldRow,
                 HLinred,
                 HighLow,
@@ -927,14 +1051,19 @@ const saveOrUpdatePdfSetting = async ({
                 hideTableHeadings,
                 LeftsignPd,
                 Rightsignpd,
+                signatureLayout,
                 hasUserSavedPrintSettings
             };
 
             for (let key in fields) {
                 if (fields[key] !== undefined) {
-                    // नई field जो document में exist नहीं करती OR value बदली हो
-                    if (!(key in existingSetting.toObject()) || fields[key] !== existingSetting[key]) {
-                        existingSetting[key] = fields[key];
+                    const prevVal = existingSetting[key];
+                    const nextVal = fields[key];
+                    const isDiff = (nextVal && typeof nextVal === 'object') || (prevVal && typeof prevVal === 'object')
+                        ? JSON.stringify(prevVal ?? null) !== JSON.stringify(nextVal ?? null)
+                        : nextVal !== prevVal;
+                    if (!(key in existingSetting.toObject()) || isDiff) {
+                        existingSetting[key] = nextVal;
                         isChanged = true;
                     }
                 }
@@ -968,6 +1097,8 @@ const mergePdfsController = async (req, res) => {
         // Create a new PDF document
         const mergedPdf = await PDFDocument.create();
 
+        const doctorsignDoc = await doctorsign.findOne({ tenantId: req.user.tenantId._id }).select('signatureLayout').lean();
+
         // Loop through each reportId and generate PDF
         for (let reportId of reportIds) {
             try {
@@ -985,6 +1116,12 @@ const mergePdfsController = async (req, res) => {
                 const defaultpdfsetting = await saveOrUpdatePdfSetting({
                     tenantId: tid,
                     createdBy: userId,
+                });
+
+                const mergedSignatureLayout = resolveEffectiveSignatureLayout({
+                    doctorsignDoc,
+                    defaultpdfsetting,
+                    customizationDoc: gettingcustomization,
                 });
 
                 // Prepare merged values
@@ -1011,6 +1148,7 @@ const mergePdfsController = async (req, res) => {
                     LeftsignPd: defaultpdfsetting?.LeftsignPd ?? gettingcustomization?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
                     Rightsignpd: defaultpdfsetting?.Rightsignpd ?? gettingcustomization?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
                     investigationmargin: defaultpdfsetting?.investigationmargin || gettingcustomization?.investigationmargin || DEFAULT_PDF_PREFERENCES.investigationmargin,
+                    signatureLayout: mergedSignatureLayout,
                     showlab: gettingcustomization?.showlab ?? false,
                     showdoctorfirst: gettingcustomization?.showdoctorfirst ?? true,
                     showdoctorsecond: gettingcustomization?.showdoctorsecond ?? true,
@@ -1071,7 +1209,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
     const format3 = pdfformat === "reportFormat3" ? true : false;
     const layerone = user.tenantId.modelType === "1layer";
 
-    if (layerone) {
+    if (layerone && !["reportFormat1", "reportFormat5"].includes(pdfformat)) {
         mergedValues.showInvest = false;
     }
 
@@ -1097,54 +1235,105 @@ async function generateSinglePdfBuffer(mergedValues, user) {
     let cleanupPageContent = async () => { };
 
     try {
-        const contentWithCssAndImage = buildPdfBodyDocument({
-            cssContent: mergedValues.cssContent,
-            htmlContent: mergedValues.htmlContent,
-            header: mergedValues.header,
-            selectedFontSize: mergedValues.selectedFontSize,
-            selectedFontFamily: mergedValues.selectedFontFamily,
-            hideCategories: mergedValues.hideCategories,
-            hideTableHeadings: mergedValues.hideTableHeadings,
-            RowSpacing: mergedValues.RowSpacing,
-            HighLow: mergedValues.HighLow,
-            HLinred: mergedValues.HLinred,
-            BoldRow: mergedValues.BoldRow,
-        });
-
-        cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
-
-        const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+        const useFormat1Engine = isReportFormat1({
+            pdfformat: pdfformat || mergedValues.pdfformat,
             format3,
-            headermargin: mergedValues.headermargin,
-            showInvest: mergedValues.showInvest,
             header: mergedValues.header,
-            selectedFontSize: mergedValues.selectedFontSize,
-            selectedFontFamily: mergedValues.selectedFontFamily,
-        });
-
-        const offlineFooterTemplate = await buildPdfFooterTemplate({
+            htmlContent: mergedValues.htmlContent,
             cssContent: mergedValues.cssContent,
-            footer: mergedValues.footer,
-            footermarginPx,
-            LeftsignPd: mergedValues.LeftsignPd,
-            Rightsignpd: mergedValues.Rightsignpd,
-            selectedFontSize: mergedValues.selectedFontSize,
-            selectedFontFamily: mergedValues.selectedFontFamily,
         });
 
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            displayHeaderFooter: true,
-            headerTemplate: offlineHeaderTemplate,
-            footerTemplate: offlineFooterTemplate,
-            margin: {
-                top: `${headermarginPx + (format3 ? ((mergedValues.investigationmargin * 1.10) + (layerone ? (mergedValues.investigationmargin < 110 ? 75 : 15) : (mergedValues.investigationmargin < 160 ? 55 : 0))) : ((mergedValues.investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
-                bottom: '175px',
-                left: '10px',
-                right: '10px'
-            },
-        });
+        let pdfBuffer;
+        if (useFormat1Engine) {
+            pdfBuffer = await generateFormat1PagePdf({
+                page,
+                htmlContent: mergedValues.htmlContent,
+                cssContent: mergedValues.cssContent,
+                header: mergedValues.header,
+                footer: mergedValues.footer,
+                selectedFontSize: mergedValues.selectedFontSize,
+                selectedFontFamily: mergedValues.selectedFontFamily,
+                RowSpacing: mergedValues.RowSpacing,
+                HighLow: mergedValues.HighLow,
+                HLinred: mergedValues.HLinred,
+                BoldRow: mergedValues.BoldRow,
+                hideCategories: mergedValues.hideCategories,
+                hideTableHeadings: mergedValues.hideTableHeadings,
+                headermargin: mergedValues.headermargin,
+                footermarginPx,
+                LeftsignPd: mergedValues.LeftsignPd,
+                Rightsignpd: mergedValues.Rightsignpd,
+                showInvest: mergedValues.showInvest,
+                layerone,
+                omitBackground: false,
+                signatureLayout: mergedValues.signatureLayout || null,
+                showlab: mergedValues.showlab,
+                showdoctorfirst: mergedValues.showdoctorfirst,
+                showdoctorsecond: mergedValues.showdoctorsecond,
+            });
+        } else {
+            const contentWithCssAndImage = buildPdfBodyDocument({
+                cssContent: mergedValues.cssContent,
+                htmlContent: mergedValues.htmlContent,
+                header: mergedValues.header,
+                selectedFontSize: mergedValues.selectedFontSize,
+                selectedFontFamily: mergedValues.selectedFontFamily,
+                hideCategories: mergedValues.hideCategories,
+                hideTableHeadings: mergedValues.hideTableHeadings,
+                RowSpacing: mergedValues.RowSpacing,
+                HighLow: mergedValues.HighLow,
+                HLinred: mergedValues.HLinred,
+                BoldRow: mergedValues.BoldRow,
+            });
+
+            cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
+
+            const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+                format3,
+                headermargin: mergedValues.headermargin,
+                showInvest: mergedValues.showInvest,
+                header: mergedValues.header,
+                selectedFontSize: mergedValues.selectedFontSize,
+                selectedFontFamily: mergedValues.selectedFontFamily,
+            });
+
+            const offlineFooterTemplate = await buildPdfFooterTemplate({
+                cssContent: mergedValues.cssContent,
+                footer: mergedValues.footer,
+                footermarginPx,
+                LeftsignPd: mergedValues.LeftsignPd,
+                Rightsignpd: mergedValues.Rightsignpd,
+                selectedFontSize: mergedValues.selectedFontSize,
+                selectedFontFamily: mergedValues.selectedFontFamily,
+                signatureLayout: mergedValues.signatureLayout || null,
+                showlab: mergedValues.showlab,
+                showdoctorfirst: mergedValues.showdoctorfirst,
+                showdoctorsecond: mergedValues.showdoctorsecond,
+            });
+
+            const normalizedMergedSig = normalizeSignatureLayout(mergedValues.signatureLayout);
+            const mergedBottomPx = normalizedMergedSig.isCustom
+                ? Math.max(175, computeSignatureStageHeightPx(normalizedMergedSig, {
+                    lab: mergedValues.showlab !== false,
+                    doc1: mergedValues.showdoctorfirst !== false,
+                    doc2: mergedValues.showdoctorsecond !== false,
+                }) + footermarginPx + 45)
+                : 175;
+
+            pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                displayHeaderFooter: true,
+                headerTemplate: offlineHeaderTemplate,
+                footerTemplate: offlineFooterTemplate,
+                margin: {
+                    top: `${headermarginPx + (format3 ? ((mergedValues.investigationmargin * 1.10) + (layerone ? (mergedValues.investigationmargin < 110 ? 75 : 15) : (mergedValues.investigationmargin < 160 ? 55 : 0))) : ((mergedValues.investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
+                    bottom: `${mergedBottomPx}px`,
+                    left: '10px',
+                    right: '10px'
+                },
+            });
+        }
 
         const finalPdfBuffer = await addBackgroundToPdf(pdfBuffer, mergedValues.backgroundImageUrl);
         if (!finalPdfBuffer) {
@@ -1175,13 +1364,21 @@ const getpdfcontrolleruser = async (req, res) => {
     try {
         // Attempt to fetch data from the database
         const gettingcustomization = await customization.findOne({ reportId: effectiveReportId });
-        const tenantDefaultSettings = gettingcustomization?.tenantId
-            ? await defaultpdfsetting.findOne({ tenantId: gettingcustomization.tenantId }).lean()
-            : null;
+        const [tenantDefaultSettings, doctorsignDoc] = gettingcustomization?.tenantId
+            ? await Promise.all([
+                defaultpdfsetting.findOne({ tenantId: gettingcustomization.tenantId }).lean(),
+                doctorsign.findOne({ tenantId: gettingcustomization.tenantId }).select('signatureLayout').lean(),
+            ])
+            : [null, null];
         const resolvedPdfFormat = pdfformat || pdfFormat || gettingcustomization?.pdfformat || gettingcustomization?.pdfFormat || "reportFormat1";
         const isFormat5User = resolvedPdfFormat === "reportFormat5";
         const explicitUserSaved = Boolean(
             gettingcustomization?.hasUserSavedPrintSettings || tenantDefaultSettings?.hasUserSavedPrintSettings
+        );
+        const explicitInvestChoice = Boolean(
+            req.body?.showInvestExplicit
+            || gettingcustomization?.showInvestExplicit
+            || tenantDefaultSettings?.showInvestExplicit
         );
         const resolvedFormat5Prefs = isFormat5User
             ? resolveFormatAwarePreferences({
@@ -1189,8 +1386,15 @@ const getpdfcontrolleruser = async (req, res) => {
                 reqBody: req.body,
                 gettingcustomization,
                 defaultpdfsetting: tenantDefaultSettings,
+                doctorsignDoc,
             })
             : null;
+        const userEffectiveSigLayout = resolveEffectiveSignatureLayout({
+            reqBody: req.body,
+            doctorsignDoc,
+            defaultpdfsetting: tenantDefaultSettings,
+            customizationDoc: gettingcustomization,
+        });
 
         let mergedValues;
 
@@ -1222,7 +1426,12 @@ const getpdfcontrolleruser = async (req, res) => {
             mergedValues = {
                 pdfformat: resolvedPdfFormat,
                 pdfFormat: resolvedPdfFormat,
-                showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+                showInvest: showInvest !== undefined
+                    ? showInvest
+                    : (explicitInvestChoice
+                        ? (gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest)
+                        : DEFAULT_PDF_PREFERENCES.showInvest),
+                showInvestExplicit: explicitInvestChoice,
                 BoldRow: explicitUserSaved
                     ? (BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
                     : (BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
@@ -1259,6 +1468,7 @@ const getpdfcontrolleruser = async (req, res) => {
                 fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
                 fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
                 fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
+                signatureLayout: userEffectiveSigLayout,
                 res
             };
         } else {
@@ -1266,7 +1476,12 @@ const getpdfcontrolleruser = async (req, res) => {
             mergedValues = {
                 pdfformat: resolvedPdfFormat,
                 pdfFormat: resolvedPdfFormat,
-                showInvest: showInvest ?? gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+                showInvest: showInvest !== undefined
+                    ? showInvest
+                    : (explicitInvestChoice
+                        ? (gettingcustomization?.showInvest ?? tenantDefaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest)
+                        : DEFAULT_PDF_PREFERENCES.showInvest),
+                showInvestExplicit: explicitInvestChoice,
                 BoldRow: explicitUserSaved
                     ? (BoldRow ?? gettingcustomization?.BoldRow ?? tenantDefaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
                     : (BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow),
@@ -1281,7 +1496,7 @@ const getpdfcontrolleruser = async (req, res) => {
                 selectedFontFamily: selectedFontFamily || gettingcustomization?.selectedFontFamily || tenantDefaultSettings?.selectedFontFamily || DEFAULT_PDF_PREFERENCES.selectedFontFamily,
                 hideCategories: hideCategories ?? gettingcustomization?.hideCategories ?? tenantDefaultSettings?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
                 hideTableHeadings: hideTableHeadings ?? gettingcustomization?.hideTableHeadings ?? tenantDefaultSettings?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
-                reportId: value1,
+                reportId: effectiveReportId,
                 htmlContent: htmlContent || gettingcustomization?.htmlContent || "", // Priority: Database > Request > Default
                 cssContent: cssContent || gettingcustomization?.cssContent || "",
                 header: header || gettingcustomization?.header || "",
@@ -1303,13 +1518,18 @@ const getpdfcontrolleruser = async (req, res) => {
                 fileInputLabtext: fileInputLabtext || gettingcustomization?.fileInputLabtext || "",
                 fileInputDoctorlefttext: fileInputDoctorlefttext || gettingcustomization?.fileInputDoctorlefttext || "",
                 fileInputDoctorrighttext: fileInputDoctorrighttext || gettingcustomization?.fileInputDoctorrighttext || "",
+                signatureLayout: userEffectiveSigLayout,
                 res
             };
         }
 
         if (layerOne === "1layer") {
-            mergedValues.showInvest = false;
             mergedValues.layerone = true;
+            if (!["reportFormat1", "reportFormat5"].includes(resolvedPdfFormat)) {
+                mergedValues.showInvest = false;
+            } else if (!explicitInvestChoice && showInvest === undefined) {
+                mergedValues.showInvest = true;
+            }
         }
 
         const shouldDisableResolvedBackground = Boolean(disableBackgroundImage || checkBox);
@@ -1396,13 +1616,17 @@ const getCustomizationByReportId = async (req, res) => {
         }
 
         const tenantId = req.user?.tenantId?._id;
-        const customizationData = await customization.findOne({ reportId: reportId }).lean();
-        const defaultSettings = tenantId
-            ? await defaultpdfsetting.findOne({ tenantId }).lean()
-            : null;
+        const [customizationData, defaultSettings, doctorsignDoc] = await Promise.all([
+            customization.findOne({ reportId: reportId }).lean(),
+            tenantId ? defaultpdfsetting.findOne({ tenantId }).lean() : Promise.resolve(null),
+            tenantId ? doctorsign.findOne({ tenantId }).select('signatureLayout').lean() : Promise.resolve(null),
+        ]);
 
         const hasSavedCustomFlags = Boolean(
             customizationData?.hasUserSavedPrintSettings || defaultSettings?.hasUserSavedPrintSettings
+        );
+        const hasExplicitInvestChoice = Boolean(
+            customizationData?.showInvestExplicit || defaultSettings?.showInvestExplicit
         );
         const mergedCustomization = {
             ...(customizationData || {}),
@@ -1412,7 +1636,10 @@ const getCustomizationByReportId = async (req, res) => {
             marginLeft: customizationData?.marginLeft ?? defaultSettings?.marginLeft ?? DEFAULT_PDF_PREFERENCES.marginLeft,
             LeftsignPd: customizationData?.LeftsignPd ?? defaultSettings?.LeftsignPd ?? DEFAULT_PDF_PREFERENCES.LeftsignPd,
             Rightsignpd: customizationData?.Rightsignpd ?? defaultSettings?.Rightsignpd ?? DEFAULT_PDF_PREFERENCES.Rightsignpd,
-            showInvest: customizationData?.showInvest ?? defaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest,
+            showInvest: hasExplicitInvestChoice
+                ? (customizationData?.showInvest ?? defaultSettings?.showInvest ?? DEFAULT_PDF_PREFERENCES.showInvest)
+                : DEFAULT_PDF_PREFERENCES.showInvest,
+            showInvestExplicit: hasExplicitInvestChoice,
             BoldRow: hasSavedCustomFlags
                 ? (customizationData?.BoldRow ?? defaultSettings?.BoldRow ?? DEFAULT_PDF_PREFERENCES.BoldRow)
                 : DEFAULT_PDF_PREFERENCES.BoldRow,
@@ -1428,6 +1655,11 @@ const getCustomizationByReportId = async (req, res) => {
             hideCategories: customizationData?.hideCategories ?? defaultSettings?.hideCategories ?? DEFAULT_PDF_PREFERENCES.hideCategories,
             hideTableHeadings: customizationData?.hideTableHeadings ?? defaultSettings?.hideTableHeadings ?? DEFAULT_PDF_PREFERENCES.hideTableHeadings,
             investigationmargin: customizationData?.investigationmargin ?? defaultSettings?.investigationmargin ?? DEFAULT_PDF_PREFERENCES.investigationmargin,
+            signatureLayout: resolveEffectiveSignatureLayout({
+                doctorsignDoc,
+                defaultpdfsetting: defaultSettings,
+                customizationDoc: customizationData,
+            }),
             hasUserSavedPrintSettings: hasSavedCustomFlags,
         };
 

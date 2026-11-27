@@ -14,6 +14,15 @@ import {
     buildLegacyAbnormalHighlightCss,
     normalizeLegacyPdfBodyHtml,
 } from '../utils/pdfAbnormalHighlight.js';
+import {
+    generateFormat1PagePdf,
+    isReportFormat1,
+} from '../utils/pdfFormat1Helpers.js';
+import { applySignatureLayoutToFooterHtml } from '../utils/pdfSignatureLayout.js';
+import {
+    computeSignatureStageHeightPx,
+    normalizeSignatureLayout,
+} from '../../public/js/signatureLayoutEngine.mjs';
 
 const launchPdfBrowser = async () => {
     const launchOptions = getPuppeteerLaunchOptions();
@@ -246,6 +255,10 @@ const buildPdfFooterTemplate = async ({
     Rightsignpd = 0,
     selectedFontSize,
     selectedFontFamily,
+    signatureLayout = null,
+    showlab,
+    showdoctorfirst,
+    showdoctorsecond,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
     const safeFooter = sanitizePdfMarkup(footer);
@@ -253,6 +266,16 @@ const buildPdfFooterTemplate = async ({
     const rightPadding = parseNumericValue(Rightsignpd, 0);
     const fontSize = parseNumericValue(selectedFontSize, 12);
     const fontStack = resolvePdfFontStack(selectedFontFamily);
+    const sigResult = applySignatureLayoutToFooterHtml({
+        rawFooterHtml: safeFooter,
+        signatureLayout,
+        baseFontSizePx: fontSize,
+        isFormat5: false,
+        showLab: showlab,
+        showDoc1: showdoctorfirst,
+        showDoc2: showdoctorsecond,
+    });
+    const resolvedFooter = sigResult.footerHtml || safeFooter;
 
     return rewriteHtmlForOfflinePdf([
         '<!DOCTYPE html>',
@@ -264,11 +287,12 @@ const buildPdfFooterTemplate = async ({
         safeCss,
         `.pdf-footer-div { width: 92%; display: flex; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
         `.pdf-footer-div, .pdf-footer-div td, .pdf-footer-div th, .pdf-footer-div p, .pdf-footer-div span, .pdf-footer-div div, .pdf-footer-div label, .pdf-footer-div small, .pdf-footer-div strong { font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
+        sigResult.layoutCss || '',
         '</style>',
         '</head>',
         '<body>',
         '<div class="pdf-footer-div">',
-        safeFooter,
+        resolvedFooter,
         '</div>',
         '</body>',
         '</html>',
@@ -576,6 +600,7 @@ const offlinePdfGeneratorController = async (params) => {
                 fileInputLabtext: params?.fileInputLabtext,
                 fileInputDoctorlefttext: params?.fileInputDoctorlefttext,
                 fileInputDoctorrighttext: params?.fileInputDoctorrighttext,
+                signatureLayout: params?.signatureLayout || null,
             }, {
                 launchPdfBrowser,
                 addBackgroundToPdf: effectiveBgUrl ? addBackgroundToPdf : null,
@@ -593,71 +618,121 @@ const offlinePdfGeneratorController = async (params) => {
         let cleanupPageContent = async () => { };
 
         try {
-            // When a background image will be applied by pdf-lib, we render the
-            // Puppeteer page with a fully transparent background so that the
-            // pdf-lib background layer can show through underneath the content.
-            // We always pass an empty backgroundImageUrl to buildPdfBodyDocument
-            // so CSS never sets a background-image (which would conflict).
-            const contentWithCssAndImage = buildPdfBodyDocument({
-                cssContent,
-                htmlContent,
-                header,
-                selectedFontSize,
-                selectedFontFamily,
-                RowSpacing,
-                HighLow: HighLow ?? true,
-                HLinred: HLinred ?? true,
-                BoldRow: BoldRow ?? true,
-                hideCategories,
-                hideTableHeadings,
-                backgroundImageUrl: '', // always empty — pdf-lib handles the bg
-                disableBackgroundImage: true, // prevent CSS bg
-                checkBox,
-            });
-
-            cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
-            console.log('[offline-pdf] HTML rendered into Puppeteer page.');
-
-            const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+            const useFormat1Engine = isReportFormat1({
+                pdfformat,
                 format3,
-                headermargin,
-                showInvest,
                 header,
-                selectedFontSize,
-                selectedFontFamily,
-            });
-
-            const offlineFooterTemplate = await buildPdfFooterTemplate({
+                htmlContent,
                 cssContent,
-                footer,
-                footermarginPx,
-                LeftsignPd,
-                Rightsignpd,
-                selectedFontSize,
-                selectedFontFamily,
             });
 
-            // omitBackground: true makes Puppeteer produce a PDF with a
-            // transparent page background instead of the default white fill.
-            // This is the key fix — without it, the white background painted by
-            // Chromium covers the image drawn by pdf-lib below the content layer.
-            const pdfOptions = {
-                format: 'A4',
-                printBackground: true,
-                omitBackground: Boolean(effectiveBgUrl), // transparent when bg image present
-                displayHeaderFooter: true,
-                headerTemplate: offlineHeaderTemplate,
-                footerTemplate: offlineFooterTemplate,
-                margin: {
-                    top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
-                    bottom: '175px',
-                    left: '10px',
-                    right: '10px',
-                },
-            };
+            let pdfBuffer;
+            if (useFormat1Engine) {
+                pdfBuffer = await generateFormat1PagePdf({
+                    page,
+                    htmlContent,
+                    cssContent,
+                    header,
+                    footer,
+                    selectedFontSize,
+                    selectedFontFamily,
+                    RowSpacing,
+                    HighLow: HighLow ?? true,
+                    HLinred: HLinred ?? true,
+                    BoldRow: BoldRow ?? true,
+                    hideCategories,
+                    hideTableHeadings,
+                    headermargin,
+                    footermarginPx,
+                    LeftsignPd,
+                    Rightsignpd,
+                    showInvest: (!params?.showInvestExplicit && params?.offlineReportId) ? true : (showInvest ?? true),
+                    layerone,
+                    omitBackground: Boolean(effectiveBgUrl),
+                    signatureLayout: params?.signatureLayout || null,
+                    showlab: params?.showlab,
+                    showdoctorfirst: params?.showdoctorfirst,
+                    showdoctorsecond: params?.showdoctorsecond,
+                });
+            } else {
+                // When a background image will be applied by pdf-lib, we render the
+                // Puppeteer page with a fully transparent background so that the
+                // pdf-lib background layer can show through underneath the content.
+                // We always pass an empty backgroundImageUrl to buildPdfBodyDocument
+                // so CSS never sets a background-image (which would conflict).
+                const contentWithCssAndImage = buildPdfBodyDocument({
+                    cssContent,
+                    htmlContent,
+                    header,
+                    selectedFontSize,
+                    selectedFontFamily,
+                    RowSpacing,
+                    HighLow: HighLow ?? true,
+                    HLinred: HLinred ?? true,
+                    BoldRow: BoldRow ?? true,
+                    hideCategories,
+                    hideTableHeadings,
+                    backgroundImageUrl: '', // always empty — pdf-lib handles the bg
+                    disableBackgroundImage: true, // prevent CSS bg
+                    checkBox,
+                });
 
-            console.log('[offline-pdf] Calling page.pdf() with omitBackground =', pdfOptions.omitBackground);
-            const pdfBuffer = await page.pdf(pdfOptions);
+                cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
+                console.log('[offline-pdf] HTML rendered into Puppeteer page.');
+
+                const offlineHeaderTemplate = await buildPdfHeaderTemplate({
+                    format3,
+                    headermargin,
+                    showInvest,
+                    header,
+                    selectedFontSize,
+                    selectedFontFamily,
+                });
+
+                const offlineFooterTemplate = await buildPdfFooterTemplate({
+                    cssContent,
+                    footer,
+                    footermarginPx,
+                    LeftsignPd,
+                    Rightsignpd,
+                    selectedFontSize,
+                    selectedFontFamily,
+                    signatureLayout: params?.signatureLayout || null,
+                    showlab: params?.showlab,
+                    showdoctorfirst: params?.showdoctorfirst,
+                    showdoctorsecond: params?.showdoctorsecond,
+                });
+                const normalizedOfflineSig = normalizeSignatureLayout(params?.signatureLayout);
+                const offlineFooterBottomPx = normalizedOfflineSig.isCustom
+                    ? Math.max(175, computeSignatureStageHeightPx(normalizedOfflineSig, {
+                        lab: params?.showlab !== false,
+                        doc1: params?.showdoctorfirst !== false,
+                        doc2: params?.showdoctorsecond !== false,
+                    }) + footermarginPx + 45)
+                    : 175;
+
+                // omitBackground: true makes Puppeteer produce a PDF with a
+                // transparent page background instead of the default white fill.
+                // This is the key fix — without it, the white background painted by
+                // Chromium covers the image drawn by pdf-lib below the content layer.
+                const pdfOptions = {
+                    format: 'A4',
+                    printBackground: true,
+                    omitBackground: Boolean(effectiveBgUrl), // transparent when bg image present
+                    displayHeaderFooter: true,
+                    headerTemplate: offlineHeaderTemplate,
+                    footerTemplate: offlineFooterTemplate,
+                    margin: {
+                        top: `${headermarginPx + (format3 ? ((investigationmargin * 1.10) + (layerone ? (investigationmargin < 110 ? 75 : 15) : (investigationmargin < 160 ? 55 : 0))) : ((investigationmargin * 0.90) + (layerone ? 10 : 0)))}px`,
+                        bottom: `${offlineFooterBottomPx}px`,
+                        left: '10px',
+                        right: '10px',
+                    },
+                };
+
+                console.log('[offline-pdf] Calling page.pdf() with omitBackground =', pdfOptions.omitBackground);
+                pdfBuffer = await page.pdf(pdfOptions);
+            }
             console.log('[offline-pdf] page.pdf() complete. Buffer size:', pdfBuffer?.length ?? 0);
 
             let finalPdfBuffer;

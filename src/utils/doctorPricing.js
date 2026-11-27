@@ -220,15 +220,17 @@ const sanitizeDoctorFields = (doctor) => {
       doctorObj.gender = DEFAULT_SELF_DOCTOR.gender;
     }
   } else {
-    // For regular doctors, provide sensible defaults if fields are missing
+    // For regular doctors, preserve optional specialization as entered while keeping safe identity defaults
     if (!String(doctorObj.firstName || "").trim()) {
       doctorObj.firstName = doctorObj.displayName?.split(' ')?.[0] || "Doctor";
     }
     if (!String(doctorObj.lastName || "").trim()) {
       doctorObj.lastName = doctorObj.displayName?.split(' ')?.[1] || "Self";
     }
-    if (!String(doctorObj.specialization || "").trim()) {
-      doctorObj.specialization = "General";
+    if (typeof doctorObj.specialization !== "string") {
+      doctorObj.specialization = "";
+    } else {
+      doctorObj.specialization = doctorObj.specialization.trim();
     }
     if (!doctorObj.gender || !["male", "female", "other"].includes(String(doctorObj.gender).toLowerCase())) {
       doctorObj.gender = "other";

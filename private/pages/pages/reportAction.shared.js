@@ -1111,10 +1111,19 @@
             }
             const data = await res.json();
             const hasSaved = Boolean(data?.hasUserSavedPrintSettings);
+            const hasExplicitInvest = Boolean(data?.showInvestExplicit);
             const prefs = {
                 HighLow: hasSaved && data?.HighLow !== undefined ? Boolean(data.HighLow) : true,
                 HLinred: hasSaved && data?.HLinred !== undefined ? Boolean(data.HLinred) : true,
                 BoldRow: hasSaved && data?.BoldRow !== undefined ? Boolean(data.BoldRow) : true,
+                selectedFontSize: data?.selectedFontSize,
+                selectedFontFamily: data?.selectedFontFamily,
+                RowSpacing: data?.RowSpacing,
+                showInvest: hasExplicitInvest ? Boolean(data?.showInvest ?? true) : true,
+                showInvestExplicit: hasExplicitInvest,
+                hideCategories: Boolean(data?.hideCategories),
+                hideTableHeadings: Boolean(data?.hideTableHeadings),
+                hasUserSavedPrintSettings: hasSaved,
             };
             applyLegacyAbnormalHighlightStyles(prefs);
             return prefs;
@@ -1853,6 +1862,239 @@
         };
     }
 
+    function normalizeInvestLookupText(value) {
+        return stripPlainHtmlText(value)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim();
+    }
+
+    function resolveHeaderDoctorName(reportData = {}, bookingData = null) {
+        const unwrappedBooking = bookingData?.data && typeof bookingData.data === "object"
+            ? bookingData.data
+            : bookingData;
+        const isUsable = (val) => {
+            const s = String(val ?? "").replace(/\s+/g, " ").trim();
+            if (!s) return false;
+            return !["null", "undefined", "none", "select doctor", "-- select doctor --", "-", "--", "n/a"].includes(s.toLowerCase());
+        };
+        const isNonSelfDoctor = (val) => isUsable(val) && String(val).replace(/\s+/g, " ").trim().toLowerCase() !== "self";
+        const joinMetaName = (meta) => {
+            if (!meta || typeof meta !== "object") return "";
+            if (meta.displayName) return String(meta.displayName).trim();
+            return [meta.firstName, meta.lastName].filter(Boolean).join(" ").trim();
+        };
+
+        const candidates = [
+            reportData?.doctorName,
+            reportData?.savedDoctor,
+            joinMetaName(reportData?.savedDoctorMeta),
+            joinMetaName(reportData?.savedDoctorId),
+            reportData?.latestDoctorName,
+            reportData?.referredBy,
+            unwrappedBooking?.doctorName,
+            unwrappedBooking?.savedDoctor,
+            joinMetaName(unwrappedBooking?.savedDoctorMeta),
+            joinMetaName(unwrappedBooking?.savedDoctorId),
+            unwrappedBooking?.referredBy,
+        ];
+
+        // Prefer any named doctor over "Self" so a stale "Self" on one record never masks a real doctor
+        for (const candidate of candidates) {
+            if (isNonSelfDoctor(candidate)) {
+                return String(candidate).replace(/\s+/g, " ").trim();
+            }
+        }
+        for (const candidate of candidates) {
+            if (isUsable(candidate)) {
+                return String(candidate).replace(/\s+/g, " ").trim();
+            }
+        }
+        return "";
+    }
+
+    function resolveHeaderInvestigationsText({ report = {}, bookingData = null, barcodeMeta = null } = {}) {
+        const unwrappedBooking = bookingData?.data && typeof bookingData.data === "object"
+            ? bookingData.data
+            : bookingData;
+
+        const shortLookup = new Map();
+        const addAlias = (fullName, displayShort) => {
+            const key = normalizeInvestLookupText(fullName);
+            const shortVal = String(displayShort ?? "").replace(/\s+/g, " ").trim();
+            if (key && shortVal && !shortLookup.has(key)) {
+                shortLookup.set(key, shortVal);
+            }
+        };
+
+        const selectedItems = Array.isArray(unwrappedBooking?.selectedItems) && unwrappedBooking.selectedItems.length > 0
+            ? unwrappedBooking.selectedItems
+            : (Array.isArray(report?.selectedItems) ? report.selectedItems : []);
+
+        selectedItems.forEach((item) => {
+            if (!item) return;
+            const itemType = String(item.itemType || "").toLowerCase();
+            if (itemType === "package") {
+                const pkgDisplay = item.itemName || item.packageName || item.shortName || "";
+                addAlias(item.itemName || item.packageName, pkgDisplay);
+                addAlias(item.shortName, pkgDisplay);
+            } else {
+                const display = item.shortName || item.Short_name || item.itemName || "";
+                addAlias(item.itemName || item.testName || item.panelName, display);
+            }
+        });
+
+        const metaEntries = Array.isArray(barcodeMeta) ? barcodeMeta : (barcodeMeta ? [barcodeMeta] : []);
+        metaEntries.forEach((entry) => {
+            (entry?.singleTests || []).forEach((t) => {
+                addAlias(t?.Name || t?.testName || t?.name, t?.Short_name || t?.shortName || t?.Name || t?.testName);
+            });
+            (entry?.panels || []).forEach((p) => {
+                addAlias(p?.name || p?.panelName || p?.title || p?.testName, p?.Short_name || p?.shortName || p?.name || p?.panelName);
+            });
+            (entry?.packages || []).forEach((pk) => {
+                const pkgLabel = pk?.packageName || pk?.name || pk?.Short_name || pk?.shortName || "";
+                addAlias(pk?.packageName || pk?.name, pkgLabel);
+                addAlias(pk?.Short_name || pk?.shortName, pkgLabel);
+            });
+        });
+
+        (Array.isArray(report?.CategoryAndTest) ? report.CategoryAndTest : []).forEach((cat) => {
+            if (!cat) return;
+            if (cat.packageName) addAlias(cat.packageName, cat.packageName || cat.Short_name);
+            if (cat.panelName && (cat.Short_name || cat.shortName)) addAlias(cat.panelName, cat.Short_name || cat.shortName);
+            if (cat.title && (cat.Short_name || cat.shortName)) addAlias(cat.title, cat.Short_name || cat.shortName);
+            (Array.isArray(cat.tests) ? cat.tests : []).forEach((t) => {
+                const full = stripPlainHtmlText(t?.Name || t?.testName || "");
+                const sh = t?.Short_name || t?.shortName || t?.defaultShortName || "";
+                if (full && sh) addAlias(full, sh);
+            });
+        });
+
+        const tokens = [];
+        const seen = new Set();
+        const pushToken = (rawName, explicitDisplay = "") => {
+            const clean = String(rawName ?? "").replace(/\s+/g, " ").trim();
+            if (!clean) return;
+            const mapped = shortLookup.get(normalizeInvestLookupText(clean)) || "";
+            const resolved = String(explicitDisplay || mapped || clean).trim();
+            const key = normalizeInvestLookupText(resolved);
+            if (key && !seen.has(key)) {
+                seen.add(key);
+                tokens.push(resolved);
+            }
+        };
+
+        // 1. Full Report + booking selectedItems preserves booked order with Test/Panel short names & Package names
+        if (!report?.isSelectiveReport && selectedItems.length > 0) {
+            selectedItems.forEach((item) => {
+                const itemType = String(item?.itemType || "").toLowerCase();
+                if (itemType === "package") {
+                    pushToken(item?.itemName || item?.packageName || item?.shortName, item?.itemName || item?.packageName || item?.shortName);
+                } else {
+                    pushToken(item?.itemName || item?.shortName, item?.shortName || item?.Short_name || "");
+                }
+            });
+            if (tokens.length > 0) return tokens.join(", ");
+        }
+
+        // 2. Selective subset or report.uniquetestArray mapped cleanly via shortLookup
+        const sourceList = report?.isSelectiveReport && Array.isArray(report?.investigationShortNames)
+            ? report.investigationShortNames
+            : report?.uniquetestArray;
+
+        if (Array.isArray(sourceList) && sourceList.length > 0) {
+            sourceList.forEach((item) => {
+                const whole = String(item ?? "").trim();
+                if (!whole) return;
+                if (shortLookup.has(normalizeInvestLookupText(whole))) {
+                    pushToken(whole);
+                } else {
+                    whole.split(",").map((s) => s.trim()).filter(Boolean).forEach((part) => pushToken(part));
+                }
+            });
+        } else if (typeof sourceList === "string" && sourceList.trim()) {
+            sourceList.split(",").map((s) => s.trim()).filter(Boolean).forEach((part) => pushToken(part));
+        }
+
+        // Include any booked packages from barcodeMeta on Full Report if not already represented
+        if (!report?.isSelectiveReport) {
+            metaEntries.forEach((entry) => {
+                (entry?.packages || []).forEach((pk) => {
+                    const pkgLabel = String(pk?.packageName || pk?.name || "").trim();
+                    if (pkgLabel) pushToken(pkgLabel, pkgLabel);
+                });
+            });
+        }
+
+        // 2b. Fallback to barcodeMeta.investigations or booking.tableData test names mapped via shortLookup
+        if (!tokens.length && !report?.isSelectiveReport) {
+            metaEntries.forEach((entry) => {
+                (entry?.investigations || []).forEach((inv) => pushToken(inv));
+            });
+        }
+        if (!tokens.length && !report?.isSelectiveReport && Array.isArray(unwrappedBooking?.tableData)) {
+            unwrappedBooking.tableData.forEach((row) => {
+                String(row?.testName || "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .forEach((part) => pushToken(part));
+            });
+        }
+
+        // 3. Fallback to CategoryAndTest
+        if (!tokens.length && Array.isArray(report?.CategoryAndTest)) {
+            report.CategoryAndTest.forEach((cat) => {
+                if (cat?.packageName) {
+                    pushToken(cat.packageName, cat.packageName);
+                } else if (cat?.panelName || (cat?.title && !String(cat.title).includes("Unknown Title"))) {
+                    pushToken(cat.panelName || cat.title, cat.Short_name || cat.shortName || "");
+                } else if (cat?.category) {
+                    pushToken(cat.category);
+                }
+            });
+        }
+
+        return tokens.join(", ");
+    }
+
+    let cachedSigLayoutMod = null;
+    let sigLayoutPromise = null;
+
+    async function loadSignatureLayoutEngine() {
+        if (cachedSigLayoutMod) return cachedSigLayoutMod;
+        if (!sigLayoutPromise) {
+            sigLayoutPromise = (async () => {
+                const candidateOrigins = [];
+                if (typeof BASE_URL === "string" && BASE_URL) candidateOrigins.push(BASE_URL);
+                if (typeof window !== "undefined" && window.location?.origin && !candidateOrigins.includes(window.location.origin)) {
+                    candidateOrigins.push(window.location.origin);
+                }
+                for (const origin of candidateOrigins) {
+                    try {
+                        const mod = await import(`${origin}/js/signatureLayoutEngine.mjs?v=1`);
+                        if (typeof mod?.normalizeSignatureLayout === "function") {
+                            cachedSigLayoutMod = mod;
+                            return mod;
+                        }
+                    } catch (err) {
+                        console.warn("[ReportActionHelpers] Could not load signatureLayoutEngine.mjs:", err?.message || err);
+                    }
+                }
+                return null;
+            })();
+        }
+        return sigLayoutPromise;
+    }
+
+    async function applySignatureLayoutToFooterContainer(containerEl, rawLayout, opts = {}) {
+        if (!containerEl) return false;
+        const mod = await loadSignatureLayoutEngine();
+        if (!mod?.applySignatureLayoutToContainer) return false;
+        return mod.applySignatureLayoutToContainer(containerEl, rawLayout, opts);
+    }
+
     window.ReportActionHelpers = {
         normalizeCounters,
         normalizeActionHistory,
@@ -1880,5 +2122,9 @@
         mountReportFilterDrawer,
         isSelectivePrintActive,
         setActiveSelectiveState,
+        resolveHeaderDoctorName,
+        resolveHeaderInvestigationsText,
+        loadSignatureLayoutEngine,
+        applySignatureLayoutToFooterContainer,
     };
 })();

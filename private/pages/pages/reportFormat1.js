@@ -159,15 +159,67 @@
         fetchreport(),
         window.ReportActionHelpers?.loadClinicalRangeEvaluator?.(),
     ]);
-    const bookingTestMetaPromise = fetchBookingTestMeta(rawReport?.bookingId);
-    const selectiveCtx = window.ReportActionHelpers?.resolveInitialSelectiveReport
-        ? await window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
-        : { fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false };
+    let rawBarcodeTestsPayload = null;
+    const [bookingTestMetaPromise, bookingData, selectiveCtx] = await Promise.all([
+        fetchBookingTestMeta(rawReport?.bookingId),
+        fetchBookingDetailsSafe(rawReport?.bookingId),
+        window.ReportActionHelpers?.resolveInitialSelectiveReport
+            ? window.ReportActionHelpers.resolveInitialSelectiveReport(rawReport, rawReport?.bookingId)
+            : Promise.resolve({ fullReport: rawReport, activeReport: rawReport, initialManifest: null, barcodeMeta: null, isSelective: false }),
+    ]);
     const fullReport = selectiveCtx?.fullReport || rawReport;
     let report = selectiveCtx?.activeReport || rawReport;
 
     value1 = report._id;
-    window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1);
+    let activePrintPrefs = null;
+    function applyFormat1PrintPreferences(prefs) {
+        if (!prefs || !pageRootEl) return;
+        activePrintPrefs = prefs;
+        if (prefs.selectedFontFamily) {
+            pageRootEl.style.setProperty('--rf1-font-family', `"${prefs.selectedFontFamily}", "Segoe UI", Arial, sans-serif`);
+        }
+        if (prefs.hasUserSavedPrintSettings && Number.isFinite(Number(prefs.selectedFontSize))) {
+            const safeBodyFont = Math.max(8, Math.min(20, Number(prefs.selectedFontSize)));
+            pageRootEl.style.setProperty('--rf1-body-font-size', `${safeBodyFont}px`);
+        }
+        if (prefs.hasUserSavedPrintSettings && Number.isFinite(Number(prefs.RowSpacing))) {
+            const rs = Number(prefs.RowSpacing);
+            const padY = rs <= 5 ? (3.5 + Math.max(0, rs - 1) * 1.4) : Math.max(4, Math.min(10, rs / 2));
+            pageRootEl.style.setProperty('--rf1-row-pad-y', `${padY.toFixed(1)}px`);
+        }
+        const investRow = document.getElementById('investDiv');
+        if (investRow) {
+            const shouldShowInvest = prefs.showInvestExplicit
+                ? (prefs.showInvest !== false)
+                : true;
+            investRow.style.display = shouldShowInvest ? 'flex' : 'none';
+        }
+        document.querySelectorAll('.headings .category-heading').forEach((el) => {
+            el.style.display = prefs.hideCategories ? 'none' : '';
+        });
+        document.querySelectorAll('table.test-table thead, .headings .table-heading').forEach((el) => {
+            el.style.display = prefs.hideTableHeadings ? 'none' : '';
+        });
+        const effSigLayout = activeSignatureLayout || prefs?.signatureLayout || null;
+        const footerStageEl = document.querySelector('.signed-off-div2');
+        if (footerStageEl && effSigLayout && window.ReportActionHelpers?.applySignatureLayoutToFooterContainer) {
+            const safeBodyPx = Number(prefs?.selectedFontSize) || 12;
+            window.ReportActionHelpers.applySignatureLayoutToFooterContainer(footerStageEl, effSigLayout, {
+                baseFontSizePx: Math.max(8.5, safeBodyPx - 1),
+                visibility: {
+                    lab: Boolean(reportformatlabsign),
+                    doc1: Boolean(reportformatfirstdoctorsign),
+                    doc2: Boolean(reportformatseconddoctorsign),
+                },
+            });
+        }
+    }
+    const legacyPrefsPromise = window.ReportActionHelpers?.fetchAndApplyLegacyPrintSettings?.(value1)
+        ?.then((prefs) => {
+            applyFormat1PrintPreferences(prefs);
+            return prefs;
+        })
+        ?.catch(() => null);
     const baseUrl = `${BASE_URL}/pages/pages/download_reports.html`;
     let backgroundImageUrl = null;
     const templateImagePromise = fetchTemplateImages()
@@ -184,6 +236,8 @@
     const urlWithParam = `${baseUrl}?value=${encodeURIComponent(value1)}&id=${encodeURIComponent(user.tenantId._id)}`;
 
     let reportformatlabsign = false;
+    let activeSignatureLayout = null;
+    let cachedSigLayoutEngine = null;
     let reportformatfirstdoctorsign = false;
     let reportformatseconddoctorsign = false;
     let prewarmInFlight = false;
@@ -506,11 +560,18 @@
         dockEl: document.querySelector('.download-pdf-div'),
         onSelectionApplied: async ({ filteredReport, isSelective }) => {
             report = filteredReport;
-            const investEl = document.getElementById('investigationarray') || document.querySelector('#investDiv .value');
+            const investEl = document.getElementById('investigationarray') || document.querySelector('#investDiv .rf1-invest-value');
             if (investEl) {
-                investEl.textContent = Array.isArray(filteredReport?.uniquetestArray)
-                    ? filteredReport.uniquetestArray.join(', ')
-                    : String(filteredReport?.uniquetestArray || '');
+                const resolvedInv = reportActionHelpers.resolveHeaderInvestigationsText
+                    ? reportActionHelpers.resolveHeaderInvestigationsText({
+                        report: filteredReport,
+                        bookingData,
+                        barcodeMeta: selectiveCtx?.barcodeMeta || rawBarcodeTestsPayload || null,
+                    })
+                    : (Array.isArray(filteredReport?.uniquetestArray)
+                        ? filteredReport.uniquetestArray.join(', ')
+                        : String(filteredReport?.uniquetestArray || ''));
+                investEl.textContent = resolvedInv || 'Standard Evaluation';
             }
             if (prefetchedViewBlobUrl) {
                 URL.revokeObjectURL(prefetchedViewBlobUrl);
@@ -520,7 +581,8 @@
             prefetchedPayloadKey = '';
             renderTask = renderData(filteredReport);
             await renderTask;
-            await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+            const refreshedPrefs = await reportActionHelpers.fetchAndApplyLegacyPrintSettings?.(value1);
+            applyFormat1PrintPreferences(refreshedPrefs);
             setActionFeedback(
                 isSelective
                     ? 'Selected tests/panels report par apply ho gaye. Print ya Download karein.'
@@ -564,13 +626,16 @@
 
         const doctorsdata = await response.json();
         doctorsSignCache = doctorsdata;
+        activeSignatureLayout = doctorsdata?.signatureLayout || activePrintPrefs?.signatureLayout || null;
         reportformatlabsign          = doctorsdata.showlabinchargesign;
         reportformatfirstdoctorsign  = doctorsdata.showfirstdoctorsign;
         reportformatseconddoctorsign = doctorsdata.showseconddoctorsign;
 
-        const slot = (flag, src, text) => `
-            <div class="left-sign" style="display:${flag ? 'block' : 'none'}; text-align:center;">
-                ${src ? `<img src="${src}" width="95" height="35" loading="eager" decoding="sync"/>` : `<div style="height:35px;width:95px;"></div>`}
+        const slot = (slotKey, flag, src, text) => `
+            <div class="left-sign" data-sig-slot="${slotKey}" style="display:${flag ? 'block' : 'none'}; text-align:center;">
+                <div class="rf-sig-img-wrap">
+                    ${src ? `<img src="${src}" width="95" height="35" loading="eager" decoding="sync"/>` : `<div class="rf-sig-spacer" style="height:35px;width:95px;"></div>`}
+                </div>
                 <div class="textspan">${text || ''}</div>
             </div>`;
 
@@ -579,11 +644,23 @@
         const div = document.createElement('div');
         div.className = 'signed-off-div2';
         div.innerHTML = `
-        ${slot(reportformatfirstdoctorsign, doctorsdata.firstdoctorsign, doctorsdata.firstdoctorsigninfo)}
-        ${slot(reportformatlabsign, doctorsdata.labinchargesign, doctorsdata.labinchargeinfo)}
-        ${slot(reportformatseconddoctorsign, doctorsdata.seconddoctorsign, doctorsdata.seconddoctorsigninfo)}
+        ${slot('doc1', reportformatfirstdoctorsign, doctorsdata.firstdoctorsign, doctorsdata.firstdoctorsigninfo)}
+        ${slot('lab', reportformatlabsign, doctorsdata.labinchargesign, doctorsdata.labinchargeinfo)}
+        ${slot('doc2', reportformatseconddoctorsign, doctorsdata.seconddoctorsign, doctorsdata.seconddoctorsigninfo)}
         `;
         signoffdiv.appendChild(div);
+        if (window.ReportActionHelpers?.loadSignatureLayoutEngine) {
+            cachedSigLayoutEngine = await window.ReportActionHelpers.loadSignatureLayoutEngine();
+        }
+        const safeBodyPx = Number(activePrintPrefs?.selectedFontSize) || 12;
+        await window.ReportActionHelpers?.applySignatureLayoutToFooterContainer?.(div, activeSignatureLayout, {
+            baseFontSizePx: Math.max(8.5, safeBodyPx - 1),
+            visibility: {
+                lab: Boolean(reportformatlabsign),
+                doc1: Boolean(reportformatfirstdoctorsign),
+                doc2: Boolean(reportformatseconddoctorsign),
+            },
+        });
         return doctorsdata;
     } catch (error) {
         console.log(error.message);
@@ -735,9 +812,12 @@
         }
 
         return {
+            pdfformat:           user?.pdfFormat || 'reportFormat1',
             showlab:             reportformatlabsign,
             showdoctorfirst:     reportformatfirstdoctorsign,
             showdoctorsecond:    reportformatseconddoctorsign,
+            showInvest:          activePrintPrefs?.showInvestExplicit ? (activePrintPrefs.showInvest !== false) : true,
+            showInvestExplicit:  Boolean(activePrintPrefs?.showInvestExplicit),
             htmlContent:         document.querySelector('.container2').outerHTML,
             cssContent:          document.getElementById('stying').innerHTML,
             header:              document.querySelector('.report-details').outerHTML,
@@ -747,6 +827,7 @@
             checkBox:            !withBackground,       // true = no background (server side flag)
             disableBackgroundImage: !withBackground,    // extra safety flag for server
             investigationmargin: countLines(),
+            signatureLayout:     activeSignatureLayout || activePrintPrefs?.signatureLayout || null,
             skipCustomizationSave: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
             isSelectivePrint: Boolean(reportActionHelpers.isSelectivePrintActive?.()),
             ...extras
@@ -1252,6 +1333,39 @@
         } catch (error) { console.log(error); }
     }
 
+    async function fetchBookingDetailsSafe(bookingId) {
+        if (bookingId) {
+            try {
+                const response = await fetchWithTopLoaderControl(`/api/v1/user/getbooking`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ bookingId }),
+                }, { silent: isBootPhase });
+                if (response.ok) {
+                    const payload = await response.json();
+                    const unwrapped = (payload?.data && typeof payload.data === 'object') ? payload.data : payload;
+                    if (unwrapped && (unwrapped.bookingId || unwrapped._id || unwrapped.patientName)) {
+                        return unwrapped;
+                    }
+                }
+            } catch { /* fall back to localStorage cache when offline */ }
+        }
+
+        try {
+            const cachedRaw = localStorage.getItem('booking');
+            if (cachedRaw) {
+                const cached = JSON.parse(cachedRaw);
+                const unwrappedCached = (cached?.data && typeof cached.data === 'object') ? cached.data : cached;
+                if (unwrappedCached && (!bookingId || String(unwrappedCached.bookingId || '') === String(bookingId || ''))) {
+                    return unwrappedCached;
+                }
+            }
+        } catch { /* ignore */ }
+
+        return null;
+    }
+
     async function fetchBookingTestMeta(bookingId) {
         if (!bookingId) {
             return new Map();
@@ -1269,6 +1383,7 @@
             }
 
             const payload = await response.json();
+            rawBarcodeTestsPayload = payload;
             return buildBookingTestMetaMap(payload?.[0]);
         } catch (error) {
             console.warn("Unable to load booking test metadata:", error);
@@ -1322,7 +1437,9 @@
     }
 
     function formatDateTime(timestamp) {
+        if (!timestamp) return '';
         const date    = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return '';
         const month   = (date.getMonth() + 1).toString().padStart(2, '0');
         const day     = date.getDate().toString().padStart(2, '0');
         const year    = date.getFullYear();
@@ -1336,49 +1453,71 @@
     async function populateHeader() {
         const bookingRegElem = document.getElementById("booking-registeration-number");
         if (bookingRegElem) {
-            bookingRegElem.innerText = report.reg_id;
+            bookingRegElem.innerText = report.reg_id || '';
         }
 
+        const resolvedDoctorName = reportActionHelpers.resolveHeaderDoctorName
+            ? (reportActionHelpers.resolveHeaderDoctorName(report, bookingData) || 'Self')
+            : (report.doctorName || report.savedDoctor || bookingData?.doctorName || bookingData?.savedDoctor || 'Self');
+
+        const investigationsText = reportActionHelpers.resolveHeaderInvestigationsText
+            ? (reportActionHelpers.resolveHeaderInvestigationsText({
+                report,
+                bookingData,
+                barcodeMeta: selectiveCtx?.barcodeMeta || rawBarcodeTestsPayload || null,
+            }) || 'Standard Evaluation')
+            : (Array.isArray(report?.uniquetestArray)
+                ? report.uniquetestArray.filter(Boolean).join(', ')
+                : String(report?.uniquetestArray || ''));
+
+        const registeredIso = report?.date
+            ? `${new Date(report.date).toISOString().split('T')[0]}T${report.time || '00:00'}`
+            : (report?.registeredOn || bookingData?.registeredOn || '');
+
+        const regDisplayValue = report.reg_id || report.bookingId || bookingData?.bookingId || '';
+        const accessionDisplayValue = report.bookingId || bookingData?.bookingId || report.reg_id || '';
+
         const patientdetails = document.createElement("div");
-        patientdetails.classList.add("report-details-innerDiv2");
+        patientdetails.classList.add("report-details-innerDiv2", "rf1-header-card");
         patientdetails.innerHTML = `
         <div class="format1left2">
             <div class="format1-infor-div fixedheightdiv">
                 <div class="format1-tags">Patient Name:</div>
-                <div class="value" style="font-weight:700;font-size:15px;color:#111;">${report.patientName}</div>
+                <div class="value rf1-patient-name">${report.patientName || ''}</div>
             </div>
-            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Age / Sex:</div><div class="value">${report.year} / ${report.gender}</div></div>
-            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Referred By:</div><div class="value">${report.doctorName}</div></div>
-            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Reg. no:</div><div class="value">${report.bookingId}</div></div>
-            <div class="format1-infor-div forhide fixedheightdiv"><div class="format1-tags">Lab Name:</div><div class="value">${report.labName}</div></div>
-            <div class="format1-infor-div forhide" id="investDiv"><div class="format1-tags">Investigations:</div><div class="value"><span id="investigationarray">${report.uniquetestArray}</span></div></div>
+            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Age / Sex:</div><div class="value">${report.year || ''} / ${report.gender || ''}</div></div>
+            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Referred By:</div><div class="value">${resolvedDoctorName}</div></div>
+            <div class="format1-infor-div fixedheightdiv"><div class="format1-tags">Reg. no:</div><div class="value">${regDisplayValue}</div></div>
+            <div class="format1-infor-div forhide fixedheightdiv"><div class="format1-tags">Lab Name:</div><div class="value">${report.labName || bookingData?.labName || ''}</div></div>
         </div>
         <div class="format1-right2">
-            <div>
-                <div class="format1-registered-div2">
-                    <div class="barcode-div2"><div class="barcode2"><div id="barcodeContainer2">
-                        <img id="barcodeImage" alt="Generated Barcode" style="background:transparent;" />
-                    </div></div></div>
-                </div>
-                <div class="format1-registered-div2">
-                    <div class="format1-registeration-tag2">Registered on:</div>
-                    <div class="format1-time-div">${formatDateTime(new Date(report.date).toISOString().split('T')[0] + "T" + report.time)}</div>
-                </div>
-                <div class="format1-registered-div2 forhide">
-                    <div class="format1-registeration-tag2">Collected on:</div>
-                    <div class="format1-time-div">${formatDateTime(report.collectedOn)}</div>
-                </div>
-                <div class="format1-registered-div2 forhide">
-                    <div class="format1-registeration-tag2">Received on:</div>
-                    <div class="format1-time-div">${formatDateTime(report.receivedOn)}</div>
-                </div>
-                <div class="format1-registered-div2">
-                    <div class="format1-registeration-tag2">Reported on:</div>
-                    <div class="format1-time-div">${formatDateTime(report.reportedOn)}</div>
-                </div>
+            <div class="rf1-barcode-band">
+                <div class="barcode-div2"><div class="barcode2"><div id="barcodeContainer2">
+                    <img id="barcodeImage" alt="Generated Barcode" style="background:transparent;" />
+                </div></div></div>
+                <span class="rf1-accession-id">${accessionDisplayValue}</span>
+            </div>
+            <div class="format1-registered-div2">
+                <div class="format1-registeration-tag2">Registered on:</div>
+                <div class="format1-time-div">${formatDateTime(registeredIso)}</div>
+            </div>
+            <div class="format1-registered-div2 forhide">
+                <div class="format1-registeration-tag2">Collected on:</div>
+                <div class="format1-time-div">${formatDateTime(report.collectedOn)}</div>
+            </div>
+            <div class="format1-registered-div2 forhide">
+                <div class="format1-registeration-tag2">Received on:</div>
+                <div class="format1-time-div">${formatDateTime(report.receivedOn)}</div>
+            </div>
+            <div class="format1-registered-div2">
+                <div class="format1-registeration-tag2">Reported on:</div>
+                <div class="format1-time-div">${formatDateTime(report.reportedOn)}</div>
+            </div>
+            <div class="rf1-header-invest" id="investDiv">
+                <span class="rf1-invest-label">Investigations:</span>
+                <span class="rf1-invest-value" id="investigationarray">${investigationsText}</span>
             </div>
         </div>
-        <div class="format1-rightcover"><span>${report.bookingId}</span></div>
         <div class="sign click qr-div">
             <img id="qrimg" src="" style="display:none;" loading="eager" decoding="sync">
             <div class="branding">
@@ -1394,13 +1533,20 @@
     }
 
     async function barcodegenerator() {
-        const booking = JSON.parse(localStorage.getItem('booking'));
+        let booking = null;
+        try {
+            booking = JSON.parse(localStorage.getItem('booking') || 'null');
+        } catch {
+            booking = null;
+        }
+        const barcodeNum = booking?.acceptedbarcode?.[0] || bookingData?.acceptedbarcode?.[0] || report?.bookingId || '';
+        if (!barcodeNum) return;
         try {
             const response = await fetchWithTopLoaderControl(`/api/v1/user/generate-barcode?nonumber=${true}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    number: booking.acceptedbarcode[0] || booking.bookingId,
+                    number: barcodeNum,
                     displayValue: false,
                     background: 'transparent'
                 }),
@@ -1408,8 +1554,10 @@
             if (response.ok) {
                 const data = await response.json();
                 const barcodeImg = document.getElementById("barcodeImage");
-                barcodeImg.src = data.barcode;
-                barcodeImg.style.background = 'transparent';
+                if (barcodeImg && data?.barcode) {
+                    barcodeImg.src = data.barcode;
+                    barcodeImg.style.background = 'transparent';
+                }
             } else {
                 console.warn("Failed to generate barcode!");
             }
@@ -1566,10 +1714,10 @@
                 <thead>
                     <tr>
                         <th class="deletion"></th>
-                        <th width="300px">Test Name</th>
-                        <th width="175px" class="valuecell">Value</th>
-                        <th>Unit</th>
-                        <th>Reference</th>
+                        <th class="col-test">Test Description</th>
+                        <th class="valuecell col-val">Result</th>
+                        <th class="col-unit">Unit</th>
+                        <th class="col-ref">Biological Ref. Interval</th>
                     </tr>
                 </thead>`;
 
@@ -1628,12 +1776,14 @@
 
                         const valueCell = document.createElement("td");
                         valueCell.className = "high-low";
-                        valueCell.innerHTML = `<div class="HL"><span class="high-low-marker">${testNameSuffix}</span></div><span class="result-value">${test.value || ''}</span>`;
+                        valueCell.innerHTML = `<div class="rf1-result-wrap"><span class="result-value">${test.value || ''}</span><div class="HL"><span class="high-low-marker">${testNameSuffix}</span></div></div>`;
 
                         const unitCell = document.createElement("td");
+                        unitCell.className = "unit-cell";
                         unitCell.textContent = test.unit || '';
 
                         const referenceCell = document.createElement("td");
+                        referenceCell.className = "reference-cell";
                         referenceCell.textContent = test.reference || '';
 
                         testRow.appendChild(createDeleteCell());
@@ -1673,7 +1823,7 @@
                     const remarkRow = document.createElement("tr");
                     remarkRow.innerHTML = `
                     <td class="wrong"></td>
-                    <td colspan="4" class="remark-row"><div>Remark:</div> <span>${test.remark}</span></td>`;
+                    <td colspan="4" class="remark-row"><div class="rf1-callout"><span class="rf1-callout-label">Remark:</span><span>${test.remark}</span></div></td>`;
                     tbodyFrag.appendChild(remarkRow);
                 }
 
@@ -1689,9 +1839,9 @@
                 if (deleteIcon) {
                     deleteIcon.addEventListener("click", () => {
                         const currentRow = deleteIcon.closest("tr");
-                        let next = currentRow.nextElementSibling;
-                        if (next?.querySelector(".remark-row")) { next.remove(); next = currentRow.nextElementSibling; }
-                        if (next?.querySelector(".details-row")) next.remove();
+                        while (currentRow.nextElementSibling?.querySelector(".remark-row, .details-row")) {
+                            currentRow.nextElementSibling.remove();
+                        }
                         currentRow.remove();
                     });
                 }
@@ -1702,25 +1852,32 @@
             ['advice', 'notes', 'remarks'].forEach(key => {
                 if (categoryData[key]) {
                     const row  = document.createElement("tr");
+                    const delSpacer = document.createElement("td");
+                    delSpacer.className = "wrong";
                     const cell = document.createElement("td");
                     cell.colSpan = 4;
                     cell.className = key;
-                    cell.innerHTML = `<div>${key.charAt(0).toUpperCase() + key.slice(1)}:</div> <span>${categoryData[key]}</span>`;
+                    cell.innerHTML = `<div class="rf1-callout"><span class="rf1-callout-label">${key.charAt(0).toUpperCase() + key.slice(1)}:</span><span>${categoryData[key]}</span></div>`;
+                    row.appendChild(delSpacer);
                     row.appendChild(cell);
                     tbody.appendChild(row);
                 }
             });
 
-            table.appendChild(tbody);
-
             if (categoryData.interpretation) {
                 const row  = document.createElement("tr");
+                const delSpacer = document.createElement("td");
+                delSpacer.className = "wrong";
                 const cell = document.createElement("td");
                 cell.colSpan = 4;
+                cell.className = "interpretation-cell";
                 cell.innerHTML = `<div class="interpretation"><p style="font-weight:bold;">Interpretation</p>${categoryData.interpretation}</div>`;
+                row.appendChild(delSpacer);
                 row.appendChild(cell);
-                table.appendChild(row);
+                tbody.appendChild(row);
             }
+
+            table.appendChild(tbody);
 
             section.appendChild(table);
             deleteH2Button.addEventListener("click", () => section.remove());
@@ -1741,6 +1898,10 @@
             more.className = "moreDetails";
             more.innerHTML = `<span>Additional Findings :-</span><br><div>${data.MoreDetails}</div>`;
             container.appendChild(more);
+        }
+
+        if (activePrintPrefs) {
+            applyFormat1PrintPreferences(activePrintPrefs);
         }
     }
 
@@ -1946,6 +2107,23 @@
                 </div>
             `;
 
+            const printFontFamily = activePrintPrefs?.selectedFontFamily
+                ? `"${activePrintPrefs.selectedFontFamily}", "Segoe UI", Arial, sans-serif`
+                : `'Segoe UI', Arial, Helvetica, sans-serif`;
+            const printBodyFontSize = (activePrintPrefs?.hasUserSavedPrintSettings && Number.isFinite(Number(activePrintPrefs?.selectedFontSize)))
+                ? Math.max(8, Math.min(20, Number(activePrintPrefs.selectedFontSize)))
+                : 12;
+            const printRowPadY = (activePrintPrefs?.hasUserSavedPrintSettings && Number.isFinite(Number(activePrintPrefs?.RowSpacing)))
+                ? (Number(activePrintPrefs.RowSpacing) <= 5
+                    ? Number((2.8 + Math.max(0, Number(activePrintPrefs.RowSpacing) - 1) * 1.15).toFixed(2))
+                    : Number(Math.max(3.5, Math.min(10, Number(activePrintPrefs.RowSpacing) / 2)).toFixed(2)))
+                : 5;
+            const hidePrintCats = Boolean(activePrintPrefs?.hideCategories);
+            const hidePrintThead = Boolean(activePrintPrefs?.hideTableHeadings);
+            const showPrintInvest = activePrintPrefs?.showInvestExplicit
+                ? (activePrintPrefs.showInvest !== false)
+                : true;
+
             const printStyles = `
                 ${cssContent}
 
@@ -1961,23 +2139,29 @@
                 }
 
                 body {
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+                    font-family: ${printFontFamily} !important;
                     margin: 0 !important;
                     padding: 0 !important;
                     background: #ffffff !important;
-                    color: #000000 !important;
+                    color: #0f172a !important;
                     width: 100% !important;
+                    font-variant-numeric: tabular-nums !important;
                 }
 
-                .print-wrapper {
+                .print-wrapper,
+                #reportFormat1Root {
                     width: 100% !important;
                     margin: 0 auto !important;
+                    padding: 0 !important;
+                    background: #ffffff !important;
                 }
 
                 .container-format1 {
                     width: 100% !important;
+                    max-width: 100% !important;
                     margin: 0 !important;
                     padding: 0 !important;
+                    border: none !important;
                     box-shadow: none !important;
                     border-radius: 0 !important;
                 }
@@ -1987,7 +2171,6 @@
                     min-width: 0 !important;
                 }
 
-                /* Hide UI controls, legacy markers, and hidden fields */
                 .download-pdf-div,
                 .downloadDiv,
                 .wrong,
@@ -1998,213 +2181,233 @@
                 #loadingOverlay,
                 .action-feedback-message,
                 .page-boot-loader,
-                .container22 > .header,
-                .container22 > .container2 + br,
-                .container22 > h3,
-                .forhide {
+                .container22 > .header {
                     display: none !important;
                 }
 
-                /* Patient Demographics Box */
+                /* Format 1 Header Card: strictly locked to 10px */
                 .report-details {
                     width: 100% !important;
-                    margin: 0 0 10px 0 !important;
+                    margin: 0 0 28px 0 !important;
+                }
+
+                .report-details-innerDiv2,
+                .report-details-innerDiv2 * {
+                    font-size: 10px !important;
+                    line-height: 1.32 !important;
+                    font-family: ${printFontFamily} !important;
                 }
 
                 .report-details-innerDiv2 {
-                    position: relative !important;
                     width: 100% !important;
-                    border: 1px solid #000 !important;
-                    padding: 4px 6px !important;
-                    min-height: 80px !important;
-                    box-sizing: border-box !important;
+                    display: flex !important;
+                    align-items: stretch !important;
+                    justify-content: space-between !important;
+                    border: 1px solid #cbd5e1 !important;
+                    border-top: 2.5px solid #1e3a5f !important;
+                    border-radius: 4px !important;
+                    background: #f8fafc !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
                 }
 
                 .format1left2 {
-                    width: 44% !important;
-                    display: inline-flex !important;
+                    flex: 1.05 1 0 !important;
+                    min-width: 0 !important;
+                    width: auto !important;
+                    padding: 8px 12px !important;
+                    display: flex !important;
                     flex-direction: column !important;
-                    justify-content: space-around !important;
-                    padding-left: 4px !important;
+                    justify-content: center !important;
+                    gap: 3px !important;
                 }
 
                 .format1-infor-div {
                     display: flex !important;
-                    align-items: baseline !important;
+                    align-items: flex-start !important;
                     gap: 6px !important;
-                    font-size: 11.5px !important;
-                    line-height: 1.4 !important;
-                    color: #111 !important;
-                    padding: 0 !important;
                     margin: 0 !important;
-                    white-space: nowrap !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
                 }
 
                 .format1-tags {
-                    min-width: 82px !important;
-                    width: 82px !important;
-                    font-weight: 500 !important;
-                    color: #333 !important;
+                    width: 80px !important;
+                    min-width: 80px !important;
+                    flex-shrink: 0 !important;
+                    font-weight: 600 !important;
+                    color: #475569 !important;
                 }
 
                 .format1-infor-div .value {
-                    white-space: nowrap !important;
-                    overflow: visible !important;
-                }
-
-                #investDiv.format1-infor-div {
-                    white-space: normal !important;
-                    align-items: flex-start !important;
-                    width: 100% !important;
-                    max-width: 100% !important;
-                    box-sizing: border-box !important;
-                }
-
-                #investDiv .format1-tags {
-                    flex-shrink: 0 !important;
-                    min-width: 82px !important;
-                    width: 82px !important;
-                }
-
-                #investDiv .value {
-                    white-space: normal !important;
-                    word-break: break-word !important;
-                    overflow-wrap: break-word !important;
-                    flex: 1 !important;
+                    flex: 1 1 auto !important;
                     min-width: 0 !important;
-                    font-size: 10.5px !important;
-                    line-height: 1.25 !important;
-                }
-
-                #investDiv #investigationarray {
-                    white-space: normal !important;
+                    color: #0f172a !important;
                     word-break: break-word !important;
-                    overflow-wrap: break-word !important;
+                    overflow-wrap: anywhere !important;
                 }
 
-                /* Middle column: both divider frame and content share exact same position (left: 62.5%, width: 36%) */
-                .format1-rightcover {
-                    position: absolute !important;
-                    top: 0 !important;
-                    bottom: 0 !important;
-                    height: 100% !important;
-                    left: 62.5% !important;
-                    width: 36% !important;
-                    transform: translateX(-50%) !important;
-                    border-left: 1px solid #000 !important;
-                    border-right: 1px solid #000 !important;
-                    border-top: none !important;
-                    border-bottom: none !important;
-                    margin: 0 !important;
-                    box-sizing: border-box !important;
-                    pointer-events: none !important;
-                }
-
-                .format1-rightcover span {
-                    position: absolute !important;
-                    left: 52% !important;
-                    top: 10px !important;
-                    font-size: 11.5px !important;
-                    font-weight: 600 !important;
-                    color: #000 !important;
-                    letter-spacing: 0.3px !important;
+                .rf1-patient-name {
+                    font-weight: 700 !important;
+                    text-transform: uppercase;
                 }
 
                 .format1-right2 {
-                    position: absolute !important;
-                    left: 62.5% !important;
-                    transform: translateX(-50%) !important;
-                    top: 0 !important;
-                    bottom: 0 !important;
-                    height: 100% !important;
-                    width: 36% !important;
-                    padding: 4px 12px !important; /* 12px breathing room so text never touches vertical lines */
-                    box-sizing: border-box !important;
+                    position: static !important;
+                    transform: none !important;
+                    flex: 1.08 0 282px !important;
+                    border-left: 1px solid #cbd5e1 !important;
+                    padding: 8px 12px !important;
                     display: flex !important;
                     flex-direction: column !important;
-                    justify-content: space-around !important;
+                    justify-content: center !important;
+                    gap: 3px !important;
+                    background: #ffffff !important;
                 }
 
-                #barcodeImage {
-                    height: 25px !important;
-                    width: 80px !important;
-                    margin: 0 !important;
-                    vertical-align: middle !important;
-                }
-
-                .format1-registered-div2 {
-                    font-size: 10.5px !important;
-                    line-height: 1.35 !important;
-                    width: 100% !important;
+                .rf1-barcode-band {
                     display: flex !important;
                     align-items: center !important;
                     justify-content: space-between !important;
-                    color: #222 !important;
-                    padding: 0 !important;
+                    gap: 8px !important;
+                    padding-bottom: 4px !important;
+                    margin-bottom: 2px !important;
+                    border-bottom: 1px dashed #cbd5e1 !important;
+                }
+
+                #barcodeImage {
+                    width: 112px !important;
+                    height: 22px !important;
+                    object-fit: fill !important;
+                    display: block !important;
+                }
+
+                .rf1-accession-id {
+                    font-weight: 700 !important;
+                    color: #1e3a5f !important;
+                    white-space: nowrap !important;
+                }
+
+                .format1-registered-div2 {
+                    display: flex !important;
+                    align-items: baseline !important;
+                    gap: 6px !important;
+                    width: 100% !important;
                     margin: 0 !important;
                 }
 
                 .format1-registeration-tag2 {
-                    width: 80px !important;
-                    min-width: 80px !important;
-                    font-weight: 500 !important;
-                    color: #333 !important;
+                    width: 76px !important;
+                    min-width: 76px !important;
+                    flex-shrink: 0 !important;
+                    font-weight: 600 !important;
+                    color: #475569 !important;
                 }
 
                 .format1-time-div {
-                    width: auto !important;
-                    flex: 1 !important;
+                    flex: 1 1 auto !important;
                     display: flex !important;
                     justify-content: space-between !important;
-                    font-size: 10.5px !important;
-                    padding-left: 6px !important;
+                    white-space: nowrap !important;
+                }
+
+                .rf1-header-invest {
+                    width: 100% !important;
+                    display: ${showPrintInvest ? 'flex' : 'none'} !important;
+                    align-items: flex-start !important;
+                    gap: 6px !important;
+                    padding-top: 4px !important;
+                    margin-top: 2px !important;
+                    border-top: 1px dashed #cbd5e1 !important;
+                }
+
+                .rf1-invest-label {
+                    width: 76px !important;
+                    min-width: 76px !important;
+                    flex-shrink: 0 !important;
+                    font-weight: 700 !important;
+                    color: #0f766e !important;
+                    white-space: nowrap !important;
+                }
+
+                .rf1-invest-value {
+                    flex: 1 1 auto !important;
+                    min-width: 0 !important;
+                    color: #0f172a !important;
+                    font-weight: 600 !important;
+                    word-break: break-word !important;
+                    overflow-wrap: anywhere !important;
                 }
 
                 .click.qr-div {
-                    position: absolute !important;
-                    right: 14px !important;
-                    top: 50% !important;
-                    transform: translateY(-50%) !important;
+                    position: static !important;
+                    flex: 0 0 90px !important;
+                    border-left: 1px solid #cbd5e1 !important;
+                    padding: 6px !important;
                     display: flex !important;
                     flex-direction: column !important;
                     align-items: center !important;
+                    justify-content: center !important;
+                    background: #f8fafc !important;
+                }
+
+                .click.qr-div.sign,
+                .sign {
+                    display: none !important;
                 }
 
                 #qrimg {
-                    width: 58px !important;
-                    height: 58px !important;
+                    width: 56px !important;
+                    height: 56px !important;
+                    object-fit: contain !important;
                 }
 
-                .branding strong { font-size: 7px !important; }
-                .branding span { font-size: 7px !important; }
-
-
                 /* Headings */
+                .section {
+                    margin-bottom: 24px !important;
+                }
+
                 .headings {
-                    margin: 14px 0 8px 0 !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    gap: 12px !important;
+                    margin: 0 0 12px 0 !important;
                     text-align: center !important;
                 }
 
                 .category-heading {
-                    font-size: 15px !important;
-                    font-weight: 800 !important;
-                    color: #000 !important;
+                    display: ${hidePrintCats ? 'none' : 'block'} !important;
+                    font-size: ${(printBodyFontSize + 2).toFixed(1)}px !important;
+                    font-weight: 700 !important;
+                    color: #1e3a5f !important;
+                    background: #eff4fa !important;
+                    border-top: 1.5px solid #1e3a5f !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    border-radius: 3px !important;
+                    padding: 6px 14px !important;
                     text-align: center !important;
                     margin: 0 !important;
-                    letter-spacing: 0.5px !important;
+                    letter-spacing: 0.08em !important;
                     text-transform: uppercase !important;
                 }
 
                 .table-heading {
-                    font-size: 13.5px !important;
+                    display: ${hidePrintThead ? 'none' : 'block'} !important;
+                    font-size: ${(printBodyFontSize + 0.8).toFixed(1)}px !important;
                     font-weight: 700 !important;
-                    color: #222 !important;
+                    color: #0f766e !important;
+                    background: #f8fafc !important;
+                    border: 1px solid #e2e8f0 !important;
+                    border-bottom: 1.5px solid #0f766e !important;
+                    border-radius: 3px !important;
+                    padding: 5px 14px !important;
                     text-align: center !important;
-                    margin: 2px 0 6px 0 !important;
+                    margin: 0 !important;
                     text-transform: uppercase !important;
                 }
 
-                /* Tables — fix column widths so Reference/Unit NEVER squish */
+                /* Tables */
                 .container2 {
                     width: 100% !important;
                     margin: 0 !important;
@@ -2214,20 +2417,23 @@
                     width: 100% !important;
                     table-layout: fixed !important;
                     border-collapse: collapse !important;
-                    margin-bottom: 8px !important;
+                    margin-bottom: 0 !important;
                 }
 
                 table.test-table thead {
-                    background-color: #888888 !important;
+                    display: ${hidePrintThead ? 'none' : 'table-header-group'} !important;
+                    background-color: #eef2f7 !important;
                 }
 
                 table.test-table thead th {
-                    color: #ffffff !important;
-                    font-size: 13px !important;
+                    background-color: #eef2f7 !important;
+                    color: #1e3a5f !important;
+                    font-size: ${Math.max(9.5, printBodyFontSize - 0.5).toFixed(1)}px !important;
                     font-weight: 700 !important;
-                    padding: 4px 6px !important;
-                    border: none !important;
-                    white-space: nowrap !important;
+                    padding: 6px 8px !important;
+                    border-top: 1.5px solid #334155 !important;
+                    border-bottom: 1.5px solid #334155 !important;
+                    text-align: left !important;
                 }
 
                 table.test-table th.deletion,
@@ -2238,90 +2444,100 @@
 
                 table.test-table th:nth-child(2),
                 table.test-table td.test-name {
-                    width: 40% !important;
+                    width: 37% !important;
                     text-align: left !important;
                     word-break: break-word !important;
                 }
 
                 table.test-table th:nth-child(3),
-                table.test-table th.valuecell {
-                    width: 20% !important;
-                    text-align: left !important;
-                    padding-left: 48px !important;
-                    white-space: nowrap !important;
-                }
-
+                table.test-table th.valuecell,
                 table.test-table td.high-low {
-                    width: 20% !important;
+                    width: 22% !important;
                     text-align: left !important;
-                    padding-left: 0 !important;
-                    white-space: nowrap !important;
-                    font-weight: 400 !important;
+                    padding-left: 8px !important;
                 }
 
-                table.test-table td.high-low .HL,
-                table.test-table td.high-low div {
-                    width: 48px !important;
-                    display: inline-block !important;
-                    text-align: center !important;
+                .rf1-result-wrap {
+                    display: grid !important;
+                    grid-template-columns: minmax(0, 1fr) 24px !important;
+                    align-items: center !important;
+                    column-gap: 6px !important;
+                    width: 100% !important;
+                    max-width: 145px !important;
                 }
 
-                table.test-table td.high-low .result-value {
-                    display: inline-block !important;
+                .rf1-result-wrap .HL {
+                    width: 22px !important;
+                    min-width: 22px !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                 }
 
                 table.test-table th:nth-child(4),
-                table.test-table td:nth-child(4) {
-                    width: 18% !important;
+                table.test-table td:nth-child(4),
+                table.test-table td.unit-cell {
+                    width: 14% !important;
                     text-align: left !important;
-                    white-space: nowrap !important;
+                    font-size: ${Math.max(9, printBodyFontSize - 0.4).toFixed(1)}px !important;
                 }
 
                 table.test-table th:nth-child(5),
-                table.test-table td:nth-child(5) {
-                    width: 22% !important;
+                table.test-table td:nth-child(5),
+                table.test-table td.reference-cell {
+                    width: 27% !important;
                     text-align: left !important;
-                    white-space: nowrap !important;
+                    white-space: pre-line !important;
+                    word-break: break-word !important;
+                    line-height: 1.3 !important;
+                    font-size: ${Math.max(9, printBodyFontSize - 0.4).toFixed(1)}px !important;
                 }
 
                 table.test-table tbody {
-                    border-bottom: 1.5px solid #222 !important;
+                    border-bottom: 1.5px solid #334155 !important;
                 }
 
                 table.test-table tbody tr {
-                    border-bottom: none !important;
                     page-break-inside: avoid !important;
                 }
 
                 table.test-table td {
-                    font-size: 12px !important;
-                    padding: 2.5px 6px !important;
-                    line-height: 1.35 !important;
-                    color: #111 !important;
+                    font-size: ${printBodyFontSize}px !important;
+                    padding: ${printRowPadY}px 8px !important;
+                    line-height: 1.32 !important;
+                    vertical-align: top !important;
+                    border-bottom: 1px solid #edf2f7 !important;
+                    color: #1e293b !important;
                 }
 
-                /* Interpretation Section */
-                .interpretation {
-                    padding: 10px 0 !important;
+                table.test-table tbody td.parameter-name-cell {
+                    padding-left: 20px !important;
                 }
 
-                .documented-content table {
-                    border: 1px solid #000 !important;
-                    border-collapse: collapse !important;
-                    width: 100% !important;
+                .details-row .methods,
+                .details-row .methods * {
+                    font-size: ${Math.max(8, printBodyFontSize - 2).toFixed(1)}px !important;
+                    color: #64748b !important;
+                    font-style: italic !important;
+                    font-weight: 400 !important;
                 }
 
-                .documented-content table th,
-                .documented-content table td {
-                    border: 1px solid #000 !important;
-                    padding: 4px 8px !important;
+                .rf1-end-report {
+                    margin: 14px 0 4px 0 !important;
+                    text-align: center !important;
+                    font-size: 9.5px !important;
+                    color: #64748b !important;
                 }
 
                 /* Doctor Signatures */
                 .signed-off-div {
                     width: 100% !important;
-                    margin-top: 24px !important;
-                    margin-bottom: 12px !important;
+                    max-width: 100% !important;
+                    margin: 18px 0 10px 0 !important;
+                    padding: 10px 0 0 0 !important;
+                    border: none !important;
+                    border-top: 1px solid #cbd5e1 !important;
+                    box-shadow: none !important;
                     display: block !important;
                 }
 
@@ -2329,8 +2545,29 @@
                     display: flex !important;
                     justify-content: space-between !important;
                     align-items: flex-end !important;
+                    gap: 18px !important;
                     width: 100% !important;
                 }
+
+                .textspan {
+                    font-size: ${Math.max(8.5, printBodyFontSize - 1).toFixed(1)}px !important;
+                    line-height: 1.28 !important;
+                }
+                ${(() => {
+                    const effLayout = activeSignatureLayout || activePrintPrefs?.signatureLayout || null;
+                    if (!effLayout?.isCustom || !cachedSigLayoutEngine?.buildCustomSignatureStageCss) return '';
+                    return cachedSigLayoutEngine.buildCustomSignatureStageCss({
+                        containerSelector: '.signed-off-div2',
+                        slotSelector: '.left-sign',
+                        layout: effLayout,
+                        baseFontSizePx: Math.max(8.5, printBodyFontSize - 1),
+                        visibility: {
+                            lab: Boolean(reportformatlabsign),
+                            doc1: Boolean(reportformatfirstdoctorsign),
+                            doc2: Boolean(reportformatseconddoctorsign),
+                        },
+                    });
+                })()}
                 ${document.getElementById('labflowLegacyAbnormalStyles')?.textContent || ''}
             `;
 
@@ -2363,16 +2600,8 @@
         if (user.tenantId.modelType === "1layer") {
             const style = document.getElementById("stying");
             style.textContent += `
-            .format1-rightcover{height:75px;}
-            #qrimg{width:83px;height:73px;}
-            .click.qr-div{right:42px;top:5px;}
-            @media print{
-                .format1-rightcover{height:50px !important;}
-                .format1-registered-div2{font-size:11px !important;}
-                .format1-rightcover{left:62.1%;}
-                .report-details-innerDiv2{min-height:70px !important;}
-                #qrimg{width:55px !important;height:45px !important;}
-            }`;
+            .forhide { display: none !important; }
+            `;
             document.querySelectorAll('.forhide').forEach(elem => { elem.style.display = "none"; });
         }
     }

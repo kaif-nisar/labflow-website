@@ -6,6 +6,8 @@ import {
     normalizeStoredUploadPublicId,
 } from "../utils/localStorage.js";
 import { doctorsign } from "../models/labinchargesign.model.js";
+import { defaultpdfsetting } from "../models/defaultpdfsettings.model.js";
+import { normalizeSignatureLayout } from "../../public/js/signatureLayoutEngine.mjs";
 
 const SIGNATURE_FIELD_MAP = Object.freeze({
     labinchargesignpublicid: "labinchargesign",
@@ -50,6 +52,16 @@ const resolveExistingSignatureAsset = (record, publicIdFieldName) => {
     );
 };
 
+const parseSignBool = (val, fallback = true) => {
+    if (typeof val === "boolean") return val;
+    if (typeof val === "string") {
+        const low = val.trim().toLowerCase();
+        if (["true", "1", "yes"].includes(low)) return true;
+        if (["false", "0", "no"].includes(low)) return false;
+    }
+    return fallback;
+};
+
 const uploadDoctorsSign = async (req, res) => {
     const {
         showlab,
@@ -58,6 +70,7 @@ const uploadDoctorsSign = async (req, res) => {
         labinchargeinfo,
         leftdoctorinfo,
         rightdoctorinfo,
+        signatureLayout,
     } = req.body;
     const files = req.files || {};
     const { labsign, firstdoctorsign, seconddoctorsign } = files;
@@ -65,10 +78,9 @@ const uploadDoctorsSign = async (req, res) => {
     const tenantId = req.user.tenantId;
 
     try {
-        const existingRecord = await doctorsign.findOne({
-            tenantId: tenantId._id,
-            createdBy: userId,
-        });
+        const existingRecord =
+            (await doctorsign.findOne({ tenantId: tenantId._id, createdBy: userId })) ||
+            (await doctorsign.findOne({ tenantId: tenantId._id }));
 
         const labsignresult = labsign
             ? await storeLocalFile(labsign?.[0]?.path, {
@@ -91,14 +103,18 @@ const uploadDoctorsSign = async (req, res) => {
 
         const updatedata = {
             tenantId: tenantId._id,
-            createdBy: userId,
-            showlabinchargesign: showlab,
+            createdBy: existingRecord?.createdBy || userId,
+            showlabinchargesign: parseSignBool(showlab, false),
             labinchargeinfo,
-            showfirstdoctorsign: showdoctorfirst,
+            showfirstdoctorsign: parseSignBool(showdoctorfirst, true),
             firstdoctorsigninfo: leftdoctorinfo,
-            showseconddoctorsign: showdoctorsecond,
+            showseconddoctorsign: parseSignBool(showdoctorsecond, true),
             seconddoctorsigninfo: rightdoctorinfo,
         };
+
+        if (signatureLayout !== undefined && signatureLayout !== null && signatureLayout !== "") {
+            updatedata.signatureLayout = normalizeSignatureLayout(signatureLayout);
+        }
 
         if (labsignresult) {
             updatedata.labinchargesign = labsignresult.secure_url;
@@ -115,11 +131,12 @@ const uploadDoctorsSign = async (req, res) => {
             updatedata.seconddoctorsignpublicid = seconddoctorsignresult.public_id;
         }
 
+        const filter = existingRecord?._id
+            ? { _id: existingRecord._id }
+            : { tenantId: tenantId._id };
+
         const templateData = await doctorsign.findOneAndUpdate(
-            {
-                tenantId: tenantId._id,
-                createdBy: userId,
-            },
+            filter,
             {
                 $set: updatedata,
             },
@@ -180,6 +197,7 @@ const getDoctorsSign = async (req, res) => {
         const labsigndata = await doctorsign.findOne({
             tenantId,
         });
+        const defaultSettings = await defaultpdfsetting.findOne({ tenantId }).select("signatureLayout").lean().catch(() => null);
 
         if (!labsigndata) {
             return res.status(404).json({ message: "No doctor signature found" });
@@ -205,6 +223,9 @@ const getDoctorsSign = async (req, res) => {
         responsePayload.firstdoctorsignpublicid = firstDoctorSignature.publicId;
         responsePayload.seconddoctorsign = secondDoctorSignature.url;
         responsePayload.seconddoctorsignpublicid = secondDoctorSignature.publicId;
+        responsePayload.signatureLayout = normalizeSignatureLayout(
+            responsePayload.signatureLayout || defaultSettings?.signatureLayout || null
+        );
 
         return res.status(200).json(responsePayload);
     } catch (error) {

@@ -79,9 +79,17 @@ const addDoctorsController = asyncHandler(async (req, res) => {
     remarks,
     email,
   } = req.body;
-  if (!(firstname && lastname && specialization && gender)) {
-    throw new ApiError(400, "Firstname, lastname, specialization and gender are required");
+  const cleanFirstname = String(firstname || "").trim();
+  const cleanLastname = String(lastname || "").trim();
+  if (!(cleanFirstname && cleanLastname)) {
+    throw new ApiError(400, "First name and last name are required");
   }
+
+  const cleanSpecialization = String(specialization || "").trim();
+  const rawGender = String(gender || "").trim().toLowerCase();
+  const normalizedGender = ["male", "female", "other"].includes(rawGender) ? rawGender : "other";
+  const cleanAddress = String(address || "").trim();
+  const cleanRemarks = String(remarks || "").trim();
 
   const userId = getActorOwnerId(req);
   const tenantId = getTenantIdFromReq(req);
@@ -100,15 +108,15 @@ const addDoctorsController = asyncHandler(async (req, res) => {
 
   try {
     createdDoctor = await doctors.create({
-      displayName: `${firstname} ${lastname}`.trim(),
+      displayName: `${cleanFirstname} ${cleanLastname}`.trim(),
       email: normalizedEmail,
-      firstName: firstname,
-      lastName: lastname,
-      specialization: specialization,
+      firstName: cleanFirstname,
+      lastName: cleanLastname,
+      specialization: cleanSpecialization,
       ...(dob ? { DOB: dob } : {}),
-      gender,
-      address,
-      remarks,
+      gender: normalizedGender,
+      address: cleanAddress,
+      remarks: cleanRemarks,
       createdBy: userId,
       tenantId,
     });

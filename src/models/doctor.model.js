@@ -40,15 +40,7 @@ const doctorSchema = new Schema({
     specialization: {
         type: String,
         trim: true,
-        default: "",
-        validate: {
-            validator: function(value) {
-                // Only validate if not a system default doctor
-                if (this.isSystemDefault) return true;
-                return Boolean(String(value || "").trim());
-            },
-            message: 'Specialization is required for non-system doctors'
-        }
+        default: ""
     },
     DOB: {
         type: Date,
@@ -60,7 +52,7 @@ const doctorSchema = new Schema({
         validate: {
             validator: function(value) {
                 // Only validate if not a system default doctor
-                if (this.isSystemDefault) return true;
+                if (this.isSystemDefault || !value) return true;
                 return ["male", "female", "other"].includes(String(value || "").toLowerCase());
             },
             message: 'Gender must be male, female, or other'

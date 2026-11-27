@@ -33,8 +33,8 @@ async function fetchDoctors() {
                     <tr>
                         <td>${index + 1}</td>
                         <td>${doctorLabel}${isSystemDefault ? '<br><span style="color:#0f62fe;font-size:12px;">Default Self Doctor</span>' : ''}</td>
-                        <td>${doctor.gender}<br>${dobFormatted}</td>
-                        <td>${doctor.specialization}</td>
+                        <td>${doctor.gender || "other"}<br>${dobFormatted}</td>
+                        <td>${doctor.specialization || "N/A"}</td>
                         <td>${doctor.address || "N/A"}</td>
                         <td>${doctor.remarks || "N/A"}</td>
                         <td>${doctor.rateCardCount || 0} items</td>

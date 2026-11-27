@@ -794,6 +794,7 @@
     state.settings.fileInputLabtext = pick(docSign.labinchargeinfo, ps.fileInputLabtext, "") || "";
     state.settings.fileInputDoctorlefttext = pick(docSign.firstdoctorsigninfo, ps.fileInputDoctorlefttext, "") || "";
     state.settings.fileInputDoctorrighttext = pick(docSign.seconddoctorsigninfo, ps.fileInputDoctorrighttext, "") || "";
+    state.settings.signatureLayout = docSign.signatureLayout || ps.signatureLayout || null;
 
     if (ps.backgroundImageUrl && !state.backgroundImageUrl) {
       state.backgroundImageUrl = ps.backgroundImageUrl;
@@ -1025,8 +1026,8 @@
     const wrap = document.createElement("div");
     wrap.className = "oh5-footer-wrap";
 
-    const makeSlotHtml = (id, slotClass, visible, imgSrc, credText, alt) => `
-      <div class="oh5-sign-slot ${slotClass} ${visible ? "" : "oh5-sign-hidden"}" id="${id}">
+    const makeSlotHtml = (slotKey, id, slotClass, visible, imgSrc, credText, alt) => `
+      <div class="oh5-sign-slot ${slotClass} ${visible ? "" : "oh5-sign-hidden"}" data-sig-slot="${slotKey}" id="${id}">
         <div class="oh5-sign-img-wrap">
           ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(alt)}" class="oh5-sign-img" onerror="this.style.display='none'" />` : ""}
         </div>
@@ -1045,9 +1046,9 @@
           </div>
         </div>
         <div class="signatures oh5-signatures" style="padding-left:${parseNum(s.LeftsignPd, 0, 0, 6)}cm;padding-right:${parseNum(s.Rightsignpd, 0, 0, 6)}cm;">
-          ${makeSlotHtml("labInchargeSign", "oh5-sign-lab", s.showlab, s.fileInputLab, s.fileInputLabtext, "Lab In-Charge Signature")}
-          ${makeSlotHtml("firstDoctorSign", "oh5-sign-doc1", s.showdoctorfirst, s.fileInputDoctorleft, s.fileInputDoctorlefttext, "Pathologist Signature")}
-          ${makeSlotHtml("secondDoctorSign", "oh5-sign-doc2", s.showdoctorsecond, s.fileInputDoctorright, s.fileInputDoctorrighttext, "Authorized Signatory")}
+          ${makeSlotHtml("lab", "labInchargeSign", "oh5-sign-lab", s.showlab, s.fileInputLab, s.fileInputLabtext, "Lab In-Charge Signature")}
+          ${makeSlotHtml("doc1", "firstDoctorSign", "oh5-sign-doc1", s.showdoctorfirst, s.fileInputDoctorleft, s.fileInputDoctorlefttext, "Pathologist Signature")}
+          ${makeSlotHtml("doc2", "secondDoctorSign", "oh5-sign-doc2", s.showdoctorsecond, s.fileInputDoctorright, s.fileInputDoctorrighttext, "Authorized Signatory")}
         </div>
       </div>
     `;
@@ -1630,6 +1631,28 @@
         font-weight: 400 !important;
         color: var(--oh5-muted) !important;
       }
+      ${(() => {
+        const engine = state.sigLayoutEngine;
+        if (!s.signatureLayout?.isCustom || !engine?.buildCustomSignatureStageCss) return "";
+        return `
+          #oh5PageRoot .oh5-footer-top-row .signatures.oh5-signatures {
+            flex: 1 1 0 !important;
+            width: auto !important;
+            min-width: 0 !important;
+          }
+          ${engine.buildCustomSignatureStageCss({
+            containerSelector: "#oh5PageRoot .oh5-signatures",
+            slotSelector: ".oh5-sign-slot",
+            layout: s.signatureLayout,
+            visibility: {
+              lab: Boolean(s.showlab),
+              doc1: Boolean(s.showdoctorfirst),
+              doc2: Boolean(s.showdoctorsecond),
+            },
+            baseFontSizePx: Math.max(8.5, Number(fontPx || 10.5) - 1),
+          })}
+        `;
+      })()}
     `;
   }
 
@@ -1897,6 +1920,7 @@
       fileInputLabtext: s.fileInputLabtext,
       fileInputDoctorlefttext: s.fileInputDoctorlefttext,
       fileInputDoctorrighttext: s.fileInputDoctorrighttext,
+      signatureLayout: s.signatureLayout || null,
       isdocumented: Boolean(state.report?.isDocumented || state.report?.isdocumented),
       pdfformat: effectiveFormat,
       pdfFormat: effectiveFormat,
@@ -1959,6 +1983,7 @@
       fileInputLabtext: s.fileInputLabtext,
       fileInputDoctorlefttext: s.fileInputDoctorlefttext,
       fileInputDoctorrighttext: s.fileInputDoctorrighttext,
+      signatureLayout: s.signatureLayout || null,
       htmlContent: snapshot.htmlContent,
       cssContent: "",
       header: snapshot.header,
@@ -2600,14 +2625,16 @@
 
       state.qrLinkUrl = `${BASE_URL}/pages/pages/download_reports.html?value=${encodeURIComponent(state.reportId)}&id=${encodeURIComponent(String(tenantId))}`;
 
-      const [rawQr, b64Lab, b64Doc1, b64Doc2] = await Promise.all([
+      const [rawQr, b64Lab, b64Doc1, b64Doc2, sigEngine] = await Promise.all([
         fetchQrCodeImage(state.qrLinkUrl),
         imageToBase64(state.settings.fileInputLab),
         imageToBase64(state.settings.fileInputDoctorleft),
         imageToBase64(state.settings.fileInputDoctorright),
+        global.ReportActionHelpers?.loadSignatureLayoutEngine?.() || Promise.resolve(null),
         ...Array.from(uniqueBarcodeNumbers).map((bNum) => fetchBarcodeImage(bNum)),
       ]);
 
+      state.sigLayoutEngine = sigEngine || null;
       state.qrDataUrl = await imageToBase64(rawQr);
       if (b64Lab) state.settings.fileInputLab = b64Lab;
       if (b64Doc1) state.settings.fileInputDoctorleft = b64Doc1;

@@ -525,6 +525,477 @@
             color: white;
         }
 
+        /* Patient Name Salutation + Full Name Composite Field */
+        .section-content > .patient-name-group {
+            flex: 1.55 1 275px;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #ffffff;
+        }
+
+        .patient-name-group:focus-within {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+        }
+
+        .patient-title-wrap {
+            display: flex;
+            align-items: center;
+            flex: 0 0 auto;
+            height: 100%;
+            padding: 0 6px 0 10px;
+            background-color: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+        }
+
+        .patient-title-wrap i {
+            margin-right: 6px;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .patient-title-wrap select#patient-title {
+            width: auto;
+            min-width: 68px;
+            max-width: 108px;
+            height: 100%;
+            padding: 6px 2px 6px 0;
+            border: none;
+            background: transparent;
+            font-size: 0.86rem;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .patient-name-group input#patient-name {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: none;
+            outline: none;
+            padding: 8px 12px;
+        }
+
+        .section-content > .patient-gender-group {
+            flex: 0.85 1 145px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 0 8px;
+            background-color: #ffffff;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.25s ease;
+        }
+
+        .patient-gender-group select {
+            border: none;
+            outline: none;
+            background: transparent;
+        }
+
+        .patient-gender-group.is-auto-synced {
+            border-color: #ea580c;
+            background-color: #fff7ed;
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+        }
+
+        .patient-gender-group.is-auto-synced i {
+            color: #ea580c;
+        }
+
+        /* Industry-Level Minimalist Add Doctor Modal */
+        @keyframes lfDocModalIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        #modal.lf-doc-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 18px;
+            background-color: rgba(15, 23, 42, 0.56);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000000;
+            overflow-y: auto;
+        }
+
+        #modal.lf-doc-modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        #modal.lf-doc-modal .lf-doc-dialog {
+            width: 100%;
+            max-width: 560px;
+            max-height: calc(100vh - 36px);
+            margin: auto;
+            padding: 0;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            box-shadow: 0 24px 56px -12px rgba(15, 23, 42, 0.28);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: lfDocModalIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .lf-doc-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 20px;
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+            border-bottom: 1px solid #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .lf-doc-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .lf-doc-badge-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background-color: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #2563eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .lf-doc-title-group h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.25;
+        }
+
+        .lf-doc-subtitle {
+            margin: 2px 0 0 0;
+            font-size: 12px;
+            color: #64748b;
+            line-height: 1.35;
+        }
+
+        .lf-doc-close-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background-color: #ffffff;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .lf-doc-close-btn:hover {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            border-color: #cbd5e1;
+        }
+
+        .lf-doc-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .lf-doc-alert {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            font-size: 12.5px;
+            font-weight: 600;
+        }
+
+        .lf-doc-alert.is-visible {
+            display: flex;
+        }
+
+        .lf-doc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .lf-doc-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+        }
+
+        .lf-doc-field.lf-doc-span-2 {
+            grid-column: 1 / -1;
+        }
+
+        .lf-doc-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #334155;
+            line-height: 1.2;
+        }
+
+        .lf-doc-req {
+            color: #dc2626;
+            font-weight: 700;
+        }
+
+        .lf-doc-opt {
+            font-size: 10.5px;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        .lf-doc-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 38px;
+            padding: 0 10px;
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .lf-doc-control:hover {
+            border-color: #94a3b8;
+        }
+
+        .lf-doc-control:focus-within {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+        }
+
+        .lf-doc-control.is-invalid {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+        }
+
+        .lf-doc-control i {
+            color: #94a3b8;
+            font-size: 12.5px;
+            flex-shrink: 0;
+            width: 14px;
+            text-align: center;
+        }
+
+        .lf-doc-control input,
+        .lf-doc-control select,
+        .lf-doc-control textarea {
+            width: 100%;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 13px;
+            color: #0f172a;
+            font-family: inherit;
+            padding: 0;
+            margin: 0;
+        }
+
+        .lf-doc-control input,
+        .lf-doc-control select {
+            height: 100%;
+        }
+
+        .lf-doc-control select {
+            cursor: pointer;
+        }
+
+        .lf-doc-control-textarea {
+            height: auto;
+            min-height: 60px;
+            align-items: flex-start;
+            padding: 8px 10px;
+        }
+
+        .lf-doc-control-textarea i {
+            margin-top: 3px;
+        }
+
+        .lf-doc-control-textarea textarea {
+            resize: vertical;
+            min-height: 42px;
+            line-height: 1.4;
+        }
+
+        .lf-doc-pricing-card {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .lf-doc-pricing-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #475569;
+        }
+
+        .lf-doc-pricing-title span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .lf-doc-pricing-title i {
+            color: #2563eb;
+        }
+
+        .lf-doc-check-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #334155;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .lf-doc-check-label input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            margin: 0;
+            accent-color: #2563eb;
+            cursor: pointer;
+        }
+
+        .lf-doc-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 20px;
+            background-color: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .lf-doc-footer-hint {
+            font-size: 11.5px;
+            color: #64748b;
+        }
+
+        .lf-doc-footer-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .lf-doc-footer-actions button {
+            height: 36px;
+            padding: 0 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid transparent;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        }
+
+        .lf-doc-footer-actions .btn-close {
+            background-color: #ffffff;
+            border-color: #cbd5e1;
+            color: #334155;
+            margin-right: 0;
+        }
+
+        .lf-doc-footer-actions .btn-close:hover {
+            background-color: #f1f5f9;
+            border-color: #94a3b8;
+        }
+
+        .lf-doc-footer-actions .btn-add {
+            background-color: #2563eb;
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+        }
+
+        .lf-doc-footer-actions .btn-add:hover {
+            background-color: #1d4ed8;
+        }
+
+        .lf-doc-footer-actions .btn-add:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 600px) {
+            #modal.lf-doc-modal {
+                padding: 10px;
+                align-items: flex-start;
+            }
+            #modal.lf-doc-modal .lf-doc-dialog {
+                max-height: calc(100vh - 20px);
+                border-radius: 12px;
+            }
+            .lf-doc-grid {
+                grid-template-columns: 1fr;
+            }
+            .lf-doc-footer {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .lf-doc-footer-actions {
+                justify-content: flex-end;
+            }
+        }
+
         /* adding lab css  */
         .modal2-overlay {
             position: fixed;
@@ -675,6 +1146,18 @@
 
             .input-group {
                 flex-wrap: wrap;
+            }
+
+            .input-group.patient-name-group,
+            .input-group.patient-gender-group {
+                flex-wrap: nowrap;
+            }
+
+            #modal.lf-doc-modal {
+                width: 100%;
+                margin: 0;
+                padding: 12px;
+                align-items: flex-start;
             }
 
             .section-content {
@@ -842,9 +1325,37 @@
         </div>
         <div class="section">
             <div class="section-content">
-                <div class="input-group">
-                    <i class="fas fa-user"></i>
-                    <input type="text" placeholder="Patient Name" id="patient-name">
+                <div class="input-group patient-name-group">
+                    <div class="patient-title-wrap">
+                        <i class="fas fa-user"></i>
+                        <select id="patient-title" aria-label="Patient salutation" title="Most frequently used title becomes default automatically">
+                            <optgroup label="★ Most Used">
+                                <option value="Mr." data-gender="Male">Mr.</option>
+                            </optgroup>
+                            <optgroup label="Male">
+                                <option value="Master" data-gender="Male">Master</option>
+                                <option value="Shri" data-gender="Male">Shri</option>
+                                <option value="Baby Boy" data-gender="Male">Baby Boy</option>
+                            </optgroup>
+                            <optgroup label="Female">
+                                <option value="Mrs." data-gender="Female">Mrs.</option>
+                                <option value="Ms." data-gender="Female">Ms.</option>
+                                <option value="Miss" data-gender="Female">Miss</option>
+                                <option value="Smt." data-gender="Female">Smt.</option>
+                                <option value="Kumari" data-gender="Female">Kumari</option>
+                                <option value="Baby Girl" data-gender="Female">Baby Girl</option>
+                            </optgroup>
+                            <optgroup label="Other / Neutral">
+                                <option value="Mx." data-gender="Other">Mx.</option>
+                                <option value="Baby" data-gender="Other">Baby</option>
+                                <option value="B/o" data-gender="Other">B/o</option>
+                                <option value="Dr." data-gender="Other">Dr.</option>
+                                <option value="Prof." data-gender="Other">Prof.</option>
+                            </optgroup>
+                            <option value="">No Title</option>
+                        </select>
+                    </div>
+                    <input type="text" placeholder="Patient Full Name *" id="patient-name" required autocomplete="off">
                 </div>
                 <!-- <div class="input-group"> -->
                 <!-- <input type="number" placeholder="Year" id="patient-year"> -->
@@ -859,14 +1370,16 @@
                     <!-- </div> -->
 
                 </div>
-                <div class="input-group">
-                    <select id="patient-gender">
-                        <option value="Any">Any</option>
+                <div class="input-group patient-gender-group">
+                    <i id="patient-gender-icon" class="fas fa-mars" aria-hidden="true"></i>
+                    <select id="patient-gender" aria-label="Patient gender">
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
+                        <option value="Other">Other</option>
                     </select>
                 </div>
                 <div class="input-group">
+                    <i class="fas fa-phone"></i>
                     <input type="text" placeholder="Patient Phone (Optional)" id="patient-phone">
                 </div>
             </div>
@@ -983,64 +1496,145 @@
     </div>
     <button class="submit-btn" id="submit-btn"><i class="fas fa-paper-plane"></i> Submit</button>
     <!-- adding doctor page  -->
-    <div class="modal" id="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Doctor Details</h2>
-                <span class="close">&times;</span>
+    <div class="modal lf-doc-modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="doctorModalTitle">
+        <div class="lf-doc-dialog">
+            <div class="lf-doc-header">
+                <div class="lf-doc-header-left">
+                    <div class="lf-doc-badge-icon"><i class="fas fa-user-md"></i></div>
+                    <div class="lf-doc-title-group">
+                        <h2 id="doctorModalTitle">Add Referring Doctor</h2>
+                        <p class="lf-doc-subtitle">Only First &amp; Last Name are required. Everything else is optional.</p>
+                    </div>
+                </div>
+                <button type="button" class="close lf-doc-close-btn" aria-label="Close modal">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="firstname"><i class="fas fa-user"></i> Firstname *</label>
-                    <input type="text" id="firstname" name="firstname">
+            <div class="lf-doc-body">
+                <div id="doctorModalFeedback" class="lf-doc-alert" role="alert" aria-live="polite"></div>
+
+                <div class="lf-doc-grid">
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="firstname">
+                            <span>First Name <span class="lf-doc-req">*</span></span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="firstname" name="firstname" placeholder="e.g. Rajesh" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="lastname">
+                            <span>Last Name <span class="lf-doc-req">*</span></span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="lastname" name="lastname" placeholder="e.g. Sharma" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="specialization">
+                            <span>Specialization</span>
+                            <span class="lf-doc-opt">Optional</span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-stethoscope"></i>
+                            <input type="text" id="specialization" name="specialization" placeholder="e.g. MD Pathology, General">
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="doctor-gender">
+                            <span>Gender</span>
+                            <span class="lf-doc-opt">Optional</span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-venus-mars"></i>
+                            <select id="doctor-gender" name="doctor-gender">
+                                <option value="">Prefer not to specify</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="doctor-email">
+                            <span>Email Address</span>
+                            <span class="lf-doc-opt">Optional</span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="doctor-email" name="doctor-email" placeholder="doctor@clinic.com">
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field">
+                        <label class="lf-doc-label" for="doctor-dob">
+                            <span>Date of Birth</span>
+                            <span class="lf-doc-opt">Optional</span>
+                        </label>
+                        <div class="lf-doc-control">
+                            <i class="fas fa-calendar-alt"></i>
+                            <input type="date" id="doctor-dob" name="doctor-dob">
+                        </div>
+                    </div>
+
+                    <div class="lf-doc-field lf-doc-span-2">
+                        <label class="lf-doc-label" for="doctor-address">
+                            <span>Clinic / Address</span>
+                            <span class="lf-doc-opt">Optional</span>
+                        </label>
+                        <div class="lf-doc-control lf-doc-control-textarea">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <textarea id="doctor-address" name="doctor-address" rows="2" placeholder="Clinic, hospital or street address"></textarea>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="lastname"><i class="fas fa-user"></i> Lastname *</label>
-                    <input type="text" id="lastname" name="lastname">
-                </div>
-                <div class="form-group">
-                    <label for="doctor-email"><i class="fas fa-envelope"></i> Email</label>
-                    <input type="email" id="doctor-email" name="doctor-email" placeholder="doctor@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="specialization"><i class="fas fa-stethoscope"></i> Doctor Specialization *</label>
-                    <input type="text" id="specialization" name="specialization">
-                </div>
-                <div class="form-group">
-                    <label for="dob"><i class="fas fa-calendar-alt"></i> Date of Birth</label>
-                    <input type="date" id="doctor-dob" name="doctor-dob">
-                </div>
-                <div class="form-group">
-                    <label for="doctor-gender">Gender</label>
-                    <select id="doctor-gender" name="doctor-gender">
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="doctor-address">Address</label>
-                    <textarea id="doctor-address" name="doctor-address" rows="3" placeholder="Enter Address Details"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="doctor-initial-pricing-mode">Initial Pricing</label>
-                    <select id="doctor-initial-pricing-mode" name="doctor-initial-pricing-mode">
-                        <option value="default">Use default booking prices</option>
-                        <option value="copy">Copy another doctor's rate card</option>
-                    </select>
-                </div>
-                <div class="form-group" id="doctor-pricing-source-wrap" style="display:none;">
-                    <label for="doctor-pricing-source">Copy Rate Card From</label>
-                    <select id="doctor-pricing-source" name="doctor-pricing-source"></select>
-                </div>
-                <div class="form-group">
-                    <label for="doctor-open-pricing-manager">Open full pricing manager after save</label>
-                    <input type="checkbox" id="doctor-open-pricing-manager" name="doctor-open-pricing-manager" style="width:auto;padding-left:0;">
+
+                <div class="lf-doc-pricing-card">
+                    <div class="lf-doc-pricing-title">
+                        <span><i class="fas fa-tags"></i> Rate Card Setup</span>
+                        <span class="lf-doc-opt">Optional</span>
+                    </div>
+                    <div class="lf-doc-grid">
+                        <div class="lf-doc-field lf-doc-span-2" id="doctor-initial-pricing-wrap">
+                            <label class="lf-doc-label" for="doctor-initial-pricing-mode">
+                                <span>Initial Pricing</span>
+                            </label>
+                            <div class="lf-doc-control">
+                                <i class="fas fa-sliders-h"></i>
+                                <select id="doctor-initial-pricing-mode" name="doctor-initial-pricing-mode">
+                                    <option value="default">Use default booking prices</option>
+                                    <option value="copy">Copy another doctor's rate card</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="lf-doc-field lf-doc-span-2" id="doctor-pricing-source-wrap" style="display:none;">
+                            <label class="lf-doc-label" for="doctor-pricing-source">
+                                <span>Copy Rate Card From</span>
+                            </label>
+                            <div class="lf-doc-control">
+                                <i class="fas fa-copy"></i>
+                                <select id="doctor-pricing-source" name="doctor-pricing-source"></select>
+                            </div>
+                        </div>
+                    </div>
+                    <label class="lf-doc-check-label" for="doctor-open-pricing-manager">
+                        <input type="checkbox" id="doctor-open-pricing-manager" name="doctor-open-pricing-manager">
+                        <span>Open full pricing manager right after saving</span>
+                    </label>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-close">Close</button>
-                <button class="btn-add"><i class="fas fa-user-plus"></i> Add Doctor</button>
+            <div class="lf-doc-footer">
+                <span class="lf-doc-footer-hint"><span class="lf-doc-req">*</span> Required fields</span>
+                <div class="lf-doc-footer-actions">
+                    <button type="button" class="btn-close">Cancel</button>
+                    <button type="button" class="btn-add"><i class="fas fa-user-plus"></i> Add Doctor</button>
+                </div>
             </div>
         </div>
     </div>

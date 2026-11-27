@@ -1493,7 +1493,8 @@ const cancelBookingController = asyncHandler(async (req, res) => {
 
 const SearchBookingController = asyncHandler(async (req, res) => {
     try {
-        const { bookingId, patientName } = req.body;
+        const bookingId = req.body.bookingId || req.body.value1;
+        const { patientName } = req.body;
         const tenantId = req.user.tenantId;
 
         // Validate required fields

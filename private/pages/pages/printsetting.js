@@ -10,6 +10,83 @@
     const BASE_URL = window.location.origin;
     const CM_TO_PX = 37.8; // 96 DPI conversion constant (1cm = 37.8px)
 
+    const SIG_DEFAULT_SLOTS = {
+        lab:  { xPct: 0,  yPx: 10, widthPct: 28, heightPx: 84 },
+        doc1: { xPct: 36, yPx: 10, widthPct: 28, heightPx: 84 },
+        doc2: { xPct: 72, yPx: 10, widthPct: 28, heightPx: 84 },
+    };
+
+    const SIG_SLOT_DOM_META = {
+        lab:  { slotElId: 'docSigSlot1', pillId: 'sigPill-lab',  boxElId: 'sigSlotBoxLab',  checkboxId: 'show-lab',     label: 'Lab Tech' },
+        doc1: { slotElId: 'docSigSlot2', pillId: 'sigPill-doc1', boxElId: 'sigSlotBoxDoc1', checkboxId: 'show-doctor1', label: 'Doctor 1' },
+        doc2: { slotElId: 'docSigSlot3', pillId: 'sigPill-doc2', boxElId: 'sigSlotBoxDoc2', checkboxId: 'show-doctor2', label: 'Doctor 2' },
+    };
+
+    let sigLayoutEngine = null;
+
+    function createDefaultSignatureLayout() {
+        return {
+            version: 1,
+            isCustom: false,
+            slots: {
+                lab:  { ...SIG_DEFAULT_SLOTS.lab },
+                doc1: { ...SIG_DEFAULT_SLOTS.doc1 },
+                doc2: { ...SIG_DEFAULT_SLOTS.doc2 },
+            },
+        };
+    }
+
+    function normalizeSigLayoutSafe(rawLayout) {
+        if (sigLayoutEngine?.normalizeSignatureLayout) {
+            return sigLayoutEngine.normalizeSignatureLayout(rawLayout);
+        }
+        if (!rawLayout) return createDefaultSignatureLayout();
+        let src = rawLayout;
+        if (typeof src === 'string') {
+            try { src = JSON.parse(src); } catch { src = null; }
+        }
+        if (!src || typeof src !== 'object') return createDefaultSignatureLayout();
+        const rawSlots = src.slots || src;
+        const clamp = (v, min, max, fb) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fb;
+        };
+        const normSlot = (s, fb) => {
+            const w = Math.round(clamp(s?.widthPct, 12, 75, fb.widthPct) * 100) / 100;
+            const x = Math.round(clamp(s?.xPct, 0, Math.max(0, 100 - w), fb.xPct) * 100) / 100;
+            const h = Math.round(clamp(s?.heightPx, 44, 210, fb.heightPx));
+            const y = Math.round(clamp(s?.yPx, 0, 170, fb.yPx));
+            return { xPct: x, yPx: y, widthPct: w, heightPx: h };
+        };
+        return {
+            version: 1,
+            isCustom: Boolean(src.isCustom),
+            slots: {
+                lab:  normSlot(rawSlots?.lab,  SIG_DEFAULT_SLOTS.lab),
+                doc1: normSlot(rawSlots?.doc1, SIG_DEFAULT_SLOTS.doc1),
+                doc2: normSlot(rawSlots?.doc2, SIG_DEFAULT_SLOTS.doc2),
+            },
+        };
+    }
+
+    function computeSlotMetricsSafe(slot, baseFontPx = 10.5) {
+        if (sigLayoutEngine?.computeSignatureSlotStyleMetrics) {
+            return sigLayoutEngine.computeSignatureSlotStyleMetrics(slot, baseFontPx);
+        }
+        const widthRatio = slot.widthPct / 28;
+        const heightRatio = slot.heightPx / 84;
+        const scaleFactor = Math.max(0.68, Math.min(1.75, Math.min(Math.max(widthRatio, 0.72), heightRatio * 1.06)));
+        const textFontPx = Math.round(Math.max(7.5, Math.min(17, baseFontPx * scaleFactor)) * 100) / 100;
+        const reservedTextPx = Math.max(22, Math.round(textFontPx * 2.9 + 8));
+        return {
+            ...slot,
+            scaleFactor,
+            textFontPx,
+            gapPx: Math.round(Math.max(2, Math.min(7, 3 * scaleFactor))),
+            imgMaxHeightPx: Math.max(20, slot.heightPx - reservedTextPx),
+        };
+    }
+
     // Central Application State
     const state = {
         letterheadMode: 'digital', // 'digital' | 'preprinted'
@@ -18,7 +95,8 @@
         activeLetterheadId: '',
         pendingTemplateFile: null,
 
-        sigGlobalAlignment: 'space-between',
+        signatureLayout: createDefaultSignatureLayout(),
+        activeSigSlot: null,
         pendingLabSignFile: null,
         pendingDoc1SignFile: null,
         pendingDoc2SignFile: null,
@@ -174,19 +252,342 @@
         updateLiveCanvas();
     };
 
-    // --- SIGNATURES MATRIX & ALIGNMENT ---
-    window.setSigGlobalAlignment = function (align) {
-        state.sigGlobalAlignment = align;
-        document.querySelectorAll('#sigGlobalAlignmentTabs .ps-tab-item').forEach(tab => {
-            tab.classList.toggle('is-active', tab.getAttribute('data-align') === align);
+    // --- INTERACTIVE DRAG & RESIZE SIGNATURE STAGE ---
+    function syncSignatureControlInputs() {
+        const layout = normalizeSigLayoutSafe(state.signatureLayout);
+        ['lab', 'doc1', 'doc2'].forEach((slotKey) => {
+            const rect = layout.slots[slotKey];
+            const xEl = document.getElementById(`sig-${slotKey}-x`);
+            const yEl = document.getElementById(`sig-${slotKey}-y`);
+            const wEl = document.getElementById(`sig-${slotKey}-w`);
+            const hEl = document.getElementById(`sig-${slotKey}-h`);
+            const scaleEl = document.getElementById(`sig-${slotKey}-scale`);
+            const scaleValEl = document.getElementById(`sig-${slotKey}-scale-val`);
+
+            if (xEl) xEl.value = String(Math.round(rect.xPct));
+            if (yEl) yEl.value = String(Math.round(rect.yPx));
+            if (wEl) wEl.value = String(Math.round(rect.widthPct));
+            if (hEl) hEl.value = String(Math.round(rect.heightPx));
+
+            const approxScalePct = Math.round(
+                Math.max(60, Math.min(165, ((rect.widthPct / 28 + rect.heightPx / 84) / 2) * 100))
+            );
+            if (scaleEl) scaleEl.value = String(approxScalePct);
+            if (scaleValEl) scaleValEl.textContent = `${approxScalePct}%`;
         });
+    }
+
+    function applyInteractiveSignatureStage() {
         const grid = document.getElementById('docSignaturesGrid');
-        if (grid) {
-            grid.style.justifyContent = align;
+        if (!grid) return;
+
+        const layout = normalizeSigLayoutSafe(state.signatureLayout);
+        state.signatureLayout = layout;
+        const baseFontPx = Math.max(8, Math.min(18, parseFloat(document.getElementById('pdf-font-size')?.value) || 10.5));
+
+        let maxBottom = 0;
+        ['lab', 'doc1', 'doc2'].forEach((slotKey) => {
+            const meta = SIG_SLOT_DOM_META[slotKey];
+            const el = document.getElementById(meta.slotElId);
+            const checkbox = document.getElementById(meta.checkboxId);
+            const isVisible = checkbox ? checkbox.checked : true;
+            const slotCard = document.getElementById(meta.boxElId);
+
+            if (slotCard) slotCard.classList.toggle('is-disabled', !isVisible);
+            if (!el) return;
+
+            if (!isVisible) {
+                el.style.display = 'none';
+                return;
+            }
+
+            const rect = layout.slots[slotKey];
+            const metrics = computeSlotMetricsSafe(rect, baseFontPx);
+            maxBottom = Math.max(maxBottom, rect.yPx + rect.heightPx);
+
+            el.style.display = 'flex';
+            el.style.left = `${metrics.xPct}%`;
+            el.style.top = `${metrics.yPx}px`;
+            el.style.width = `${metrics.widthPct}%`;
+            el.style.height = `${metrics.heightPx}px`;
+            el.classList.toggle('is-selected', state.activeSigSlot === slotKey);
+
+            const imgWrap = el.querySelector('.ps-doc-sig-img-wrap');
+            if (imgWrap) {
+                imgWrap.style.maxHeight = `${metrics.imgMaxHeightPx}px`;
+                imgWrap.style.marginBottom = `${metrics.gapPx}px`;
+            }
+
+            const digEl = el.querySelector('.ps-doc-digital-signature');
+            if (digEl) {
+                const digPx = Math.max(12, Math.min(28, Math.round(18 * metrics.scaleFactor)));
+                digEl.style.fontSize = `${digPx}px`;
+            }
+
+            const textEl = el.querySelector('.ps-doc-sig-designation');
+            if (textEl) {
+                textEl.style.fontSize = `${metrics.textFontPx}px`;
+            }
+
+            const pillEl = document.getElementById(meta.pillId);
+            if (pillEl) {
+                pillEl.textContent = `${meta.label} • ${Math.round(rect.widthPct)}% × ${Math.round(rect.heightPx)}px`;
+            }
+        });
+
+        const targetStageHeight = Math.max(175, Math.min(310, Math.ceil(maxBottom + 18)));
+        grid.style.minHeight = `${targetStageHeight}px`;
+        grid.style.height = `${targetStageHeight}px`;
+    }
+
+    function hideSnapGuides() {
+        const vx = document.getElementById('sigSnapGuideX');
+        const vy = document.getElementById('sigSnapGuideY');
+        if (vx) vx.style.display = 'none';
+        if (vy) vy.style.display = 'none';
+    }
+
+    function showSnapGuides(snapXPct, snapYPx) {
+        const vx = document.getElementById('sigSnapGuideX');
+        const vy = document.getElementById('sigSnapGuideY');
+        if (vx) {
+            if (snapXPct !== null) {
+                vx.style.left = `${snapXPct}%`;
+                vx.style.display = 'block';
+            } else {
+                vx.style.display = 'none';
+            }
         }
+        if (vy) {
+            if (snapYPx !== null) {
+                vy.style.top = `${snapYPx}px`;
+                vy.style.display = 'block';
+            } else {
+                vy.style.display = 'none';
+            }
+        }
+    }
+
+    function setupInteractiveSignatureStage() {
+        const grid = document.getElementById('docSignaturesGrid');
+        if (!grid || grid.dataset.sigStageBound === 'true') return;
+        grid.dataset.sigStageBound = 'true';
+
+        let activeInteraction = null;
+
+        grid.addEventListener('pointerdown', (e) => {
+            const slotEl = e.target.closest('.ps-doc-sig-block[data-sig-slot]');
+            if (!slotEl) {
+                if (e.target === grid) {
+                    state.activeSigSlot = null;
+                    applyInteractiveSignatureStage();
+                }
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const slotKey = slotEl.getAttribute('data-sig-slot');
+            if (!SIG_SLOT_DOM_META[slotKey]) return;
+
+            state.activeSigSlot = slotKey;
+            const handleEl = e.target.closest('.ps-sig-handle[data-handle]');
+            const mode = handleEl ? 'resize' : 'drag';
+            const handle = handleEl ? handleEl.getAttribute('data-handle') : '';
+
+            const stageRect = grid.getBoundingClientRect();
+            const unscaledW = grid.offsetWidth || stageRect.width || 720;
+            const scaleFactor = stageRect.width / unscaledW || 1;
+            const startRect = { ...state.signatureLayout.slots[slotKey] };
+
+            slotEl.classList.add('is-interacting');
+            activeInteraction = {
+                slotKey,
+                slotEl,
+                mode,
+                handle,
+                startClientX: e.clientX,
+                startClientY: e.clientY,
+                stageWidthPx: stageRect.width || 720,
+                scaleFactor,
+                startRect,
+            };
+
+            applyInteractiveSignatureStage();
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!activeInteraction) return;
+            e.preventDefault();
+
+            const {
+                slotKey, mode, handle, startClientX, startClientY,
+                stageWidthPx, scaleFactor, startRect
+            } = activeInteraction;
+
+            const dxPct = ((e.clientX - startClientX) / stageWidthPx) * 100;
+            const dyPx = (e.clientY - startClientY) / scaleFactor;
+
+            const next = { ...startRect };
+            let guideX = null;
+            let guideY = null;
+
+            if (mode === 'drag') {
+                let candX = Math.max(0, Math.min(100 - startRect.widthPct, startRect.xPct + dxPct));
+                let candY = Math.max(0, Math.min(170, startRect.yPx + dyPx));
+
+                // Magnetic X snap: Left edge (0%), Center, Right edge, and visible siblings
+                const snapXTargets = [
+                    { boxX: 0, guidePct: 0 },
+                    { boxX: (100 - startRect.widthPct) / 2, guidePct: 50 },
+                    { boxX: 100 - startRect.widthPct, guidePct: 100 },
+                ];
+                const snapYTargets = [{ boxY: 10, guidePx: 10 }];
+
+                ['lab', 'doc1', 'doc2'].forEach((otherKey) => {
+                    if (otherKey === slotKey) return;
+                    const cb = document.getElementById(SIG_SLOT_DOM_META[otherKey].checkboxId);
+                    if (cb && !cb.checked) return;
+                    const sibling = state.signatureLayout.slots[otherKey];
+                    snapXTargets.push({ boxX: sibling.xPct, guidePct: sibling.xPct });
+                    snapXTargets.push({
+                        boxX: sibling.xPct + (sibling.widthPct - startRect.widthPct) / 2,
+                        guidePct: sibling.xPct + sibling.widthPct / 2,
+                    });
+                    snapYTargets.push({ boxY: sibling.yPx, guidePx: sibling.yPx });
+                    snapYTargets.push({
+                        boxY: sibling.yPx + sibling.heightPx - startRect.heightPx,
+                        guidePx: sibling.yPx + sibling.heightPx,
+                    });
+                });
+
+                for (const target of snapXTargets) {
+                    if (Math.abs(candX - target.boxX) <= 1.35) {
+                        candX = Math.max(0, Math.min(100 - startRect.widthPct, target.boxX));
+                        guideX = Math.max(0, Math.min(100, target.guidePct));
+                        break;
+                    }
+                }
+                for (const target of snapYTargets) {
+                    if (Math.abs(candY - target.boxY) <= 5) {
+                        candY = Math.max(0, Math.min(170, target.boxY));
+                        guideY = Math.max(0, Math.min(310, target.guidePx));
+                        break;
+                    }
+                }
+
+                next.xPct = Math.round(candX * 100) / 100;
+                next.yPx = Math.round(candY);
+                showSnapGuides(guideX, guideY);
+            } else if (mode === 'resize') {
+                const startRight = startRect.xPct + startRect.widthPct;
+                const startBottom = startRect.yPx + startRect.heightPx;
+
+                if (handle.includes('e')) {
+                    const maxW = Math.min(75, 100 - startRect.xPct);
+                    next.widthPct = Math.round(Math.max(12, Math.min(maxW, startRect.widthPct + dxPct)) * 100) / 100;
+                }
+                if (handle.includes('w')) {
+                    const newX = Math.max(0, Math.min(startRight - 12, startRect.xPct + dxPct));
+                    const newW = Math.min(75, startRight - newX);
+                    next.widthPct = Math.round(Math.max(12, newW) * 100) / 100;
+                    next.xPct = Math.round((startRight - next.widthPct) * 100) / 100;
+                }
+                if (handle.includes('s')) {
+                    next.heightPx = Math.round(Math.max(44, Math.min(210, startRect.heightPx + dyPx)));
+                }
+                if (handle.includes('n')) {
+                    const clampedTop = Math.max(0, Math.min(startBottom - 44, startRect.yPx + dyPx));
+                    const clampedHeight = Math.min(210, startBottom - clampedTop);
+                    next.heightPx = Math.round(Math.max(44, clampedHeight));
+                    next.yPx = Math.round(Math.max(0, Math.min(170, startBottom - next.heightPx)));
+                }
+                hideSnapGuides();
+            }
+
+            state.signatureLayout.isCustom = true;
+            state.signatureLayout.slots[slotKey] = normalizeSigLayoutSafe({ isCustom: true, slots: { ...state.signatureLayout.slots, [slotKey]: next } }).slots[slotKey];
+
+            applyInteractiveSignatureStage();
+            syncSignatureControlInputs();
+            updateStatusIndicator('unsaved', 'Unsaved signature layout');
+        });
+
+        const finishInteraction = () => {
+            if (!activeInteraction) return;
+            activeInteraction.slotEl.classList.remove('is-interacting');
+            activeInteraction = null;
+            hideSnapGuides();
+        };
+
+        window.addEventListener('pointerup', finishInteraction);
+        window.addEventListener('pointercancel', finishInteraction);
+    }
+
+    function bindSignatureCoordinateInputs() {
+        ['lab', 'doc1', 'doc2'].forEach((slotKey) => {
+            const xEl = document.getElementById(`sig-${slotKey}-x`);
+            const yEl = document.getElementById(`sig-${slotKey}-y`);
+            const wEl = document.getElementById(`sig-${slotKey}-w`);
+            const hEl = document.getElementById(`sig-${slotKey}-h`);
+            const scaleEl = document.getElementById(`sig-${slotKey}-scale`);
+
+            const commitManualDims = () => {
+                const candidate = {
+                    xPct: parseFloat(xEl?.value),
+                    yPx: parseFloat(yEl?.value),
+                    widthPct: parseFloat(wEl?.value),
+                    heightPx: parseFloat(hEl?.value),
+                };
+                state.signatureLayout.isCustom = true;
+                state.signatureLayout.slots[slotKey] = normalizeSigLayoutSafe({
+                    isCustom: true,
+                    slots: { ...state.signatureLayout.slots, [slotKey]: candidate },
+                }).slots[slotKey];
+                state.activeSigSlot = slotKey;
+                applyInteractiveSignatureStage();
+                syncSignatureControlInputs();
+                updateStatusIndicator('unsaved', 'Unsaved signature layout');
+            };
+
+            [xEl, yEl, wEl, hEl].forEach((input) => {
+                input?.addEventListener('input', commitManualDims);
+                input?.addEventListener('change', commitManualDims);
+            });
+
+            scaleEl?.addEventListener('input', () => {
+                const ratio = (parseFloat(scaleEl.value) || 100) / 100;
+                const cur = state.signatureLayout.slots[slotKey];
+                const scaled = sigLayoutEngine?.scaleSignatureSlotUniformly
+                    ? sigLayoutEngine.scaleSignatureSlotUniformly(cur, ratio, SIG_DEFAULT_SLOTS[slotKey])
+                    : (() => {
+                        const w = Math.max(12, Math.min(75, Math.round(SIG_DEFAULT_SLOTS[slotKey].widthPct * ratio * 100) / 100));
+                        const h = Math.max(44, Math.min(210, Math.round(SIG_DEFAULT_SLOTS[slotKey].heightPx * ratio)));
+                        const center = cur.xPct + cur.widthPct / 2;
+                        const x = Math.max(0, Math.min(100 - w, Math.round((center - w / 2) * 100) / 100));
+                        return { xPct: x, yPx: cur.yPx, widthPct: w, heightPx: h };
+                    })();
+                state.signatureLayout.isCustom = true;
+                state.signatureLayout.slots[slotKey] = scaled;
+                state.activeSigSlot = slotKey;
+                applyInteractiveSignatureStage();
+                syncSignatureControlInputs();
+                updateStatusIndicator('unsaved', 'Unsaved signature layout');
+            });
+        });
+    }
+
+    window.resetSignatureLayout = function () {
+        state.signatureLayout = createDefaultSignatureLayout();
+        state.activeSigSlot = null;
+        applyInteractiveSignatureStage();
+        syncSignatureControlInputs();
+        updateStatusIndicator('unsaved', 'Unsaved changes');
+        showToast('Signature positions & sizes reset to default.', 'info');
     };
 
-    window.handleSigSlotToggle = function (slotKey) {
+    window.handleSigSlotToggle = function () {
         updateSignaturesLiveCanvas();
     };
 
@@ -246,16 +647,28 @@
         if (docBody) {
             docBody.style.paddingLeft = `${Math.max(10, Math.round(marginLeftCm * CM_TO_PX))}px`;
             docBody.style.paddingRight = `${Math.max(10, Math.round(marginRightCm * CM_TO_PX))}px`;
-            docBody.style.fontSize = `${fontSizePt}pt`;
+            docBody.style.fontSize = `${fontSizePt}px`;
+
+            const docTable = document.getElementById('docParametersTable');
+            if (docTable) {
+                docTable.style.fontSize = `${fontSizePt}px`;
+                docTable.querySelectorAll('td, th').forEach((cell) => {
+                    cell.style.fontSize = `${fontSizePt}px`;
+                });
+            }
+            const bannerEl = document.getElementById('docInvestigationBanner');
+            if (bannerEl) {
+                bannerEl.style.fontSize = `${Math.max(9.5, fontSizePt)}px`;
+            }
 
             // Report Format 1 Header font size is strictly locked to 10px
             const patientCard = document.querySelector('.ps-doc-patient-card');
             if (patientCard) {
                 const currentFormat = localStorage.getItem('pdfformat') || 'reportFormat1';
                 if (!currentFormat || currentFormat === 'reportFormat1') {
-                    patientCard.style.fontSize = '10px';
+                    patientCard.style.setProperty('font-size', '10px', 'important');
                     patientCard.querySelectorAll('*').forEach(el => {
-                        el.style.fontSize = '10px';
+                        el.style.setProperty('font-size', '10px', 'important');
                     });
                 }
             }
@@ -332,9 +745,11 @@
             badge.style.display = showAbnormalFlag ? 'inline-block' : 'none';
         });
 
-        // Banner and Categories
+        // Banner and Header Investigations Preview
         const banner = document.getElementById('docInvestigationBanner');
         if (banner) banner.style.display = showInvestBanner ? 'block' : 'none';
+        const cardInvestRow = document.getElementById('psDocInvestRow');
+        if (cardInvestRow) cardInvestRow.style.display = showInvestBanner ? 'flex' : 'none';
 
         const catRows = document.querySelectorAll('.ps-doc-category-row');
         catRows.forEach(row => {
@@ -420,6 +835,8 @@
                 }
             }
         }
+
+        applyInteractiveSignatureStage();
     }
 
     // Global image error handler to prevent broken image icons
@@ -745,9 +1162,15 @@
                     document.getElementById('abnormal-results-red').checked = true;
                     document.getElementById('abnormal-results-bold').checked = true;
                 }
-                if (data.showInvest !== undefined) document.getElementById('show-investigations').checked = !!data.showInvest;
+                const investCheckbox = document.getElementById('show-investigations');
+                if (investCheckbox) {
+                    investCheckbox.checked = data.showInvestExplicit ? !!data.showInvest : true;
+                }
                 if (data.hideCategories !== undefined) document.getElementById('hide-categories').checked = !!data.hideCategories;
                 if (data.hideTableHeadings !== undefined) document.getElementById('hide-table-headings').checked = !!data.hideTableHeadings;
+                if (data.signatureLayout && !state.signatureLayout?.isCustom) {
+                    state.signatureLayout = normalizeSigLayoutSafe(data.signatureLayout);
+                }
             }
         } catch (error) {
             console.warn('Notice: Using default print settings due to fetch fallback:', error.message);
@@ -796,6 +1219,13 @@
                     renderSignatureThumb('secondSignThumbBox', 'secondSignImgdiv', state.doc2SignUrl, 'Doctor 2');
                 } else {
                     document.getElementById('secondSignThumbBox').style.display = 'none';
+                }
+
+                if (data.signatureLayout) {
+                    const normDbLayout = normalizeSigLayoutSafe(data.signatureLayout);
+                    if (normDbLayout.isCustom || !state.signatureLayout?.isCustom) {
+                        state.signatureLayout = normDbLayout;
+                    }
                 }
             }
         } catch (error) {
@@ -948,21 +1378,22 @@
         const doc2ImgUrl = safeUrl(state.doc2SignUrl);
         const bgUrl = withoutLetterhead ? '' : safeUrl(state.activeLetterheadUrl);
 
-        // Build HTML footer for the PDF compiler
-        const renderSlotHtml = (visible, img, text) => {
-            if (!visible) return '<div style="min-width: 120px;"></div>';
-            return `
-                <div style="text-align: center; min-width: 120px; max-width: 220px;">
-                    ${img ? `<img src="${img}" style="max-height: 44px; max-width: 140px; object-fit: contain;" />` : `<div style="height: 35px;"></div>`}
-                    <div style="font-size: 10px; color: #1e293b; margin-top: 4px; white-space: pre-line; border-top: 1px solid #94a3b8; padding-top: 3px;">${text}</div>
-                </div>`;
-        };
+        const activeSigLayout = normalizeSigLayoutSafe(state.signatureLayout);
+
+        // Build clean HTML footer matching all Report Formats (`data-sig-slot="lab"|"doc1"|"doc2"`)
+        const renderSlotHtml = (slotKey, visible, img, text) => `
+            <div class="left-sign" data-sig-slot="${slotKey}" style="display:${visible ? 'flex' : 'none'}; text-align:center;">
+                <div class="rf-sig-img-wrap">${img ? `<img src="${img}" width="95" height="35" />` : `<div style="height:35px;width:95px;"></div>`}</div>
+                <div class="textspan">${text || ''}</div>
+            </div>`;
 
         const footerHtml = `
-            <div style="width: 100%; display: flex; justify-content: ${state.sigGlobalAlignment}; align-items: flex-end; padding-left: ${LeftsignPd}cm; padding-right: ${Rightsignpd}cm;">
-                ${renderSlotHtml(showlab, labImgUrl, labText)}
-                ${renderSlotHtml(showdoctorfirst, doc1ImgUrl, doc1Text)}
-                ${renderSlotHtml(showdoctorsecond, doc2ImgUrl, doc2Text)}
+            <div class="signed-off-div">
+                <div class="signed-off-div2" style="padding-left: ${LeftsignPd}cm; padding-right: ${Rightsignpd}cm;">
+                    ${renderSlotHtml('lab', showlab, labImgUrl, labText)}
+                    ${renderSlotHtml('doc1', showdoctorfirst, doc1ImgUrl, doc1Text)}
+                    ${renderSlotHtml('doc2', showdoctorsecond, doc2ImgUrl, doc2Text)}
+                </div>
             </div>`;
 
         const payload = {
@@ -982,6 +1413,7 @@
             HLinred,
             BoldRow,
             showInvest,
+            showInvestExplicit: !!customOverrides.persistCustomization,
             hideCategories,
             hideTableHeadings,
             showlab,
@@ -994,6 +1426,7 @@
             fileInputDoctorlefttext: doc1Text,
             fileInputDoctorrighttext: doc2Text,
             footer: footerHtml,
+            signatureLayout: activeSigLayout,
             persistCustomization: !!customOverrides.persistCustomization,
             explicitPrintSettingsSave: !!customOverrides.persistCustomization,
             pdfFormat: localStorage.getItem('pdfformat') || 'reportFormat1'
@@ -1077,6 +1510,7 @@
             sigFormData.append('showdoctorsecond', document.getElementById('show-doctor2')?.checked ?? true);
             sigFormData.append('LeftsignPd', document.getElementById('padding-left')?.value || '0.5');
             sigFormData.append('Rightsignpd', document.getElementById('padding-right')?.value || '0.5');
+            sigFormData.append('signatureLayout', JSON.stringify(normalizeSigLayoutSafe(state.signatureLayout)));
 
             const sigRes = await fetch(`${BASE_URL}/api/v1/user/uploadDoctorsSign`, {
                 method: 'POST',
@@ -1188,15 +1622,24 @@
 
     // --- APPLICATION BOOTSTRAP ---
     async function init() {
+        try {
+            sigLayoutEngine = await import(`${BASE_URL}/js/signatureLayoutEngine.mjs?v=1`);
+        } catch (err) {
+            console.warn('Signature layout engine dynamic load fallback active:', err?.message || err);
+        }
+
         setupDragAndDrop();
         setupDeleteHandlers();
         bindInputListeners();
+        setupInteractiveSignatureStage();
+        bindSignatureCoordinateInputs();
 
         // Load configuration and data from server
         await fetchDataAndSetInputs();
         await fetchLabSignAndSetInputs();
         await fetchTemplateGallery();
 
+        syncSignatureControlInputs();
         // Calculate initial true-to-scale responsive preview
         fitPreviewToWindow();
         updateLiveCanvas();

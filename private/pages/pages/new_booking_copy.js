@@ -1,4 +1,46 @@
 async function bookingload() {
+    if (!window.LabflowBookingHelpers) {
+        await new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = '/js/bookingPatientHelpers.js';
+            script.async = false;
+            script.onload = resolve;
+            script.onerror = resolve;
+            document.head.appendChild(script);
+        });
+    }
+
+    const bookingHelpers = window.LabflowBookingHelpers || {
+        combinePatientTitleAndName: (title, name) => [String(title || '').trim(), String(name || '').trim()].filter(Boolean).join(' '),
+        validateDoctorFormPayload: (payload, refs) => {
+            if (!String(payload.firstname || '').trim()) {
+                return { message: 'Doctor first name is required.', field: refs?.doctorFirstname };
+            }
+            if (!String(payload.lastname || '').trim()) {
+                return { message: 'Doctor last name is required.', field: refs?.doctorLastname };
+            }
+            return null;
+        },
+        bindPatientTitleGenderSync: () => ({
+            syncFromTitle: () => false,
+            refreshPriorityOptions: () => {},
+            recordTitleUsage: () => {},
+            hydratePatientFields: () => {},
+        }),
+    };
+
+    const patientTitleEl = document.getElementById('patient-title');
+    const patientNameEl = document.getElementById('patient-name');
+    const patientGenderEl = document.getElementById('patient-gender');
+    const patientTitleController = bookingHelpers.bindPatientTitleGenderSync({
+        titleSelect: patientTitleEl,
+        genderSelect: patientGenderEl,
+        nameInput: patientNameEl,
+        genderIcon: document.getElementById('patient-gender-icon'),
+        genderGroup: patientGenderEl?.closest('.patient-gender-group') || null,
+        mode: 'new',
+    });
+
     let totalprice = document.querySelector('#header span');
     const testSelection = document.getElementById('test-selection');
     testSelection.innerHTML = '';
@@ -92,7 +134,8 @@ async function bookingload() {
                 testElement.classList.add('doctor-option-selection');
                 testElement.setAttribute('doctor-id', test._id);
 
-                testElement.innerText = `${test.firstName} ${test.lastName} (${test.specialization})`;
+                const specSuffix = test.specialization ? ` (${test.specialization})` : '';
+                testElement.innerText = `${test.firstName} ${test.lastName}${specSuffix}`;
                 subFranchiseeSelect.appendChild(testElement);
             });
         } catch (error) {
@@ -339,83 +382,171 @@ async function bookingload() {
     document.getElementById('selectedTestDivforSearch').addEventListener('input', filterselectedTests);
 
     // adding doctor function
+    function clearDoctorModalError() {
+        const feedbackEl = document.getElementById('doctorModalFeedback');
+        if (feedbackEl) {
+            feedbackEl.innerHTML = '';
+            feedbackEl.classList.remove('is-visible');
+        }
+        document.querySelectorAll('#modal .lf-doc-control.is-invalid').forEach((node) => {
+            node.classList.remove('is-invalid');
+        });
+    }
+
+    function showDoctorModalError(message, field = null) {
+        clearDoctorModalError();
+        const feedbackEl = document.getElementById('doctorModalFeedback');
+        if (feedbackEl) {
+            feedbackEl.innerHTML = `<i class="fas fa-exclamation-circle" aria-hidden="true"></i><span>${String(message || '').replace(/</g, '&lt;')}</span>`;
+            feedbackEl.classList.add('is-visible');
+        } else {
+            alert(message);
+        }
+        field?.closest?.('.lf-doc-control')?.classList.add('is-invalid');
+    }
+
+    function resetDoctorModalForm() {
+        clearDoctorModalError();
+        ['firstname', 'lastname', 'specialization', 'doctor-email', 'doctor-dob', 'address'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const genderEl = document.getElementById('doctor-gender') || document.getElementById('gender');
+        if (genderEl) genderEl.value = '';
+    }
+
     function addDoctorpage() {
         try {
             const modal = document.getElementById('modal');
             const openModalBtn = document.getElementById('openModalBtn');
-            const closeModalBtn = document.querySelector('.close');
-            const closeFooterBtn = document.querySelector('.btn-close');
+            const closeModalBtn = modal?.querySelector('.close');
+            const closeFooterBtn = modal?.querySelector('.btn-close');
 
-            // Function to open modal
-            openModalBtn.addEventListener('click', function () {
-                modal.classList.add('active');
+            openModalBtn?.addEventListener('click', function () {
+                resetDoctorModalForm();
+                modal?.classList.add('active');
+                window.requestAnimationFrame(() => document.getElementById('firstname')?.focus());
             });
 
-            // Function to close modal when close button is clicked
-            closeModalBtn.addEventListener('click', function () {
-                modal.classList.remove('active');
+            closeModalBtn?.addEventListener('click', function () {
+                clearDoctorModalError();
+                modal?.classList.remove('active');
             });
 
-            // Close modal by clicking footer close button
-            closeFooterBtn.addEventListener('click', function () {
-                modal.classList.remove('active');
+            closeFooterBtn?.addEventListener('click', function () {
+                clearDoctorModalError();
+                modal?.classList.remove('active');
             });
 
-            // Close modal when clicking outside the modal content
             window.addEventListener('click', function (event) {
                 if (event.target === modal) {
+                    clearDoctorModalError();
+                    modal?.classList.remove('active');
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && modal?.classList.contains('active')) {
+                    clearDoctorModalError();
                     modal.classList.remove('active');
                 }
             });
+
+            ['firstname', 'lastname', 'doctor-email'].forEach((id) => {
+                const inputEl = document.getElementById(id);
+                inputEl?.addEventListener('input', () => {
+                    inputEl.closest('.lf-doc-control')?.classList.remove('is-invalid');
+                    clearDoctorModalError();
+                });
+            });
         } catch (error) {
             console.error(error);
-
         }
     }
 
     // adding doctor to database
     function addingdoctortodatabase() {
         try {
-            const addDoctorBtn = document.querySelector('.btn-add');
+            const modal = document.getElementById('modal');
+            const addDoctorBtn = modal?.querySelector('.btn-add') || document.querySelector('.btn-add');
 
-            // Add event listener to the Add Doctor button
-            addDoctorBtn.addEventListener('click', function () {
-                // Gather form data
+            addDoctorBtn?.addEventListener('click', async function () {
+                clearDoctorModalError();
+
+                const doctorFirstname = document.getElementById('firstname');
+                const doctorLastname = document.getElementById('lastname');
+                const doctorEmail = document.getElementById('doctor-email');
+                const doctorSpecialization = document.getElementById('specialization');
+                const doctorDob = document.getElementById('doctor-dob') || document.getElementById('dob');
+                const doctorGender = document.getElementById('doctor-gender') || document.getElementById('gender');
+                const doctorAddress = document.getElementById('address') || document.getElementById('doctor-address');
+
                 const doctorData = {
-                    firstname: document.getElementById('firstname').value,
-                    lastname: document.getElementById('lastname').value,
-                    specialization: document.getElementById('specialization').value,
-                    dob: document.getElementById('dob').value,
-                    gender: document.getElementById('gender').value,
-                    address: document.getElementById('address').value,
+                    firstname: doctorFirstname?.value.trim() || '',
+                    lastname: doctorLastname?.value.trim() || '',
+                    email: doctorEmail?.value.trim() || '',
+                    specialization: doctorSpecialization?.value.trim() || '',
+                    dob: doctorDob?.value || '',
+                    gender: doctorGender?.value || '',
+                    address: doctorAddress?.value.trim() || '',
                     userId
                 };
 
-                // Send the data to the backend using fetch
-                fetch(`${BASE_URL}/api/v1/user/add-doctor`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(doctorData)
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Doctor added successfully!');
-                            modal.classList.remove('active'); // Close modal on success
-                        } else {
-                            alert('Failed to add doctor.');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred while adding the doctor.');
+                const validationError = bookingHelpers.validateDoctorFormPayload(doctorData, {
+                    doctorFirstname,
+                    doctorLastname,
+                    doctorEmail,
+                });
+                if (validationError) {
+                    showDoctorModalError(validationError.message, validationError.field);
+                    validationError.field?.focus?.();
+                    return;
+                }
+
+                const originalHtml = addDoctorBtn.innerHTML;
+                addDoctorBtn.disabled = true;
+                addDoctorBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving...';
+
+                try {
+                    const response = await fetch(`${BASE_URL}/api/v1/user/add-doctor`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(doctorData)
                     });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to add doctor.');
+                    }
+
+                    const createdDoctor = data.data || data.doctor || data;
+                    const doctorSelect = document.getElementById('doctor-selection');
+                    if (doctorSelect && createdDoctor?._id) {
+                        const opt = document.createElement('option');
+                        opt.id = 'doctor-option-selection';
+                        opt.classList.add('doctor-option-selection');
+                        opt.setAttribute('doctor-id', createdDoctor._id);
+                        opt.value = `${createdDoctor.firstName || doctorData.firstname} ${createdDoctor.lastName || doctorData.lastname}`.trim();
+                        const specSuffix = createdDoctor.specialization ? ` (${createdDoctor.specialization})` : '';
+                        opt.innerText = `${opt.value}${specSuffix}`;
+                        doctorSelect.appendChild(opt);
+                        doctorSelect.value = opt.value;
+                        doctorSelect.dispatchEvent(new Event('change'));
+                    }
+
+                    resetDoctorModalForm();
+                    modal?.classList.remove('active');
+                } catch (error) {
+                    console.error('Error:', error);
+                    showDoctorModalError(error.message || 'An error occurred while adding the doctor.');
+                } finally {
+                    addDoctorBtn.disabled = false;
+                    addDoctorBtn.innerHTML = originalHtml;
+                }
             });
         } catch (error) {
             console.error(error);
-
         }
     }
 
@@ -571,7 +702,16 @@ async function bookingload() {
                 const bookingid = document.getElementById('random-id').value;
                 const current_date = document.querySelector('input[type="date"]').value;
                 const current_time = document.querySelector('input[type="time"]').value;
-                const patient_name = document.getElementById('patient-name').value;
+                const rawPatientName = document.getElementById('patient-name')?.value?.trim() || '';
+                if (!rawPatientName) {
+                    alert('Patient name is required.');
+                    document.getElementById('patient-name')?.focus();
+                    return;
+                }
+                const patient_name = bookingHelpers.combinePatientTitleAndName(
+                    document.getElementById('patient-title')?.value || '',
+                    rawPatientName
+                );
                 const total = document.getElementById('total').innerText;
                 // Get the selected test/package
                 // let selectedTestId = [];
@@ -658,6 +798,7 @@ async function bookingload() {
                 const data = await response.json();
                 userId = userRole;
                 if (response.ok) {
+                    patientTitleController.recordTitleUsage(document.getElementById('patient-title')?.value || '');
                     successMessage.style.height = '4rem';
                     setTimeout(() => {
                         successMessage.style.height = '0rem';

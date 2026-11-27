@@ -21,6 +21,14 @@ const customizationSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    showInvestExplicit: {
+        type: Boolean,
+        default: false
+    },
+    signatureLayout: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
     BoldRow: {
         type: Boolean,
         default: true

@@ -249,28 +249,39 @@
         }
     }
 
+    function getBookingHelpers() {
+        if (typeof window !== 'undefined' && window.LabflowBookingHelpers) {
+            return window.LabflowBookingHelpers;
+        }
+
+        return {
+            getGenderForPatientTitle: () => '',
+            normalizePatientGenderValue: (val, fallback = 'Male') => val || fallback,
+            combinePatientTitleAndName: (title, name) => [String(title || '').trim(), String(name || '').trim()].filter(Boolean).join(' '),
+            splitPatientTitleAndName: (fullName) => ({ title: '', name: String(fullName || '').trim() }),
+            validateDoctorFormPayload: (payload, refs) => {
+                if (!String(payload.firstname || '').trim()) {
+                    return { message: 'Doctor first name is required.', field: refs.doctorFirstname };
+                }
+                if (!String(payload.lastname || '').trim()) {
+                    return { message: 'Doctor last name is required.', field: refs.doctorLastname };
+                }
+                if (payload.email && !SIMPLE_EMAIL_REGEX.test(payload.email)) {
+                    return { message: 'Please enter a valid doctor email address.', field: refs.doctorEmail };
+                }
+                return null;
+            },
+            bindPatientTitleGenderSync: () => ({
+                syncFromTitle: () => false,
+                refreshPriorityOptions: () => {},
+                recordTitleUsage: () => {},
+                hydratePatientFields: () => {},
+            }),
+        };
+    }
+
     function validateDoctorPayload(payload, refs) {
-        if (!payload.firstname) {
-            return { message: 'Doctor first name required hai.', field: refs.doctorFirstname };
-        }
-
-        if (!payload.lastname) {
-            return { message: 'Doctor last name required hai.', field: refs.doctorLastname };
-        }
-
-        if (payload.email && !SIMPLE_EMAIL_REGEX.test(payload.email)) {
-            return { message: 'Doctor email valid format me dijiye.', field: refs.doctorEmail };
-        }
-
-        if (!payload.specialization) {
-            return { message: 'Doctor specialization required hai.', field: refs.doctorSpecialization };
-        }
-
-        if (!payload.gender) {
-            return { message: 'Doctor gender required hai.', field: refs.doctorGender };
-        }
-
-        return null;
+        return getBookingHelpers().validateDoctorFormPayload(payload, refs);
     }
 
     function validateLabPayload(payload, refs) {
@@ -363,10 +374,13 @@
             bookingTime: getElementByIds(['booking-time', 'time']),
             courierName: document.getElementById('courier-name'),
             courierId: document.getElementById('courier-id'),
+            patientTitle: document.getElementById('patient-title'),
             patientName: document.getElementById('patient-name'),
             ageValue: document.getElementById('ageValue'),
             ageUnit: document.getElementById('ageUnit'),
             patientGender: document.getElementById('patient-gender'),
+            patientGenderIcon: document.getElementById('patient-gender-icon'),
+            patientGenderGroup: document.getElementById('patient-gender')?.closest('.patient-gender-group') || null,
             patientPhone: document.getElementById('patient-phone'),
             doctorSelect: document.getElementById('doctor-selection'),
             doctorName: document.getElementById('doctor-name'),
@@ -394,6 +408,7 @@
             lastBookingTotal: document.getElementById('last-booking-total'),
             lastBookingPatient: document.getElementById('last-booking-patient'),
             doctorModal: document.getElementById('modal'),
+            doctorModalFeedback: document.getElementById('doctorModalFeedback'),
             openDoctorBtn: document.getElementById('openModalBtn'),
             doctorCloseBtn: document.querySelector('#modal .close'),
             doctorFooterCloseBtn: document.querySelector('#modal .btn-close'),
@@ -474,6 +489,16 @@
         }
 
         syncIdentityState();
+
+        const bookingHelpers = getBookingHelpers();
+        const patientTitleController = bookingHelpers.bindPatientTitleGenderSync({
+            titleSelect: refs.patientTitle,
+            genderSelect: refs.patientGender,
+            nameInput: refs.patientName,
+            genderIcon: refs.patientGenderIcon,
+            genderGroup: refs.patientGenderGroup,
+            mode,
+        });
 
         function showMessage(message, type = 'error') {
             if (!refs.feedback) return;
@@ -2163,7 +2188,10 @@
                 createdbyuser: resolveGlobalUsername(),
                 courierName: (document.getElementById('courier-name') || refs.courierName)?.value || '',
                 courierId: (document.getElementById('courier-id') || refs.courierId)?.value || '',
-                patientName: (document.getElementById('patient-name') || refs.patientName)?.value?.trim() || '',
+                patientName: bookingHelpers.combinePatientTitleAndName(
+                    (document.getElementById('patient-title') || refs.patientTitle)?.value || '',
+                    (document.getElementById('patient-name') || refs.patientName)?.value?.trim() || ''
+                ),
                 year: buildPatientAgeText(),
                 gender: (document.getElementById('patient-gender') || refs.patientGender)?.value || '',
                 patientPhone: (document.getElementById('patient-phone') || refs.patientPhone)?.value || '',
@@ -2247,6 +2275,8 @@
                     throw new Error(getResponseMessage(data, 'Booking save nahi ho saki'));
                 }
 
+                const submittedTitle = (document.getElementById('patient-title') || refs.patientTitle)?.value || '';
+                patientTitleController.recordTitleUsage(submittedTitle);
                 showMessage(data.message || 'Booking successfully create ho gayi.', 'success');
                 const savedBookingId = data?.data?.bookingId || data?.bookingId || getFormCommonFields().bookingId;
 
@@ -2521,9 +2551,11 @@
             if (refs.bookingTime) refs.bookingTime.value = booking.time || '';
             if (refs.courierName) refs.courierName.value = booking.courierName || '';
             if (refs.courierId) refs.courierId.value = booking.courierId || '';
-            if (refs.patientName) refs.patientName.value = booking.patientName || '';
+            patientTitleController.hydratePatientFields({
+                patientName: booking.patientName || '',
+                gender: booking.gender || 'Male',
+            });
             if (refs.patientPhone) refs.patientPhone.value = booking.patientPhone || '';
-            if (refs.patientGender) refs.patientGender.value = booking.gender || 'Any';
             if (refs.clinicalHistory) refs.clinicalHistory.value = booking.clinicalHistory || '';
             if (refs.doctorName) refs.doctorName.value = booking.doctorName || booking.savedDoctor || '';
             if (refs.labName) refs.labName.value = booking.labName || booking.savedLab || '';
@@ -2609,13 +2641,38 @@
             state.bookingUserId = getSelectedFranchiseeId() || toId(state.booking?.createdBy) || state.rootUserId || state.bookingUserId;
         }
 
+        function clearDoctorModalError() {
+            if (refs.doctorModalFeedback) {
+                refs.doctorModalFeedback.innerHTML = '';
+                refs.doctorModalFeedback.classList.remove('is-visible');
+            }
+            refs.doctorModal?.querySelectorAll('.lf-doc-control.is-invalid').forEach((node) => {
+                node.classList.remove('is-invalid');
+            });
+        }
+
+        function showDoctorModalError(message, field = null) {
+            clearDoctorModalError();
+            if (refs.doctorModalFeedback) {
+                refs.doctorModalFeedback.innerHTML = `<i class="fas fa-exclamation-circle" aria-hidden="true"></i><span>${escapeHtml(message)}</span>`;
+                refs.doctorModalFeedback.classList.add('is-visible');
+            } else {
+                showMessage(message, 'error');
+            }
+            const control = field?.closest?.('.lf-doc-control');
+            if (control) {
+                control.classList.add('is-invalid');
+            }
+        }
+
         function resetDoctorForm() {
+            clearDoctorModalError();
             if (refs.doctorFirstname) refs.doctorFirstname.value = '';
             if (refs.doctorLastname) refs.doctorLastname.value = '';
             if (refs.doctorEmail) refs.doctorEmail.value = '';
             if (refs.doctorSpecialization) refs.doctorSpecialization.value = '';
             if (refs.doctorDob) refs.doctorDob.value = '';
-            if (refs.doctorGender) refs.doctorGender.value = 'male';
+            if (refs.doctorGender) refs.doctorGender.value = '';
             if (refs.doctorAddress) refs.doctorAddress.value = '';
             if (refs.doctorPricingMode) refs.doctorPricingMode.value = 'default';
             if (refs.doctorPricingSource) refs.doctorPricingSource.value = state.selfDoctorId || '';
@@ -2629,6 +2686,8 @@
         }
 
         async function createDoctor() {
+            clearDoctorModalError();
+
             const payload = {
                 firstname: refs.doctorFirstname?.value.trim() || '',
                 lastname: refs.doctorLastname?.value.trim() || '',
@@ -2636,81 +2695,97 @@
                 specialization: refs.doctorSpecialization?.value.trim() || '',
                 dob: refs.doctorDob?.value || '',
                 gender: refs.doctorGender?.value || '',
-                address: refs.doctorAddress?.value || '',
+                address: refs.doctorAddress?.value.trim() || '',
                 userId: state.bookingUserId || state.rootUserId || '',
             };
 
             const validationError = validateDoctorPayload(payload, refs);
             if (validationError) {
-                showMessage(validationError.message, 'error');
+                showDoctorModalError(validationError.message, validationError.field);
                 focusField(validationError.field);
                 return;
             }
 
-            const response = await fetch(`${BASE}/api/v1/user/add-doctor`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const data = await getResponseJson(response);
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Doctor create nahi ho paya');
+            const submitButton = refs.addDoctorBtn;
+            const originalButtonHtml = submitButton ? submitButton.innerHTML : '';
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving...';
             }
 
-            const createdDoctor = data.data || data.doctor || data;
-            const createdDoctorId = toId(createdDoctor?._id);
-            const pricingMode = refs.doctorPricingMode?.value || 'default';
-            const copySourceDoctorId = refs.doctorPricingSource?.value || state.selfDoctorId || '';
-            const shouldOpenPricingManager = Boolean(refs.doctorOpenPricingManager?.checked);
-            let postCreateMessage = data.message || 'Doctor successfully add ho gaya.';
+            try {
+                const response = await fetch(`${BASE}/api/v1/user/add-doctor`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await getResponseJson(response);
 
-            if (pricingMode === 'copy' && createdDoctorId && copySourceDoctorId) {
-                if (state.supportsAdvancedBookingApi === false) {
-                    postCreateMessage = 'Doctor add ho gaya. Is running app build me doctor pricing copy API available nahi hai. Updated build run karke pricing set karein.';
-                } else {
-                    try {
-                        const copyResponse = await fetch(`${BASE}/api/v1/user/doctor-rate-card/${createdDoctorId}/copy`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sourceDoctorId: copySourceDoctorId }),
-                        });
-                        const copyData = await getResponseJson(copyResponse);
+                if (!response.ok) {
+                    throw new Error(getResponseMessage(data, 'Doctor could not be created.'));
+                }
 
-                        if (!copyResponse.ok) {
-                            throw new Error(getResponseMessage(copyData, 'Doctor create ho gaya, lekin pricing copy nahi ho payi'));
+                const createdDoctor = data.data || data.doctor || data;
+                const createdDoctorId = toId(createdDoctor?._id);
+                const pricingMode = refs.doctorPricingMode?.value || 'default';
+                const copySourceDoctorId = refs.doctorPricingSource?.value || state.selfDoctorId || '';
+                const shouldOpenPricingManager = Boolean(refs.doctorOpenPricingManager?.checked);
+                let postCreateMessage = data.message || 'Doctor successfully add ho gaya.';
+
+                if (pricingMode === 'copy' && createdDoctorId && copySourceDoctorId) {
+                    if (state.supportsAdvancedBookingApi === false) {
+                        postCreateMessage = 'Doctor add ho gaya. Is running app build me doctor pricing copy API available nahi hai. Updated build run karke pricing set karein.';
+                    } else {
+                        try {
+                            const copyResponse = await fetch(`${BASE}/api/v1/user/doctor-rate-card/${createdDoctorId}/copy`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ sourceDoctorId: copySourceDoctorId }),
+                            });
+                            const copyData = await getResponseJson(copyResponse);
+
+                            if (!copyResponse.ok) {
+                                throw new Error(getResponseMessage(copyData, 'Doctor create ho gaya, lekin pricing copy nahi ho payi'));
+                            }
+                        } catch (error) {
+                            logNonBlockingApiWarning('Doctor pricing copy failed after doctor creation', error);
+                            postCreateMessage = `${postCreateMessage} Pricing copy nahi ho payi. ${error.message || 'Manual pricing later set karein.'}`;
                         }
-                    } catch (error) {
-                        logNonBlockingApiWarning('Doctor pricing copy failed after doctor creation', error);
-                        postCreateMessage = `${postCreateMessage} Pricing copy nahi ho payi. ${error.message || 'Manual pricing later set karein.'}`;
                     }
                 }
-            }
 
-            resetDoctorForm();
-            if (refs.doctorModal) refs.doctorModal.classList.remove('active');
-            await fetchDoctors(createdDoctorId);
-            if (createdDoctorId && refs.doctorSelect) {
-                refs.doctorSelect.value = createdDoctorId;
-                state.selectedDoctorId = createdDoctorId;
-                updateDoctorField();
-            }
-            const catalogLoaded = await loadCatalogSafely({ preserveSelection: true });
+                resetDoctorForm();
+                if (refs.doctorModal) refs.doctorModal.classList.remove('active');
+                await fetchDoctors(createdDoctorId);
+                if (createdDoctorId && refs.doctorSelect) {
+                    refs.doctorSelect.value = createdDoctorId;
+                    state.selectedDoctorId = createdDoctorId;
+                    updateDoctorField();
+                }
+                const catalogLoaded = await loadCatalogSafely({ preserveSelection: true });
 
-            if (shouldOpenPricingManager && createdDoctorId && typeof window.loadPage === 'function') {
-                if (state.supportsAdvancedBookingApi === false) {
-                    showMessage('Doctor add ho gaya. Pricing manager current running build me available nahi hai. Updated build run karein.', 'success');
+                if (shouldOpenPricingManager && createdDoctorId && typeof window.loadPage === 'function') {
+                    if (state.supportsAdvancedBookingApi === false) {
+                        showMessage('Doctor add ho gaya. Pricing manager current running build me available nahi hai. Updated build run karein.', 'success');
+                        return;
+                    }
+                    window.loadPage('doctorPricing', createdDoctorId);
                     return;
                 }
-                window.loadPage('doctorPricing', createdDoctorId);
-                return;
-            }
 
-            if (!catalogLoaded) {
-                postCreateMessage = `${postCreateMessage} Catalog refresh turant complete nahi hua, ek baar page reload karke verify kar lijiye.`;
-            }
+                if (!catalogLoaded) {
+                    postCreateMessage = `${postCreateMessage} Catalog refresh turant complete nahi hua, ek baar page reload karke verify kar lijiye.`;
+                }
 
-            showMessage(postCreateMessage, 'success');
+                showMessage(postCreateMessage, 'success');
+            } catch (error) {
+                showDoctorModalError(error.message || 'Doctor could not be added.');
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonHtml;
+                }
+            }
         }
 
         async function createLab() {
@@ -3009,11 +3084,33 @@
                 renderDoctorPricingSources();
                 syncDoctorPricingMode();
                 refs.doctorModal?.classList.add('active');
+                window.requestAnimationFrame(() => focusField(refs.doctorFirstname));
             });
-            refs.doctorCloseBtn?.addEventListener('click', () => refs.doctorModal?.classList.remove('active'));
-            refs.doctorFooterCloseBtn?.addEventListener('click', () => refs.doctorModal?.classList.remove('active'));
+            refs.doctorCloseBtn?.addEventListener('click', () => {
+                clearDoctorModalError();
+                refs.doctorModal?.classList.remove('active');
+            });
+            refs.doctorFooterCloseBtn?.addEventListener('click', () => {
+                clearDoctorModalError();
+                refs.doctorModal?.classList.remove('active');
+            });
             refs.doctorModal?.addEventListener('click', (event) => {
                 if (event.target === refs.doctorModal) {
+                    clearDoctorModalError();
+                    refs.doctorModal.classList.remove('active');
+                }
+            });
+            [refs.doctorFirstname, refs.doctorLastname, refs.doctorEmail].forEach((inputEl) => {
+                inputEl?.addEventListener('input', () => {
+                    inputEl.closest('.lf-doc-control')?.classList.remove('is-invalid');
+                    if (refs.doctorModalFeedback?.classList.contains('is-visible')) {
+                        clearDoctorModalError();
+                    }
+                });
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && refs.doctorModal?.classList.contains('active')) {
+                    clearDoctorModalError();
                     refs.doctorModal.classList.remove('active');
                 }
             });

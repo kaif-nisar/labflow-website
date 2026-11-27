@@ -26,6 +26,7 @@ import {
 } from "../utils/pdfOfflineAssets.js";
 import { getPuppeteerLaunchOptions } from "../utils/puppeteerRuntime.js";
 import { evaluateClinicalReferenceFlag } from "../../public/js/clinicalRangeEvaluator.mjs";
+import { applySignatureLayoutToFooterHtml } from "../utils/pdfSignatureLayout.js";
 
 const DEFAULT_BASE_SIDE_PX = 28;
 const CM_TO_PX = 37.7952755906;
@@ -181,7 +182,7 @@ export const prepareFormat5FooterHtml = async ({
     );
   }
 
-  const syncSlot = ({ selectors, visible, imgUrl, credentialText, altText }) => {
+  const syncSlot = ({ slotKey, selectors, visible, imgUrl, credentialText, altText }) => {
     let $slot = null;
     for (const selector of selectors) {
       const candidate = $(selector).first();
@@ -191,6 +192,7 @@ export const prepareFormat5FooterHtml = async ({
       }
     }
     if (!$slot || !$slot.length) return;
+    if (slotKey) $slot.attr("data-sig-slot", slotKey);
 
     if (!visible) {
       $slot.attr("style", "display: none !important;");
@@ -216,6 +218,7 @@ export const prepareFormat5FooterHtml = async ({
   };
 
   syncSlot({
+    slotKey: "lab",
     selectors: ["#labInchargeSign", ".lab-incharge-sign", ".oh5-sign-lab"],
     visible: isLabVisible,
     imgUrl: fileInputLab,
@@ -223,6 +226,7 @@ export const prepareFormat5FooterHtml = async ({
     altText: "Lab In-Charge Signature",
   });
   syncSlot({
+    slotKey: "doc1",
     selectors: ["#firstDoctorSign", ".first-doctor-sign", ".oh5-sign-doc1"],
     visible: isDoc1Visible,
     imgUrl: fileInputDoctorleft,
@@ -230,6 +234,7 @@ export const prepareFormat5FooterHtml = async ({
     altText: "Authorized Pathologist Signature",
   });
   syncSlot({
+    slotKey: "doc2",
     selectors: ["#secondDoctorSign", ".second-doctor-sign", ".oh5-sign-doc2"],
     visible: isDoc2Visible,
     imgUrl: fileInputDoctorright,
@@ -1416,6 +1421,7 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
     hideTableHeadings = false,
     showCategory,
     showTestHeading,
+    signatureLayout = null,
   } = options;
 
   const cmToPx = (cm) => cm * CM_TO_PX;
@@ -1512,10 +1518,24 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
     HighLowResolved: highLowResolved,
   });
 
+  const sigLayoutResult = applySignatureLayoutToFooterHtml({
+    rawFooterHtml: inlinedFooterInner,
+    signatureLayout,
+    baseFontSizePx: Math.max(8.5, baseFontSizePx - 1),
+    isFormat5: true,
+    showLab: showlab,
+    showDoc1: showdoctorfirst,
+    showDoc2: showdoctorsecond,
+  });
+  const finalFooterInner = sigLayoutResult.footerHtml || inlinedFooterInner;
+  const format5CustomFlexCss = sigLayoutResult.isCustom
+    ? `\n.oh5-footer-top-row .signatures.oh5-signatures { flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }\n${sigLayoutResult.layoutCss}`
+    : "";
+
   const footerTemplateHtml = `
-    <style>${footerTemplateCss}</style>
+    <style>${footerTemplateCss}${format5CustomFlexCss}</style>
     <div class="oh5-footer-shell" id="oh5FooterRoot">
-      ${inlinedFooterInner}
+      ${finalFooterInner}
       <div class="oh5-footer-bottom-meta">
         ${isMultiSpecimen
           ? `<span>&nbsp;</span><span class="oh5-page-counter">&nbsp;</span>`
@@ -1573,7 +1593,7 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
       const safeHeaderHeight = inlinedHeader
         ? Math.min(460, Math.max(headermarginPx + 45, measured.headerHeight || headermarginPx + 100))
         : headermarginPx;
-      const safeFooterHeight = Math.min(340, Math.max(footermarginPx + 58, measured.footerHeight || footermarginPx + 88));
+      const safeFooterHeight = Math.min(480, Math.max(footermarginPx + 58, measured.footerHeight || footermarginPx + 88));
 
       const marginTopPx = safeHeaderHeight + headerContentGapPx;
       const marginBottomPx = safeFooterHeight + 10;

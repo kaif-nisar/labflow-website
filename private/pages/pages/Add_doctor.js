@@ -2,15 +2,22 @@ document.querySelector(".submit-btn button").addEventListener("click", async (e)
     e.preventDefault(); // Prevent default form submission
 
     // Collect form data
+    const firstname = document.getElementById("firstname").value.trim();
+    const lastname = document.getElementById("lastname").value.trim();
+    if (!firstname || !lastname) {
+        alert("First name and last name are required.");
+        return;
+    }
+
     const doctorData = {
-        firstname: document.getElementById("firstname").value,
-        lastname: document.getElementById("lastname").value,
-        email: document.getElementById("email").value,
+        firstname,
+        lastname,
+        email: document.getElementById("email").value.trim(),
         dob: document.getElementById("dob").value,
         gender: document.getElementById("gender").value,
-        specialization: document.getElementById("specialization").value,
-        remarks: document.getElementById("remarks").value,
-        address: document.getElementById("address").value,
+        specialization: document.getElementById("specialization").value.trim(),
+        remarks: document.getElementById("remarks").value.trim(),
+        address: document.getElementById("address").value.trim(),
         userId
     };
 

@@ -131,6 +131,25 @@ const buildSavedReportData = (reportData = []) => {
     };
 };
 
+const isNonSelfDoctorText = (val) => {
+    const s = String(val ?? "").replace(/\s+/g, " ").trim();
+    if (!s) return false;
+    return !["self", "null", "undefined", "none", "select doctor", "-- select doctor --", "-", "n/a"].includes(s.toLowerCase());
+};
+
+const pickPreferredDoctorName = (...vals) => {
+    for (const v of vals) {
+        if (isNonSelfDoctorText(v)) return String(v).replace(/\s+/g, " ").trim();
+    }
+    for (const v of vals) {
+        const s = String(v ?? "").replace(/\s+/g, " ").trim();
+        if (s && !["null", "undefined", "none", "select doctor", "-- select doctor --", "-", "n/a"].includes(s.toLowerCase())) {
+            return s;
+        }
+    }
+    return "";
+};
+
 const loadBookingDoctorFallback = async ({ bookingId, tenantId }) => {
     if (!bookingId) {
         return null;
@@ -142,7 +161,8 @@ const loadBookingDoctorFallback = async ({ bookingId, tenantId }) => {
     }
 
     return newBooking.findOne(filter)
-        .select("savedDoctorId savedDoctor savedDoctorEmail savedDoctorMeta doctorName patientPhone")
+        .select("savedDoctorId savedDoctor savedDoctorEmail savedDoctorMeta doctorName patientPhone selectedItems")
+        .populate("savedDoctorId", "displayName firstName lastName email")
         .lean();
 };
 
@@ -157,24 +177,30 @@ const hydrateReportForResponse = async (reportDoc, { tenantId, pdfFormat, layerO
         tenantId,
     });
 
-    const snapshotDoctorId = reportPayload.savedDoctorId || bookingFallback?.savedDoctorId || null;
+    const bookingPopulatedDoc = bookingFallback?.savedDoctorId && typeof bookingFallback.savedDoctorId === "object" && !bookingFallback.savedDoctorId._bsontype
+        ? bookingFallback.savedDoctorId
+        : null;
+    const bookingPopulatedDoctorName = bookingPopulatedDoc ? getDoctorDisplayName(bookingPopulatedDoc) : "";
+
+    const snapshotDoctorId = reportPayload.savedDoctorId || bookingPopulatedDoc?._id || bookingFallback?.savedDoctorId || null;
     const snapshotDoctorMeta = hasMeaningfulDoctorSnapshot(reportPayload.savedDoctorMeta)
         ? reportPayload.savedDoctorMeta
         : (hasMeaningfulDoctorSnapshot(bookingFallback?.savedDoctorMeta) ? bookingFallback.savedDoctorMeta : null);
 
-    const snapshotDoctorName = String(
-        reportPayload.savedDoctor
-        || snapshotDoctorMeta?.displayName
-        || bookingFallback?.savedDoctor
-        || reportPayload.doctorName
-        || bookingFallback?.doctorName
-        || ""
-    ).trim();
+    const snapshotDoctorName = pickPreferredDoctorName(
+        reportPayload.savedDoctor,
+        reportPayload.doctorName,
+        snapshotDoctorMeta?.displayName,
+        bookingFallback?.savedDoctor,
+        bookingFallback?.doctorName,
+        bookingPopulatedDoctorName
+    );
 
     const snapshotDoctorEmail = normalizeOptionalEmail(
         reportPayload.savedDoctorEmail
         || snapshotDoctorMeta?.email
         || bookingFallback?.savedDoctorEmail
+        || bookingPopulatedDoc?.email
     );
 
     let liveDoctor = null;
@@ -196,30 +222,34 @@ const hydrateReportForResponse = async (reportDoc, { tenantId, pdfFormat, layerO
     const latestDoctorName = String(getDoctorDisplayName(liveDoctor) || "").trim();
     const latestDoctorEmail = normalizeOptionalEmail(liveDoctor?.email);
     const doctorName = reportPayload.signOff
-        ? (snapshotDoctorName || reportPayload.doctorName || "")
-        : (latestDoctorName || snapshotDoctorName || reportPayload.doctorName || "");
+        ? pickPreferredDoctorName(snapshotDoctorName, bookingFallback?.savedDoctor, bookingFallback?.doctorName, bookingPopulatedDoctorName, reportPayload.doctorName)
+        : pickPreferredDoctorName(latestDoctorName, snapshotDoctorName, bookingFallback?.savedDoctor, bookingFallback?.doctorName, bookingPopulatedDoctorName, reportPayload.doctorName);
     const doctorEmail = reportPayload.signOff
         ? snapshotDoctorEmail
         : (latestDoctorEmail || snapshotDoctorEmail);
 
     const resolvedDoctorSnapshot = hasMeaningfulDoctorSnapshot(snapshotDoctorMeta)
         ? snapshotDoctorMeta
-        : buildDoctorSnapshot(liveDoctor || {}, {
-            displayName: snapshotDoctorName,
+        : buildDoctorSnapshot(liveDoctor || bookingPopulatedDoc || {}, {
+            displayName: snapshotDoctorName || doctorName,
             savedDoctorEmail: snapshotDoctorEmail,
             source: "snapshot",
         });
 
     const actionCounters = normalizeReportActionCounters(reportPayload.actionCounters);
     const actionHistory = normalizeReportActionHistory(reportPayload.actionHistory);
+    const bookingSelectedItems = Array.isArray(bookingFallback?.selectedItems) && bookingFallback.selectedItems.length > 0
+        ? bookingFallback.selectedItems
+        : (Array.isArray(reportPayload.selectedItems) ? reportPayload.selectedItems : []);
 
     return {
         ...reportPayload,
         savedDoctorId: snapshotDoctorId,
-        savedDoctor: snapshotDoctorName || reportPayload.savedDoctor || "",
+        savedDoctor: pickPreferredDoctorName(snapshotDoctorName, reportPayload.savedDoctor, bookingFallback?.savedDoctor, bookingPopulatedDoctorName),
         savedDoctorEmail: doctorEmail,
         savedDoctorMeta: resolvedDoctorSnapshot,
         doctorName,
+        selectedItems: bookingSelectedItems,
         patientPhone: reportPayload.patientPhone || bookingFallback?.patientPhone || "",
         latestDoctorName: !reportPayload.signOff ? latestDoctorName : "",
         latestDoctorEmail: !reportPayload.signOff ? latestDoctorEmail : "",
