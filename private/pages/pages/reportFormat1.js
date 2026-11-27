@@ -202,6 +202,11 @@
         });
         const effSigLayout = activeSignatureLayout || prefs?.signatureLayout || null;
         const footerStageEl = document.querySelector('.signed-off-div2');
+        const footerOuterEl = document.querySelector('.signed-off-div');
+        if (footerOuterEl && effSigLayout?.footer?.isCustom && effSigLayout.footer.heightPx < 82) {
+            footerOuterEl.style.paddingTop = '6px';
+            footerOuterEl.style.paddingBottom = '6px';
+        }
         if (footerStageEl && effSigLayout && window.ReportActionHelpers?.applySignatureLayoutToFooterContainer) {
             const safeBodyPx = Number(prefs?.selectedFontSize) || 12;
             window.ReportActionHelpers.applySignatureLayoutToFooterContainer(footerStageEl, effSigLayout, {
@@ -626,7 +631,11 @@
 
         const doctorsdata = await response.json();
         doctorsSignCache = doctorsdata;
-        activeSignatureLayout = doctorsdata?.signatureLayout || activePrintPrefs?.signatureLayout || null;
+        const docSigL = doctorsdata?.signatureLayout;
+        const prefSigL = activePrintPrefs?.signatureLayout;
+        activeSignatureLayout = (docSigL?.isCustom || docSigL?.footer?.isCustom)
+            ? docSigL
+            : (prefSigL || docSigL || null);
         reportformatlabsign          = doctorsdata.showlabinchargesign;
         reportformatfirstdoctorsign  = doctorsdata.showfirstdoctorsign;
         reportformatseconddoctorsign = doctorsdata.showseconddoctorsign;
@@ -640,6 +649,10 @@
             </div>`;
 
         const signoffdiv = document.querySelector('.signed-off-div');
+        if (signoffdiv && activeSignatureLayout?.footer?.isCustom && activeSignatureLayout.footer.heightPx < 82) {
+            signoffdiv.style.paddingTop = '6px';
+            signoffdiv.style.paddingBottom = '6px';
+        }
         signoffdiv.innerHTML = '';
         const div = document.createElement('div');
         div.className = 'signed-off-div2';
@@ -1665,7 +1678,7 @@
             const categoryData = categories[index];
             const section = document.createElement("div");
             section.className = "section";
-            if (data.categorizedPDF && index > 0) section.classList.add("page-break");
+            if (parseStoredCheckboxFlag(data.categorizedPDF) && index > 0) section.classList.add("page-break");
 
             const headings = document.createElement("div");
             headings.classList.add("headings");
@@ -2212,7 +2225,7 @@
                 }
 
                 .format1left2 {
-                    flex: 1.05 1 0 !important;
+                    flex: 1.4 1 0 !important;
                     min-width: 0 !important;
                     width: auto !important;
                     padding: 8px 12px !important;
@@ -2256,7 +2269,8 @@
                 .format1-right2 {
                     position: static !important;
                     transform: none !important;
-                    flex: 1.08 0 282px !important;
+                    flex: 0.9 0 220px !important;
+                    max-width: 44% !important;
                     border-left: 1px solid #cbd5e1 !important;
                     padding: 8px 12px !important;
                     display: flex !important;
@@ -2555,9 +2569,9 @@
                 }
                 ${(() => {
                     const effLayout = activeSignatureLayout || activePrintPrefs?.signatureLayout || null;
-                    if (!effLayout?.isCustom || !cachedSigLayoutEngine?.buildCustomSignatureStageCss) return '';
+                    if ((!effLayout?.isCustom && !effLayout?.footer?.isCustom) || !cachedSigLayoutEngine?.buildCustomSignatureStageCss) return '';
                     return cachedSigLayoutEngine.buildCustomSignatureStageCss({
-                        containerSelector: '.signed-off-div2',
+                        containerSelector: '.signed-off-div .signed-off-div2',
                         slotSelector: '.left-sign',
                         layout: effLayout,
                         baseFontSizePx: Math.max(8.5, printBodyFontSize - 1),
