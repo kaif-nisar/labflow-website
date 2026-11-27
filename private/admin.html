@@ -34,19 +34,15 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="admin.css">
     <link rel="stylesheet" href="/css/catalog-studio.css?v=1">
-
-    <!-- ⚠️ Core Vendor Scripts (Must load before page scripts) -->
-    <script src="/vendor/chart.js/chart.umd.min.js"></script>
-    <script src="/vendor/jquery/jquery.min.js"></script>
-    <script src="/vendor/popper.js/popper.min.js"></script>
-    <script src="/vendor/bootstrap4/js/bootstrap.min.js"></script>
-    <script src="/vendor/xlsx/xlsx.full.min.js"></script>
-    <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
-    <script src="/vendor/jspdf/jspdf.umd.min.js"></script>
-    <script src="/vendor/jspdf-autotable/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body class="lf-admin-body">
+    <!-- Minimalist Global Top Progress Rail -->
+    <div class="lf-instant-rail" id="lfInstantRail" aria-hidden="true">
+        <div class="lf-instant-rail__bar" id="lfInstantRailBar"></div>
+    </div>
+    <div class="lf-route-toast-host" id="lfRouteToastHost" aria-live="assertive"></div>
+
     <!-- Legacy Loader Hook (Managed by top-progress.js) -->
     <div class="loader" id="loader1" aria-hidden="true">
         <div class="shape"></div>
@@ -738,7 +734,7 @@
              ===================================================================== -->
         <header class="top-navbar" id="top-navbar">
             <div class="lf-topbar-inner">
-                <!-- Left Zone: Sidebar Toggle + Compact Logo + Active Route Breadcrumb -->
+                <!-- Left Zone: Sidebar Toggle + Compact Logo -->
                 <div class="lf-topbar-left">
                     <button
                         type="button"
@@ -754,12 +750,6 @@
                     <a href="#" data-page="dashboard" class="nav-item lf-topbar-brand" id="lfTopbarBrand" title="LabFlow Dashboard">
                         <img id="topbarLogo" src="/images/logoLabFlow.svg" alt="LabFlow" data-fallback-type="logo" />
                     </a>
-
-                    <div class="lf-breadcrumb" id="lfBreadcrumb" aria-live="polite">
-                        <span class="lf-breadcrumb__section" id="lfBreadcrumbSection">Workspace</span>
-                        <i class="fa-solid fa-chevron-right lf-breadcrumb__sep"></i>
-                        <span class="lf-breadcrumb__current" id="lfBreadcrumbCurrent">Dashboard</span>
-                    </div>
                 </div>
 
                 <!-- Center Zone: Primary Quick-Switch Segmented Navigation -->
@@ -987,6 +977,172 @@
 
     </div>
 
+    <!-- Synchronous Pre-Paint Snapshot & Buffer Hydration (Eliminates Blank Screen on Refresh) -->
+    <script>
+        (function () {
+            try {
+                var SNAPSHOT_KEY = "lf_spa_snapshot_admin";
+                var params = new URLSearchParams(window.location.search);
+                var targetPage = params.get("page") || "dashboard";
+                var escapeAttr = function (v) {
+                    var s = String(v || "");
+                    return (window.CSS && typeof window.CSS.escape === "function")
+                        ? window.CSS.escape(s)
+                        : s.replace(/["\\]/g, "");
+                };
+
+                var rail = document.getElementById("lfInstantRail");
+                var contentBox = document.getElementById("content-box");
+
+                var setInitialProgress = function (pct) {
+                    var clamped = Math.max(8, Math.min(95, pct));
+                    var ratio = (clamped / 100).toFixed(3);
+                    document.documentElement.style.setProperty("--lf-rail-progress", ratio);
+                };
+
+                var attachSingleSidebarSpinner = function (pageKey) {
+                    var list = document.getElementById("lfPanelList");
+                    if (!list || !pageKey) return;
+                    var candidate = list.querySelector('a.nav-item[data-page="' + escapeAttr(pageKey) + '"]');
+                    if (!candidate) return;
+                    var sub = candidate.closest(".subItem");
+                    var targetEl = candidate;
+                    if (sub && sub.style.display !== "block" && sub.previousElementSibling) {
+                        var groupBtn = sub.previousElementSibling.querySelector(".m_dash");
+                        if (groupBtn) targetEl = groupBtn;
+                    }
+                    targetEl.classList.add("is-route-loading");
+                    targetEl.setAttribute("aria-busy", "true");
+                    var host = targetEl.querySelector(".contar") || targetEl;
+                    if (!host.querySelector(".lf-nav-pending-spinner")) {
+                        var sp = document.createElement("span");
+                        sp.className = "lf-nav-pending-spinner";
+                        sp.setAttribute("aria-hidden", "true");
+                        host.appendChild(sp);
+                    }
+                };
+
+                var raw = null;
+                try { raw = sessionStorage.getItem(SNAPSHOT_KEY); } catch (e) {}
+                var snapshot = null;
+                if (raw) {
+                    try { snapshot = JSON.parse(raw); } catch (e) { snapshot = null; }
+                }
+
+                var isValidSnapshot = Boolean(
+                    snapshot &&
+                    snapshot.pathname === window.location.pathname &&
+                    typeof snapshot.contentHtml === "string" &&
+                    snapshot.contentHtml.trim().length > 0 &&
+                    (!snapshot.ts || (Date.now() - Number(snapshot.ts)) < 15 * 60 * 1000)
+                );
+
+                if (isValidSnapshot && contentBox) {
+                    // Restore sidebar collapse & shell profile immediately so zero shell jump occurs
+                    if (snapshot.sidebarCollapsed && window.innerWidth > 1024) {
+                        var sb = document.getElementById("left-navbar");
+                        if (sb) sb.classList.add("hidden");
+                        contentBox.classList.add("collapsed");
+                        document.body.classList.add("lf-sidebar-collapsed");
+                    }
+
+                    var meta = snapshot.shellMeta || {};
+                    if (meta.logoSrc) {
+                        var l1 = document.getElementById("logo");
+                        var l2 = document.getElementById("topbarLogo");
+                        if (l1) l1.src = meta.logoSrc;
+                        if (l2) l2.src = meta.logoSrc;
+                    }
+                    if (meta.avatarSrc) {
+                        var a1 = document.getElementById("userAvatarImg");
+                        var a2 = document.getElementById("popupAvatar");
+                        if (a1) a1.src = meta.avatarSrc;
+                        if (a2) a2.src = meta.avatarSrc;
+                    }
+                    if (meta.brandName) {
+                        var bn = document.querySelector(".name_text");
+                        if (bn) bn.textContent = meta.brandName;
+                    }
+                    if (meta.roleText) {
+                        var rt = document.querySelector(".nt1");
+                        if (rt) rt.textContent = meta.roleText;
+                    }
+                    if (meta.userName) {
+                        var un = document.getElementById("userName");
+                        if (un) un.textContent = meta.userName;
+                    }
+                    if (meta.userEmail) {
+                        var ue = document.getElementById("userEmail");
+                        if (ue) ue.textContent = meta.userEmail;
+                    }
+
+                    // Keep the previous screen's nav item highlighted until the new screen commits
+                    var activeSnapshotPage = snapshot.page || targetPage;
+                    document.querySelectorAll('.nav-item[data-page="' + escapeAttr(activeSnapshotPage) + '"]').forEach(function (el) {
+                        el.classList.add("active");
+                        var sub = el.closest(".subItem");
+                        if (sub) {
+                            sub.style.display = "block";
+                            if (sub.previousElementSibling) {
+                                sub.previousElementSibling.classList.add("expanded", "has-active-child");
+                            }
+                        }
+                    });
+
+                    // Inject locked pre-reload visual snapshot directly into live content-box before first paint
+                    var stage = document.createElement("div");
+                    stage.className = "lf-snapshot-stage";
+                    stage.setAttribute("data-lf-snapshot", "true");
+                    stage.setAttribute("aria-hidden", "true");
+                    try { stage.inert = true; } catch (e) {}
+                    stage.innerHTML = snapshot.contentHtml;
+                    contentBox.innerHTML = "";
+                    contentBox.appendChild(stage);
+                    window.__lfHasBootSnapshot = true;
+
+                    if (snapshot.scrollY) {
+                        requestAnimationFrame(function () {
+                            window.scrollTo(0, Number(snapshot.scrollY) || 0);
+                        });
+                    }
+                } else if (contentBox) {
+                    // Cold boot (no snapshot yet): show clean skeleton instead of raw blank space
+                    contentBox.innerHTML =
+                        '<div class="lf-workspace-skeleton" data-lf-boot-skeleton="true" aria-hidden="true">' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--lg"></div><div class="lf-skel-line lf-skel-line--sm" style="margin-top:10px;"></div></div>' +
+                        '<div class="lf-skel-grid">' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '</div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-block"></div></div>' +
+                        '</div>';
+                }
+
+                attachSingleSidebarSpinner(targetPage);
+                if (rail) rail.classList.add("is-active");
+                setInitialProgress(14);
+
+                var bootPct = 14;
+                window.__lfBootProgress = bootPct;
+                window.__lfBootProgressTimer = window.setInterval(function () {
+                    bootPct = Math.min(48, bootPct + (48 - bootPct) * 0.14);
+                    window.__lfBootProgress = bootPct;
+                    setInitialProgress(bootPct);
+                }, 140);
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- Core Vendor Scripts (Placed at end of body in exact load order so pre-paint hydration renders immediately) -->
+    <script src="/vendor/chart.js/chart.umd.min.js"></script>
+    <script src="/vendor/jquery/jquery.min.js"></script>
+    <script src="/vendor/popper.js/popper.min.js"></script>
+    <script src="/vendor/bootstrap4/js/bootstrap.min.js"></script>
+    <script src="/vendor/xlsx/xlsx.full.min.js"></script>
+    <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
+    <script src="/vendor/jspdf/jspdf.umd.min.js"></script>
+    <script src="/vendor/jspdf-autotable/jspdf.plugin.autotable.min.js"></script>
     <script src="/vendor/jsbarcode/JsBarcode.all.min.js"></script>
     <script src="/js/barcodePrintEngine.js?v=2"></script>
     <script src="/js/bookingPatientHelpers.js"></script>

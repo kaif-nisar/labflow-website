@@ -274,6 +274,13 @@ export const detectMimeTypeFromBuffer = (buffer) => {
   if (buffer[0] === 0x42 && buffer[1] === 0x4d) {
     return "image/bmp";
   }
+  const headText = buffer
+    .subarray(0, Math.min(buffer.length, 64))
+    .toString("latin1")
+    .replace(/^[\s\0\xef\xbb\xbf]+/, "");
+  if (headText.startsWith("%PDF-")) {
+    return "application/pdf";
+  }
   return null;
 };
 
@@ -430,7 +437,8 @@ export const readAssetAsBuffer = async (assetReference) => {
 };
 
 export const getMimeType = (filePath) => {
-  const extension = path.extname(String(filePath || "")).toLowerCase();
+  const cleanPath = String(filePath || "").split("?")[0].split("#")[0];
+  const extension = path.extname(cleanPath).toLowerCase();
   const mimeMap = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -438,6 +446,7 @@ export const getMimeType = (filePath) => {
     ".webp": "image/webp",
     ".svg": "image/svg+xml",
     ".gif": "image/gif",
+    ".pdf": "application/pdf",
   };
 
   return mimeMap[extension] || "application/octet-stream";

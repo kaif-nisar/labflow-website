@@ -1,3 +1,6 @@
+import fsPromises from "fs/promises";
+import path from "path";
+import { PDFDocument } from "pdf-lib";
 import { User } from "../models/user.model.js";
 import { Template } from "../models/template.model.js";
 import {
@@ -7,6 +10,54 @@ import {
     normalizeStoredUploadUrl,
     normalizeStoredUploadPublicId,
 } from "../utils/localStorage.js";
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"]);
+const ALLOWED_PDF_EXTENSIONS = new Set([".pdf"]);
+
+const cleanupTempUpload = async (filePath) => {
+    if (!filePath) return;
+    await fsPromises.unlink(filePath).catch(() => {});
+};
+
+const validateUploadedTemplateFile = async (uploadedFile) => {
+    const ext = path.extname(String(uploadedFile?.originalname || uploadedFile?.path || "")).toLowerCase();
+    const mime = String(uploadedFile?.mimetype || "").toLowerCase();
+    const isPdf = ALLOWED_PDF_EXTENSIONS.has(ext) || mime === "application/pdf" || mime === "application/x-pdf";
+    const isImage = ALLOWED_IMAGE_EXTENSIONS.has(ext) || mime.startsWith("image/");
+
+    if (!isPdf && !isImage) {
+        return { valid: false, status: 400, message: "Unsupported template format. Please upload PNG, JPG, WEBP, or PDF." };
+    }
+
+    if (!uploadedFile?.size || uploadedFile.size <= 0) {
+        return { valid: false, status: 400, message: "Uploaded template file is empty." };
+    }
+
+    if (isPdf) {
+        const buffer = await fsPromises.readFile(uploadedFile.path);
+        const header = buffer.subarray(0, Math.min(buffer.length, 64)).toString("latin1").replace(/^[\s\0\xef\xbb\xbf]+/, "");
+        if (!header.startsWith("%PDF-")) {
+            return { valid: false, status: 400, message: "Invalid PDF file. Please upload a valid PDF document." };
+        }
+
+        let pdfDoc;
+        try {
+            pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+        } catch {
+            return { valid: false, status: 400, message: "Unable to read this PDF file. Please upload an uncorrupted PDF." };
+        }
+
+        if (pdfDoc.isEncrypted) {
+            return { valid: false, status: 400, message: "Password-protected PDFs are not supported. Please upload an unlocked PDF." };
+        }
+
+        if (pdfDoc.getPageCount() < 1) {
+            return { valid: false, status: 400, message: "Uploaded PDF template contains no pages." };
+        }
+    }
+
+    return { valid: true, isPdf };
+};
 
 const normalizeTemplatePublicId = (value) => {
     return normalizeStoredUploadPublicId(value);
@@ -29,6 +80,7 @@ const normalizeTemplateRecord = async (templateDoc) => {
 };
 
 const uploadImage = async (req, res) => {
+    const uploadedTemplate = req.files?.template?.[0];
     try {
         let userId;
         if (req.user.role === "staff") {
@@ -37,13 +89,14 @@ const uploadImage = async (req, res) => {
             userId = req.user._id;
         }
 
-        if (!req.files) {
-            return res.status(400).json({ message: "No file uploaded or file type is not supported" });
+        if (!req.files || !uploadedTemplate) {
+            return res.status(400).json({ message: "Template file is required" });
         }
 
-        const uploadedTemplate = req.files?.template?.[0];
-        if (!uploadedTemplate) {
-            return res.status(400).json({ message: "Template file is required" });
+        const validation = await validateUploadedTemplateFile(uploadedTemplate);
+        if (!validation.valid) {
+            await cleanupTempUpload(uploadedTemplate.path);
+            return res.status(validation.status || 400).json({ message: validation.message });
         }
 
         const result = await storeLocalFile(uploadedTemplate.path, {
@@ -52,6 +105,7 @@ const uploadImage = async (req, res) => {
         });
 
         if (!result) {
+            await cleanupTempUpload(uploadedTemplate.path);
             return res.status(500).json({ message: "Failed to store template" });
         }
 
@@ -89,9 +143,11 @@ const uploadImage = async (req, res) => {
             url: result.secure_url,
             public_id: result.public_id,
             templateId: newTemplate._id,
+            fileType: validation.isPdf ? "pdf" : "image",
         });
     } catch (error) {
-        console.error("Error uploading image:", error);
+        await cleanupTempUpload(uploadedTemplate?.path);
+        console.error("Error uploading template:", error);
         return res.status(500).json({ message: "Server error" });
     }
 };

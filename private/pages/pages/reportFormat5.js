@@ -74,6 +74,7 @@
     barcodeMetaEntries: [],
     testMethodMap: new Map(),
     backgroundImageUrl: "",
+    backgroundPreviewUrl: "",
     doctorsSign: null,
     barcodeMap: new Map(),
     defaultSpecimen: { barcodeId: "", sampleType: "" },
@@ -544,6 +545,56 @@
   /* =========================================================================
    * 2. API HYDRATION (LABFLOW ENDPOINTS)
    * ========================================================================= */
+
+  async function ensureTemplatePreviewHelperLoaded() {
+    if (global.TemplatePreviewHelper) return global.TemplatePreviewHelper;
+    const scriptUrl = `${BASE_URL}/js/templatePreviewHelper.js`;
+    if (typeof global.loadScript === "function") {
+      try {
+        await global.loadScript(scriptUrl);
+        if (global.TemplatePreviewHelper) return global.TemplatePreviewHelper;
+      } catch {
+        // Fallback to script tag
+      }
+    }
+    try {
+      await new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = scriptUrl;
+        script.async = false;
+        script.onload = resolve;
+        script.onerror = resolve;
+        document.body.appendChild(script);
+      });
+    } catch {
+      // Non-fatal
+    }
+    return global.TemplatePreviewHelper || null;
+  }
+
+  function isPdfTemplateUrl(url) {
+    if (global.TemplatePreviewHelper?.isPdfUrl) {
+      return global.TemplatePreviewHelper.isPdfUrl(url);
+    }
+    const raw = String(url || "").trim().toLowerCase();
+    if (!raw) return false;
+    if (/^data:application\/(?:x-)?pdf(?:[;,]|$)/.test(raw)) return true;
+    return raw.split("?")[0].split("#")[0].endsWith(".pdf");
+  }
+
+  async function resolveLetterheadPreviewUrl(bgUrl) {
+    const raw = String(bgUrl || "").trim();
+    if (!raw) return "";
+    if (!isPdfTemplateUrl(raw)) return raw;
+    try {
+      const helper = await ensureTemplatePreviewHelperLoaded();
+      if (!helper?.getPdfPreviewUrl) return "";
+      return await helper.getPdfPreviewUrl(raw, { targetWidth: 1588 });
+    } catch (err) {
+      console.warn("[Format5] PDF letterhead preview failed:", err?.message || err);
+      return "";
+    }
+  }
 
   async function ensureReportActionHelpersLoaded() {
     if (global.ReportActionHelpers) return global.ReportActionHelpers;
@@ -1672,7 +1723,10 @@
     const headerGapPx = Math.round(s.headerContentGap * CM_TO_PX);
     const leftPadPx = DEFAULT_SIDE_PAD_PX + Math.round(s.marginLeft * CM_TO_PX);
     const rightPadPx = DEFAULT_SIDE_PAD_PX + Math.round(s.marginRight * CM_TO_PX);
-    const bgUrl = !state.withoutLetterhead ? state.backgroundImageUrl : "";
+    const isPdfBg = isPdfTemplateUrl(state.backgroundImageUrl);
+    const bgUrl = !state.withoutLetterhead
+      ? (isPdfBg ? state.backgroundPreviewUrl : state.backgroundImageUrl)
+      : "";
 
     const sheetsMeta = [];
 
@@ -2625,15 +2679,17 @@
 
       state.qrLinkUrl = `${BASE_URL}/pages/pages/download_reports.html?value=${encodeURIComponent(state.reportId)}&id=${encodeURIComponent(String(tenantId))}`;
 
-      const [rawQr, b64Lab, b64Doc1, b64Doc2, sigEngine] = await Promise.all([
+      const [rawQr, b64Lab, b64Doc1, b64Doc2, sigEngine, resolvedBgPreview] = await Promise.all([
         fetchQrCodeImage(state.qrLinkUrl),
         imageToBase64(state.settings.fileInputLab),
         imageToBase64(state.settings.fileInputDoctorleft),
         imageToBase64(state.settings.fileInputDoctorright),
         global.ReportActionHelpers?.loadSignatureLayoutEngine?.() || Promise.resolve(null),
+        resolveLetterheadPreviewUrl(state.backgroundImageUrl),
         ...Array.from(uniqueBarcodeNumbers).map((bNum) => fetchBarcodeImage(bNum)),
       ]);
 
+      state.backgroundPreviewUrl = resolvedBgPreview || "";
       state.sigLayoutEngine = sigEngine || null;
       state.qrDataUrl = await imageToBase64(rawQr);
       if (b64Lab) state.settings.fileInputLab = b64Lab;

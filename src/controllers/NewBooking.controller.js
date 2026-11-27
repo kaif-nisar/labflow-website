@@ -25,6 +25,7 @@ import {
     syncPrePrintedBarcodesForBooking,
     releasePrePrintedBarcodesForBooking,
 } from "./barcode.controller.js";
+import { hydrateCategoriesOnBarcodeResult } from "../utils/categorySnapshot.js";
 
 const getEffectiveBookingUserId = (req) => (
     req.user.role === "staff" ? req.user.parentUser : req.user._id
@@ -3915,7 +3916,7 @@ const getTestNameController = async (req, res) => {
                                     { originalTestId: obj.id }
                                 ],
                                 tenantId: tid
-                            }).populate('category');
+                            });
 
                             return { singleTests: docs, panels: [] };
                         }
@@ -4041,7 +4042,7 @@ const getTestNameController = async (req, res) => {
                                     { _id: { $in: packageTestIds } },
                                     { originalTestId: { $in: packageTestIds } }
                                 ]
-                            }).populate('category');
+                            });
 
                             // Fetch full panel documents with populated tests
                             const packagePanels = await addPannel.find({
@@ -4081,6 +4082,14 @@ const getTestNameController = async (req, res) => {
             },
             { barcodes: barcodesObject, singleTests: [], panels: [], packages: [] }
         );
+
+        const hydratedCategories = await hydrateCategoriesOnBarcodeResult({
+            tenantId: tid,
+            singleTests: mergedResult.singleTests,
+            panels: mergedResult.panels
+        });
+        mergedResult.singleTests = hydratedCategories.singleTests;
+        mergedResult.panels = hydratedCategories.panels;
 
         // ✅ Build dynamic ID-to-Name map to reflect latest names from DB
         const idToNameMap = new Map();

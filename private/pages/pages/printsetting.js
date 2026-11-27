@@ -151,9 +151,12 @@
     const state = {
         letterheadMode: 'digital', // 'digital' | 'preprinted'
         activeLetterheadUrl: '',
+        activeLetterheadPreviewUrl: '',
+        activeLetterheadIsPdf: false,
         activeLetterheadPublicId: '',
         activeLetterheadId: '',
         pendingTemplateFile: null,
+        letterheadRenderToken: 0,
 
         signatureLayout: createDefaultSignatureLayout(),
         activeSigSlot: null,
@@ -229,6 +232,111 @@
         const trimmed = url.trim();
         if (['null', 'undefined', '[object object]'].includes(trimmed.toLowerCase())) return '';
         return trimmed;
+    }
+
+    const MAX_TEMPLATE_FILE_BYTES = 50 * 1024 * 1024;
+    let templateHelperPromise = null;
+
+    async function ensureTemplatePreviewHelper() {
+        if (window.TemplatePreviewHelper) return window.TemplatePreviewHelper;
+        if (templateHelperPromise) return templateHelperPromise;
+
+        const scriptUrl = `${BASE_URL}/js/templatePreviewHelper.js`;
+        templateHelperPromise = (async () => {
+            if (typeof window.loadScript === 'function') {
+                try {
+                    await window.loadScript(scriptUrl);
+                    if (window.TemplatePreviewHelper) return window.TemplatePreviewHelper;
+                } catch {
+                    // Fallback to direct script tag
+                }
+            }
+            await new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = scriptUrl;
+                script.async = false;
+                script.onload = resolve;
+                script.onerror = resolve;
+                document.head.appendChild(script);
+            });
+            return window.TemplatePreviewHelper || null;
+        })();
+        return templateHelperPromise;
+    }
+
+    function isPdfTemplateUrl(url) {
+        if (window.TemplatePreviewHelper?.isPdfUrl) {
+            return window.TemplatePreviewHelper.isPdfUrl(url);
+        }
+        const raw = String(url || '').trim().toLowerCase();
+        if (!raw) return false;
+        if (/^data:application\/(?:x-)?pdf(?:[;,]|$)/.test(raw)) return true;
+        return raw.split('?')[0].split('#')[0].endsWith('.pdf');
+    }
+
+    function getPdfFallbackSvg() {
+        return window.TemplatePreviewHelper?.PDF_PLACEHOLDER_SVG || '';
+    }
+
+    function updateLetterheadThumbBox({ visible, src = '', name = '', sizeText = '', isPdf = false }) {
+        const thumbBox = document.getElementById('letterheadThumbBox');
+        const thumbImg = document.getElementById('letterheadThumbImg');
+        const thumbName = document.getElementById('letterheadThumbName');
+        const thumbSize = document.getElementById('letterheadThumbSize');
+        const pdfBadge = document.getElementById('letterheadThumbPdfBadge');
+        if (!thumbBox) return;
+
+        if (!visible) {
+            thumbBox.style.display = 'none';
+            if (thumbImg) thumbImg.removeAttribute('src');
+            if (pdfBadge) pdfBadge.style.display = 'none';
+            return;
+        }
+
+        if (thumbImg) {
+            thumbImg.src = src || (isPdf ? getPdfFallbackSvg() : '');
+        }
+        if (thumbName) thumbName.textContent = name || (isPdf ? 'letterhead.pdf' : 'template.png');
+        if (thumbSize) thumbSize.textContent = sizeText || (isPdf ? 'PDF Template' : 'Active template');
+        if (pdfBadge) pdfBadge.style.display = isPdf ? 'inline-block' : 'none';
+        thumbBox.style.display = 'flex';
+    }
+
+    function clearActiveLetterheadState() {
+        state.letterheadRenderToken += 1;
+        state.activeLetterheadUrl = '';
+        state.activeLetterheadPreviewUrl = '';
+        state.activeLetterheadIsPdf = false;
+        state.activeLetterheadPublicId = '';
+        state.activeLetterheadId = '';
+        state.pendingTemplateFile = null;
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) fileInput.value = '';
+        document.querySelectorAll('.ps-template-item').forEach(el => el.classList.remove('is-selected'));
+        updateLetterheadThumbBox({ visible: false });
+    }
+
+    async function hydratePdfCanvasPreview(pdfUrl, token, thumbMeta = null) {
+        const helper = await ensureTemplatePreviewHelper();
+        if (!helper || token !== state.letterheadRenderToken) return;
+
+        try {
+            const previewDataUrl = await helper.getPdfPreviewUrl(pdfUrl, { targetWidth: 1588 });
+            if (token !== state.letterheadRenderToken || !previewDataUrl) return;
+            state.activeLetterheadPreviewUrl = previewDataUrl;
+            if (thumbMeta) {
+                updateLetterheadThumbBox({
+                    visible: true,
+                    src: previewDataUrl,
+                    name: thumbMeta.name,
+                    sizeText: thumbMeta.sizeText,
+                    isPdf: true,
+                });
+            }
+            updateLiveCanvas();
+        } catch (err) {
+            console.warn('PDF letterhead canvas preview fallback active:', err?.message || err);
+        }
     }
 
     // Extract doctor display name from designation lines for digital signature
@@ -1088,10 +1196,29 @@
         }
 
         // Letterhead Layer vs Pre-printed Spacer
+        const withoutLetterhead = Boolean(document.getElementById('check1')?.checked);
+        const activePreviewUrl = state.activeLetterheadIsPdf
+            ? state.activeLetterheadPreviewUrl
+            : state.activeLetterheadUrl;
+
         if (state.letterheadMode === 'digital' && state.activeLetterheadUrl) {
             if (letterheadOverlay) {
-                letterheadOverlay.classList.add('is-active');
-                letterheadOverlay.style.backgroundImage = `url("${state.activeLetterheadUrl}")`;
+                if (withoutLetterhead) {
+                    letterheadOverlay.classList.remove('is-active', 'is-pdf-fallback');
+                    letterheadOverlay.style.display = 'none';
+                } else if (activePreviewUrl) {
+                    letterheadOverlay.style.display = '';
+                    letterheadOverlay.classList.add('is-active');
+                    letterheadOverlay.classList.remove('is-pdf-fallback');
+                    letterheadOverlay.innerHTML = '';
+                    letterheadOverlay.style.backgroundImage = `url("${activePreviewUrl}")`;
+                } else {
+                    letterheadOverlay.style.display = '';
+                    letterheadOverlay.classList.add('is-active', 'is-pdf-fallback');
+                    letterheadOverlay.style.backgroundImage = 'none';
+                    letterheadOverlay.innerHTML =
+                        '<div class="ps-pdf-canvas-badge"><i class="fa-solid fa-file-pdf" style="color:#f87171;"></i><span>PDF Letterhead Active — Previewing / Switch to Official PDF for vector view</span></div>';
+                }
             }
             if (headerGuide) {
                 headerGuide.style.height = `${Math.round(headerCm * CM_TO_PX)}px`;
@@ -1108,7 +1235,9 @@
         } else {
             // Pre-printed stationery mode
             if (letterheadOverlay) {
-                letterheadOverlay.classList.remove('is-active');
+                letterheadOverlay.classList.remove('is-active', 'is-pdf-fallback');
+                letterheadOverlay.style.display = '';
+                letterheadOverlay.innerHTML = '';
                 letterheadOverlay.style.backgroundImage = 'none';
             }
             if (headerGuide) {
@@ -1353,36 +1482,170 @@
         });
     }
 
-    function processLetterheadFile(file) {
-        if (!file.type.startsWith('image/')) {
-            showToast('Please select a valid image file (PNG, JPG, WEBP).', 'error');
+    function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error('Failed to read selected file.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function processLetterheadFile(file) {
+        if (!file) return;
+
+        const helper = await ensureTemplatePreviewHelper();
+        const isPdf = helper?.isPdfFile
+            ? helper.isPdfFile(file)
+            : (file.type === 'application/pdf' || file.type === 'application/x-pdf' || /\.pdf$/i.test(file.name || ''));
+        const isImage = helper?.isImageFile
+            ? helper.isImageFile(file)
+            : (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name || ''));
+
+        const resetInput = () => {
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) fileInput.value = '';
+        };
+
+        if (!isPdf && !isImage) {
+            resetInput();
+            showToast('Please select a valid image (PNG, JPG, WEBP) or PDF file.', 'error');
             return;
         }
 
-        state.pendingTemplateFile = file;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const dataUrl = e.target.result;
-            state.activeLetterheadUrl = dataUrl;
+        if (!file.size || file.size <= 0) {
+            resetInput();
+            showToast('Selected file is empty.', 'error');
+            return;
+        }
 
-            // Update Thumbnail Box
-            const thumbBox = document.getElementById('letterheadThumbBox');
-            const thumbImg = document.getElementById('letterheadThumbImg');
-            const thumbName = document.getElementById('letterheadThumbName');
-            const thumbSize = document.getElementById('letterheadThumbSize');
+        if (file.size > MAX_TEMPLATE_FILE_BYTES) {
+            resetInput();
+            showToast('Template file is too large. Maximum allowed size is 50 MB.', 'error');
+            return;
+        }
 
-            if (thumbBox && thumbImg && thumbName && thumbSize) {
-                thumbImg.src = dataUrl;
-                thumbName.textContent = file.name;
-                thumbSize.textContent = `${formatBytes(file.size)} (Pending upload)`;
-                thumbBox.style.display = 'flex';
+        if (isPdf) {
+            const validHeader = helper?.validatePdfFileHeader
+                ? await helper.validatePdfFileHeader(file)
+                : true;
+            if (!validHeader) {
+                resetInput();
+                showToast('Invalid PDF file. Please upload a valid PDF document.', 'error');
+                return;
             }
 
+            const token = ++state.letterheadRenderToken;
+            try {
+                const [arrayBuffer, dataUrl] = await Promise.all([
+                    file.arrayBuffer(),
+                    readFileAsDataUrl(file),
+                ]);
+                if (token !== state.letterheadRenderToken) return;
+
+                document.querySelectorAll('.ps-template-item').forEach(el => el.classList.remove('is-selected'));
+                state.pendingTemplateFile = file;
+                state.activeLetterheadUrl = dataUrl;
+                state.activeLetterheadPreviewUrl = '';
+                state.activeLetterheadIsPdf = true;
+                state.activeLetterheadPublicId = '';
+                state.activeLetterheadId = '';
+
+                updateLetterheadThumbBox({
+                    visible: true,
+                    src: getPdfFallbackSvg(),
+                    name: file.name,
+                    sizeText: `${formatBytes(file.size)} • PDF (Rendering preview...)`,
+                    isPdf: true,
+                });
+
+                setLetterheadMode('digital');
+                updateStatusIndicator('unsaved', 'Unsaved changes');
+
+                if (helper?.renderPdfBytesToDataUrl) {
+                    try {
+                        const rendered = await helper.renderPdfBytesToDataUrl(new Uint8Array(arrayBuffer), {
+                            targetWidth: 1588,
+                        });
+                        if (token !== state.letterheadRenderToken) return;
+
+                        state.activeLetterheadPreviewUrl = rendered.dataUrl;
+                        const pageNote = rendered.numPages > 1 ? ` • Page 1 of ${rendered.numPages}` : '';
+                        updateLetterheadThumbBox({
+                            visible: true,
+                            src: rendered.dataUrl,
+                            name: file.name,
+                            sizeText: `${formatBytes(file.size)} • PDF${pageNote} (Pending upload)`,
+                            isPdf: true,
+                        });
+                        updateLiveCanvas();
+                        if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
+                            autogeneratingpdf();
+                        }
+                        showToast(
+                            rendered.numPages > 1
+                                ? `PDF page 1 of ${rendered.numPages} loaded as letterhead. Click "Save Settings" to persist.`
+                                : 'PDF letterhead preview ready. Click "Save Settings" to persist.',
+                            'success'
+                        );
+                    } catch (renderErr) {
+                        if (token !== state.letterheadRenderToken) return;
+                        if (renderErr?.name === 'PasswordException') {
+                            clearActiveLetterheadState();
+                            updateLiveCanvas();
+                            showToast('Password-protected PDFs are not supported. Please upload an unlocked PDF.', 'error');
+                            return;
+                        }
+                        console.warn('Browser PDF preview failed, keeping PDF file for server upload:', renderErr);
+                        updateLetterheadThumbBox({
+                            visible: true,
+                            src: getPdfFallbackSvg(),
+                            name: file.name,
+                            sizeText: `${formatBytes(file.size)} • PDF (Pending upload)`,
+                            isPdf: true,
+                        });
+                        updateLiveCanvas();
+                        showToast('PDF template attached. Click "Save Settings" to persist.', 'info');
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading PDF template file:', err);
+                showToast('Could not read the selected PDF file.', 'error');
+            }
+            return;
+        }
+
+        const token = ++state.letterheadRenderToken;
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            if (token !== state.letterheadRenderToken) return;
+
+            document.querySelectorAll('.ps-template-item').forEach(el => el.classList.remove('is-selected'));
+            state.pendingTemplateFile = file;
+            state.activeLetterheadUrl = dataUrl;
+            state.activeLetterheadPreviewUrl = dataUrl;
+            state.activeLetterheadIsPdf = false;
+            state.activeLetterheadPublicId = '';
+            state.activeLetterheadId = '';
+
+            updateLetterheadThumbBox({
+                visible: true,
+                src: dataUrl,
+                name: file.name,
+                sizeText: `${formatBytes(file.size)} (Pending upload)`,
+                isPdf: false,
+            });
+
             setLetterheadMode('digital');
+            if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
+                autogeneratingpdf();
+            }
             updateStatusIndicator('unsaved', 'Unsaved changes');
             showToast('Letterhead preview ready. Click "Save Settings" to persist.', 'success');
-        };
-        reader.readAsDataURL(file);
+        } catch (err) {
+            console.error('Error loading image template file:', err);
+            showToast('Could not read the selected image file.', 'error');
+        }
     }
 
     function processSignatureFile(file, slotKey) {
@@ -1428,14 +1691,11 @@
     function setupDeleteHandlers() {
         // Remove Letterhead
         document.getElementById('btnRemoveTemplate')?.addEventListener('click', () => {
-            state.activeLetterheadUrl = '';
-            state.pendingTemplateFile = null;
-            const fileInput = document.getElementById('fileInput');
-            if (fileInput) fileInput.value = '';
-            const thumbBox = document.getElementById('letterheadThumbBox');
-            if (thumbBox) thumbBox.style.display = 'none';
-
+            clearActiveLetterheadState();
             updateLiveCanvas();
+            if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
+                autogeneratingpdf();
+            }
             showToast('Letterhead template removed from preview.', 'warning');
         });
 
@@ -1653,27 +1913,83 @@
 
         try {
             const response = await fetch(`${BASE_URL}/api/v1/user/templates`, { method: 'POST' });
-            if (!response.ok) return;
+            if (!response.ok) {
+                if (galleryGroup) galleryGroup.style.display = 'none';
+                return;
+            }
 
             const data = await response.json();
+            const helper = await ensureTemplatePreviewHelper();
+
             if (data && Array.isArray(data.urls) && data.urls.length > 0) {
                 gallery.innerHTML = '';
                 if (galleryGroup) galleryGroup.style.display = 'block';
 
                 data.urls.forEach((item, index) => {
+                    const isPdf = isPdfTemplateUrl(item.template);
+                    const labelText = isPdf ? `PDF Template ${index + 1}` : `Template ${index + 1}`;
+                    const sizeSubtext = isPdf ? 'Saved PDF Letterhead' : 'Saved Template';
+
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'ps-template-item';
-                    if (index === 0 && !state.activeLetterheadUrl) {
+
+                    const img = document.createElement('img');
+                    img.alt = labelText;
+                    img.loading = 'lazy';
+                    img.src = isPdf ? getPdfFallbackSvg() : item.template;
+
+                    if (isPdf) {
+                        const pdfBadge = document.createElement('span');
+                        pdfBadge.className = 'ps-template-type-badge';
+                        pdfBadge.textContent = 'PDF';
+                        itemDiv.appendChild(pdfBadge);
+
+                        if (helper?.getPdfPreviewUrl) {
+                            helper.getPdfPreviewUrl(item.template, { targetWidth: 260 })
+                                .then((thumbUrl) => {
+                                    if (thumbUrl && img.isConnected) {
+                                        img.src = thumbUrl;
+                                    }
+                                })
+                                .catch(() => {});
+                        }
+                    }
+
+                    const shouldSelectThis =
+                        (state.activeLetterheadUrl && state.activeLetterheadUrl === item.template) ||
+                        (index === 0 && !state.activeLetterheadUrl);
+
+                    if (shouldSelectThis) {
                         itemDiv.classList.add('is-selected');
                         state.activeLetterheadUrl = item.template;
                         state.activeLetterheadPublicId = item.public_id;
                         state.activeLetterheadId = item._id;
-                    }
+                        state.activeLetterheadIsPdf = isPdf;
 
-                    const img = document.createElement('img');
-                    img.src = item.template;
-                    img.alt = `Template ${index + 1}`;
-                    img.loading = 'lazy';
+                        if (isPdf) {
+                            const token = ++state.letterheadRenderToken;
+                            updateLetterheadThumbBox({
+                                visible: true,
+                                src: getPdfFallbackSvg(),
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                                isPdf: true,
+                            });
+                            hydratePdfCanvasPreview(item.template, token, {
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                            });
+                        } else {
+                            state.activeLetterheadPreviewUrl = item.template;
+                            updateLetterheadThumbBox({
+                                visible: true,
+                                src: item.template,
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                                isPdf: false,
+                            });
+                        }
+                    }
 
                     const deleteBtn = document.createElement('div');
                     deleteBtn.className = 'ps-template-delete';
@@ -1696,9 +2012,13 @@
                                 })
                             });
                             if (delRes.ok) {
+                                helper?.clearCacheForUrl?.(item.template);
                                 itemDiv.remove();
                                 if (state.activeLetterheadUrl === item.template) {
-                                    state.activeLetterheadUrl = '';
+                                    clearActiveLetterheadState();
+                                }
+                                if (gallery.children.length === 0 && galleryGroup) {
+                                    galleryGroup.style.display = 'none';
                                 }
                                 updateLiveCanvas();
                                 showToast('Template deleted successfully.', 'success');
@@ -1718,24 +2038,46 @@
                     itemDiv.addEventListener('click', () => {
                         document.querySelectorAll('.ps-template-item').forEach(el => el.classList.remove('is-selected'));
                         itemDiv.classList.add('is-selected');
+
+                        const fileInput = document.getElementById('fileInput');
+                        if (fileInput) fileInput.value = '';
+                        state.pendingTemplateFile = null;
+
+                        const token = ++state.letterheadRenderToken;
                         state.activeLetterheadUrl = item.template;
                         state.activeLetterheadPublicId = item.public_id;
                         state.activeLetterheadId = item._id;
+                        state.activeLetterheadIsPdf = isPdf;
 
-                        // Display in thumb box
-                        const thumbBox = document.getElementById('letterheadThumbBox');
-                        const thumbImg = document.getElementById('letterheadThumbImg');
-                        const thumbName = document.getElementById('letterheadThumbName');
-                        const thumbSize = document.getElementById('letterheadThumbSize');
-                        if (thumbBox && thumbImg) {
-                            thumbImg.src = item.template;
-                            thumbName.textContent = `Template ${index + 1}`;
-                            thumbSize.textContent = 'Saved Cloudinary Template';
-                            thumbBox.style.display = 'flex';
+                        if (isPdf) {
+                            state.activeLetterheadPreviewUrl = '';
+                            updateLetterheadThumbBox({
+                                visible: true,
+                                src: getPdfFallbackSvg(),
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                                isPdf: true,
+                            });
+                            hydratePdfCanvasPreview(item.template, token, {
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                            });
+                        } else {
+                            state.activeLetterheadPreviewUrl = item.template;
+                            updateLetterheadThumbBox({
+                                visible: true,
+                                src: item.template,
+                                name: labelText,
+                                sizeText: sizeSubtext,
+                                isPdf: false,
+                            });
                         }
 
                         setLetterheadMode('digital');
                         updateLiveCanvas();
+                        if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
+                            autogeneratingpdf();
+                        }
                     });
 
                     gallery.appendChild(itemDiv);
@@ -1781,7 +2123,8 @@
         const doc1Text = document.getElementById('firstdoctor-info')?.value || '';
         const doc2Text = document.getElementById('seconddoctor-info')?.value || '';
 
-        // Safe image URLs: allow HTTP(S) and root-relative /uploads/ paths, omit Base64 data strings
+        // Safe URLs: allow HTTP(S) and root-relative /uploads/ paths.
+        // For unsaved pending template preview only (not persistence), allow reasonable data URLs.
         const safeUrl = (url) => {
             const raw = String(url || '').trim();
             return (raw.startsWith('http') || raw.startsWith('/')) ? raw : '';
@@ -1789,7 +2132,16 @@
         const labImgUrl = safeUrl(state.labSignUrl);
         const doc1ImgUrl = safeUrl(state.doc1SignUrl);
         const doc2ImgUrl = safeUrl(state.doc2SignUrl);
-        const bgUrl = withoutLetterhead ? '' : safeUrl(state.activeLetterheadUrl);
+        const isPendingPreviewDataUrl = Boolean(
+            !customOverrides.persistCustomization &&
+            state.pendingTemplateFile &&
+            typeof state.activeLetterheadUrl === 'string' &&
+            state.activeLetterheadUrl.startsWith('data:') &&
+            state.activeLetterheadUrl.length <= 20 * 1024 * 1024
+        );
+        const bgUrl = withoutLetterhead
+            ? ''
+            : (isPendingPreviewDataUrl ? state.activeLetterheadUrl : safeUrl(state.activeLetterheadUrl));
 
         const activeSigLayout = normalizeSigLayoutSafe(state.signatureLayout);
 
@@ -1812,6 +2164,7 @@
         const payload = {
             value1: bookingId,
             checkBox: withoutLetterhead,
+            disableBackgroundImage: withoutLetterhead,
             backgroundImageUrl: bgUrl,
             headermargin,
             footermargin,
@@ -1842,6 +2195,8 @@
             signatureLayout: activeSigLayout,
             persistCustomization: !!customOverrides.persistCustomization,
             explicitPrintSettingsSave: !!customOverrides.persistCustomization,
+            skipCustomizationSave: isPendingPreviewDataUrl,
+            isSelectivePrint: isPendingPreviewDataUrl,
             pdfFormat: localStorage.getItem('pdfformat') || 'reportFormat1'
         };
 
@@ -1861,10 +2216,17 @@
                 : new Blob([await rawBlob.arrayBuffer()], { type: 'application/pdf' });
             const blobUrl = URL.createObjectURL(blob);
             if (iframe) {
+                if (iframe._blobUrl) {
+                    URL.revokeObjectURL(iframe._blobUrl);
+                }
+                iframe._blobUrl = blobUrl;
                 iframe.src = blobUrl;
             }
         } catch (err) {
             console.error('Error generating official PDF:', err);
+            if (!customOverrides.persistCustomization) {
+                showToast('Could not compile Official PDF preview.', 'error');
+            }
         } finally {
             if (loader) loader.style.display = 'none';
         }
@@ -1901,11 +2263,18 @@
                     const uploadResult = await uploadRes.json();
                     if (uploadResult.url) {
                         state.activeLetterheadUrl = uploadResult.url;
+                        state.activeLetterheadPublicId = uploadResult.public_id || '';
+                        state.activeLetterheadId = uploadResult.templateId || '';
+                        state.activeLetterheadIsPdf = uploadResult.fileType === 'pdf' || isPdfTemplateUrl(uploadResult.url);
                     }
                     state.pendingTemplateFile = null;
+                    const fileInput = document.getElementById('fileInput');
+                    if (fileInput) fileInput.value = '';
                     await fetchTemplateGallery();
+                    updateLiveCanvas();
                 } else {
-                    throw new Error('Letterhead template upload failed.');
+                    const errBody = await uploadRes.json().catch(() => ({}));
+                    throw new Error(errBody?.message || 'Letterhead template upload failed.');
                 }
             }
 
@@ -1991,11 +2360,8 @@
         });
 
         // Without Letterhead Checkbox
-        document.getElementById('check1')?.addEventListener('change', (e) => {
-            const overlay = document.getElementById('letterheadBgOverlay');
-            if (overlay) {
-                overlay.style.display = e.target.checked ? 'none' : (state.letterheadMode === 'digital' ? 'block' : 'none');
-            }
+        document.getElementById('check1')?.addEventListener('change', () => {
+            updateLiveCanvas();
             if (document.getElementById('pdfPreviewIframeBox')?.classList.contains('is-active')) {
                 autogeneratingpdf();
             }
@@ -2048,6 +2414,7 @@
         bindSignatureCoordinateInputs();
 
         // Load configuration and data from server
+        await ensureTemplatePreviewHelper();
         await fetchDataAndSetInputs();
         await fetchLabSignAndSetInputs();
         await fetchTemplateGallery();

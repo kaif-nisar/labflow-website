@@ -7,13 +7,13 @@ import { defaultpdfsetting } from '../models/defaultpdfsettings.model.js';
 import { doctorsign } from '../models/labinchargesign.model.js';
 import { Template } from '../models/template.model.js';
 import {
-    convertImageToPngBuffer,
     loadOfflineHtmlIntoPage,
     readAssetAsBuffer,
     rewriteHtmlForOfflinePdf,
     sanitizePdfCss,
     sanitizePdfMarkup,
 } from '../utils/pdfOfflineAssets.js';
+import { addBackgroundToPdf } from '../utils/pdfBackground.js';
 import { doesLocalFileExist, normalizeStoredUploadUrl } from '../utils/localStorage.js';
 import { getPuppeteerLaunchOptions } from '../utils/puppeteerRuntime.js';
 import { generateFormat5PdfBuffer } from './reportFormat5Pdf.controller.js';
@@ -267,6 +267,7 @@ const buildPdfBodyDocument = ({
     BoldRow = true,
     hideCategories,
     hideTableHeadings,
+    hasBackground = false,
 }) => {
     const safeCss = sanitizePdfCss(cssContent);
     const highLowResolved = HighLow !== undefined ? Boolean(HighLow) : true;
@@ -288,6 +289,9 @@ const buildPdfBodyDocument = ({
         HLinred: hlInRedResolved,
         BoldRow: boldRowResolved,
     });
+    const transparentOuterCss = hasBackground
+        ? `html, body, .middle, .container, .container2, .container-format1, .container22, .report-page, .report-container { background-color: transparent !important; background-image: none !important; }`
+        : '';
 
     return [
         '<!DOCTYPE html>',
@@ -297,6 +301,7 @@ const buildPdfBodyDocument = ({
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
         safeCss,
+        transparentOuterCss,
         '.wrong i, .delete-btn i { display: none; }',
         'h2 { margin: 0 !important; padding: 0 !important; }',
         '.headings { margin-top: 0 !important; margin-bottom: 0 !important; text-align: center !important; width: 100% !important; }',
@@ -493,85 +498,6 @@ const adjustPdfMargins = async (pdfBuffer, marginRight, marginLeft) => {
 };
 
 
-const addBackgroundToPdf = async (inputPdfBuffer, backgroundImageUrl) => {
-
-    if (!inputPdfBuffer) {
-        console.error('Input PDF buffer is null or undefined');
-        return null;
-    }
-
-    if (!backgroundImageUrl) {
-        return inputPdfBuffer;
-    }
-
-    try {
-        const inputPdfDoc = await PDFDocument.load(inputPdfBuffer);
-
-        const outputPdfDoc = await PDFDocument.create();
-
-        let backgroundImage = null;
-
-        const backgroundAsset = await readAssetAsBuffer(backgroundImageUrl);
-        if (!backgroundAsset?.buffer) {
-            console.warn('Background image could not be resolved, returning the original PDF buffer.');
-            return inputPdfBuffer;
-        }
-
-        try {
-            if (backgroundAsset.mimeType?.includes('png')) {
-                backgroundImage = await outputPdfDoc.embedPng(backgroundAsset.buffer);
-            } else {
-                backgroundImage = await outputPdfDoc.embedJpg(backgroundAsset.buffer);
-            }
-        } catch (jpgError) {
-            try {
-                backgroundImage = await outputPdfDoc.embedPng(backgroundAsset.buffer);
-            } catch (pngError) {
-                console.error('Failed to embed background image:', pngError);
-                return inputPdfBuffer;
-            }
-        }
-
-        const pages = inputPdfDoc.getPages();
-        const pageWidth = pages[0].getWidth();
-        const pageHeight = pages[0].getHeight();
-
-        for (let i = 0; i < pages.length; i++) {
-            const newPage = outputPdfDoc.addPage([pageWidth, pageHeight]);
-
-            // Draw the background image if available
-            if (backgroundImage) {
-                newPage.drawImage(backgroundImage, {
-                    x: 0,
-                    y: 0,
-                    width: pageWidth,
-                    height: pageHeight,
-                });
-            }
-
-            // Copy the current page from the input PDF
-            const [copiedPage] = await outputPdfDoc.embedPages([inputPdfDoc.getPages()[i]]);
-            if (!copiedPage) {
-                console.error(`Failed to copy page at index ${i}`);
-                return null;
-            }
-
-            newPage.drawPage(copiedPage, {
-                x: 0,
-                y: 0,
-                width: pageWidth,
-                height: pageHeight,
-            });
-        }
-
-        const pdfBytes = await outputPdfDoc.save();
-        return pdfBytes;
-    } catch (error) {
-        console.error('Error adding background to PDF:', error);
-        return null;
-    }
-};
-
 const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showInvestExplicit = false, BoldRow, HLinred, HighLow, RowSpacing,
     selectedFontSize, selectedFontFamily, hideCategories, hideTableHeadings, reportId, htmlContent,
     cssContent, header, footer, backgroundImageUrl, headermargin, footermargin, marginRight,
@@ -658,6 +584,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showIn
                 });
 
                 let pdfBuffer;
+                const hasBgTemplate = Boolean(String(backgroundImageUrl || "").trim());
                 if (useFormat1Engine) {
                     pdfBuffer = await generateFormat1PagePdf({
                         page,
@@ -679,7 +606,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showIn
                         Rightsignpd,
                         showInvest,
                         layerone,
-                        omitBackground: false,
+                        omitBackground: hasBgTemplate,
                         signatureLayout,
                         showlab,
                         showdoctorfirst,
@@ -698,6 +625,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showIn
                         BoldRow,
                         hideCategories,
                         hideTableHeadings,
+                        hasBackground: hasBgTemplate,
                     });
 
                     cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
@@ -738,6 +666,7 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showIn
                     pdfBuffer = await page.pdf({
                         format: 'A4',
                         printBackground: true,
+                        omitBackground: hasBgTemplate,
                         displayHeaderFooter: true,
                         headerTemplate: offlineHeaderTemplate,
                         footerTemplate: offlineFooterTemplate,
@@ -1247,6 +1176,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
         });
 
         let pdfBuffer;
+        const hasBgTemplate = Boolean(String(mergedValues.backgroundImageUrl || "").trim());
         if (useFormat1Engine) {
             pdfBuffer = await generateFormat1PagePdf({
                 page,
@@ -1268,7 +1198,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
                 Rightsignpd: mergedValues.Rightsignpd,
                 showInvest: mergedValues.showInvest,
                 layerone,
-                omitBackground: false,
+                omitBackground: hasBgTemplate,
                 signatureLayout: mergedValues.signatureLayout || null,
                 showlab: mergedValues.showlab,
                 showdoctorfirst: mergedValues.showdoctorfirst,
@@ -1287,6 +1217,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
                 HighLow: mergedValues.HighLow,
                 HLinred: mergedValues.HLinred,
                 BoldRow: mergedValues.BoldRow,
+                hasBackground: hasBgTemplate,
             });
 
             cleanupPageContent = await renderOfflineHtmlOnPage(page, contentWithCssAndImage);
@@ -1327,6 +1258,7 @@ async function generateSinglePdfBuffer(mergedValues, user) {
             pdfBuffer = await page.pdf({
                 format: 'A4',
                 printBackground: true,
+                omitBackground: hasBgTemplate,
                 displayHeaderFooter: true,
                 headerTemplate: offlineHeaderTemplate,
                 footerTemplate: offlineFooterTemplate,

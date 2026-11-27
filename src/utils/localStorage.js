@@ -124,12 +124,15 @@ const inferCloudinaryResourceType = (value) => {
         if (normalizedValue.includes("/raw/upload/")) return "raw";
     }
 
-    const extension = path.extname(normalizedValue).toLowerCase();
+    const cleanPath = normalizedValue.split("?")[0].split("#")[0];
+    const extension = path.extname(cleanPath).toLowerCase();
     const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".tif", ".tiff"]);
     const videoExtensions = new Set([".mp4", ".mov", ".avi", ".webm", ".mkv", ".m4v"]);
+    const rawExtensions = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".json", ".zip", ".bin"]);
 
     if (imageExtensions.has(extension)) return "image";
     if (videoExtensions.has(extension)) return "video";
+    if (rawExtensions.has(extension)) return "raw";
     if (
         normalizedValue.includes("signature") ||
         normalizedValue.includes("logo") ||
@@ -233,6 +236,10 @@ export const normalizeStoredUploadPublicId = (identifier) => {
                 return "";
             }
 
+            if (/\/raw\/upload\//i.test(parsedUrl.pathname)) {
+                return match[1];
+            }
+
             return stripCloudinaryFileExtension(match[1]);
         } catch {
             return "";
@@ -255,6 +262,9 @@ export const normalizeStoredUploadPublicId = (identifier) => {
     }
 
     if (isCloudinaryPublicId(normalizedIdentifier)) {
+        if (inferCloudinaryResourceType(normalizedIdentifier) === "raw") {
+            return normalizedIdentifier;
+        }
         return stripCloudinaryFileExtension(normalizedIdentifier);
     }
 
@@ -288,7 +298,10 @@ export const normalizeStoredUploadUrl = (identifier) => {
     }
 
     if (isCloudinaryPublicId(rawValue)) {
-        return buildCloudinaryUrl(normalizeStoredUploadPublicId(rawValue));
+        return buildCloudinaryUrl(
+            normalizeStoredUploadPublicId(rawValue),
+            inferCloudinaryResourceType(rawValue)
+        );
     }
 
     const resolvedPath = resolveStoredFilePath(identifier);
@@ -352,13 +365,18 @@ export const storeLocalFile = async (localFilePath, options = {}) => {
 
     if (ensureCloudinaryConfigured()) {
         try {
-            const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].includes(safeExtension.toLowerCase())
+            const extLower = safeExtension.toLowerCase();
+            const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].includes(extLower)
                 || ["signatures", "logos", "profiles"].includes(category);
-            const resolvedResourceType = isImage ? "image" : "auto";
+            const isRawDocument = extLower === ".pdf";
+            const resolvedResourceType = isRawDocument ? "raw" : (isImage ? "image" : "auto");
+            const cloudinaryPublicId = resolvedResourceType === "raw"
+                ? `${generatedBaseName}${safeExtension}`
+                : generatedBaseName;
 
             const uploadResult = await cloudinary.uploader.upload(sourcePath, {
                 folder: `${getCloudinaryRootFolder()}/${category}`,
-                public_id: generatedBaseName,
+                public_id: cloudinaryPublicId,
                 resource_type: resolvedResourceType,
                 use_filename: false,
                 unique_filename: false,

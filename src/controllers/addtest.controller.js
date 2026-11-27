@@ -14,6 +14,7 @@ import { User } from "../models/user.model.js";
 import { SuperAdmin } from "../models/superAdmin.model.js";
 import { getNextBookingCodeForScope } from "../utils/bookingCode.js";
 import { Formula } from "../models/formula.model.js";
+import { resolveCategoryForScope } from "../utils/categorySnapshot.js";
 
 
 const parseBooleanInput = (value) => value === true || value === "true" || value === 1 || value === "1";
@@ -406,11 +407,16 @@ const addingTest = asyncHandler(async (req, res) => {
         createdByRole: "superAdmin"
     });
     const normalizedParameters = normalizeParameterPayload(parameters);
+    const resolvedCategory = await resolveCategoryForScope({
+        categoryInput: category,
+        tenantId: null,
+        createdBy: userId
+    });
 
     const testCreated = await testSchema.create({
         Name,
         Short_name,
-        category: category || "",
+        category: resolvedCategory || category || "",
         Price,
         parameters: normalizedParameters || null,
         sampleType,
@@ -532,11 +538,16 @@ const addingTesttenant = asyncHandler(async (req, res) => {
     const nextOrder = (Number(lastPanel?.order) || 0) + 1;
     const nextBookingCode = await getNextBookingCodeForScope({ tenantId });
     const normalizedParameters = normalizeParameterPayload(parameters);
+    const resolvedCategory = await resolveCategoryForScope({
+        categoryInput: category,
+        tenantId,
+        createdBy: userId
+    });
 
     const testCreated = await testSchema.create({
         Name,
         Short_name,
-        category: category || "",
+        category: resolvedCategory || category || "",
         Price,
         parameters: normalizedParameters || null,
         sampleType,
@@ -1261,6 +1272,11 @@ const editTest = asyncHandler(async (req, res) => {
         }
     }
     const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
+    const resolvedCategory = await resolveCategoryForScope({
+        categoryInput: category,
+        tenantId: null,
+        createdBy: userId
+    });
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
@@ -1270,7 +1286,7 @@ const editTest = asyncHandler(async (req, res) => {
         {
             Name: trimmedName || currentTest.Name,
             Short_name: Short_name !== undefined ? String(Short_name).trim() : (currentTest.Short_name || ""),
-            category: category || "",
+            category: resolvedCategory || category || "",
             Price,
             parameters: Array.isArray(normalizedParameters) ? normalizedParameters : [],
             sampleType,
@@ -1370,6 +1386,11 @@ const editTesttenant = asyncHandler(async (req, res) => {
         }
     }
     const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
+    const resolvedCategory = await resolveCategoryForScope({
+        categoryInput: category,
+        tenantId: tid,
+        createdBy: userId
+    });
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
@@ -1379,7 +1400,7 @@ const editTesttenant = asyncHandler(async (req, res) => {
         {
             ...(trimmedName ? { Name: trimmedName } : {}),
             Short_name: Short_name !== undefined ? String(Short_name).trim() : (currentTest.Short_name || ""),
-            category: category || "",
+            category: resolvedCategory || category || "",
             Price,
             parameters: Array.isArray(normalizedParameters) ? normalizedParameters : [],
             sampleType,

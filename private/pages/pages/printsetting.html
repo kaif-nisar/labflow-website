@@ -519,6 +519,12 @@
             align-items: center;
             gap: 10px;
         }
+        .ps-thumb-img-wrap {
+            position: relative;
+            width: 50px;
+            height: 50px;
+            flex-shrink: 0;
+        }
         .ps-thumb-img {
             width: 50px;
             height: 50px;
@@ -526,6 +532,48 @@
             border-radius: 4px;
             background: #ffffff;
             border: 1px solid #e2e8f0;
+            display: block;
+        }
+        .ps-thumb-pdf-badge,
+        .ps-template-type-badge {
+            position: absolute;
+            bottom: 3px;
+            left: 3px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: #dc2626;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            line-height: 1.3;
+            pointer-events: none;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+            z-index: 2;
+        }
+        .ps-template-type-badge {
+            top: 4px;
+            bottom: auto;
+            left: 4px;
+        }
+        .ps-a4-letterhead-overlay.is-pdf-fallback {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 18px;
+            background: linear-gradient(180deg, rgba(240, 253, 250, 0.72) 0%, rgba(255, 255, 255, 0) 24%);
+        }
+        .ps-pdf-canvas-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
         }
         .ps-thumb-meta {
             display: flex;
@@ -1720,18 +1768,21 @@
                         <!-- Drag & Drop Zone for Letterhead -->
                         <div id="digitalLetterheadControls">
                             <div class="ps-form-group">
-                                <label class="ps-label">Upload Letterhead Template (A4 Background)</label>
+                                <label class="ps-label">Upload Letterhead Template (A4 Image or PDF)</label>
                                 <div class="ps-dropzone" id="letterheadDropzone">
-                                    <input type="file" id="fileInput" name="template" accept="image/png,image/jpeg,image/webp">
+                                    <input type="file" id="fileInput" name="template" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf">
                                     <div class="ps-dropzone-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                                    <div class="ps-dropzone-text">Drag & drop letterhead image here, or browse</div>
-                                    <div class="ps-dropzone-sub">Supports PNG, JPG, WEBP (Recommended: 2480 x 3508 px at 300 DPI)</div>
+                                    <div class="ps-dropzone-text">Drag & drop letterhead image or PDF here, or browse</div>
+                                    <div class="ps-dropzone-sub">Supports PNG, JPG, WEBP, PDF (A4 size; images 2480 x 3508 px at 300 DPI)</div>
                                 </div>
 
                                 <!-- Current Uploaded Thumbnail Preview -->
                                 <div class="ps-preview-thumb-box" id="letterheadThumbBox" style="display: none;">
                                     <div class="ps-thumb-details">
-                                        <img src="" id="letterheadThumbImg" class="ps-thumb-img" alt="Letterhead preview">
+                                        <div class="ps-thumb-img-wrap">
+                                            <img src="" id="letterheadThumbImg" class="ps-thumb-img" alt="Letterhead preview">
+                                            <span class="ps-thumb-pdf-badge" id="letterheadThumbPdfBadge" style="display: none;">PDF</span>
+                                        </div>
                                         <div class="ps-thumb-meta">
                                             <span class="ps-thumb-name" id="letterheadThumbName">template.png</span>
                                             <span class="ps-thumb-size" id="letterheadThumbSize">Active template</span>
@@ -2500,6 +2551,7 @@ Consultant Pathologist</div>
         <span id="psToastMsg">Settings updated successfully</span>
     </div>
 
+    <script src="/js/templatePreviewHelper.js"></script>
     <script src="printsetting.js"></script>
 </body>
 </html>

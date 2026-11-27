@@ -36,6 +36,7 @@
     root: null,
     bar: null,
     activeTokens: new Set(),
+    tokenMeta: new Map(),
     showTimer: null,
     hideTimer: null,
     trickleTimer: null,
@@ -64,7 +65,7 @@
         top: 0;
         left: 0;
         width: 100%;
-        height: 3px;
+        height: 3.5px;
         opacity: 0;
         pointer-events: none;
         z-index: 2147483647;
@@ -75,15 +76,23 @@
         opacity: 1;
       }
 
+      /* Yield to SPA shell instant progress rail during active route transitions so only one top bar appears */
+      #lfInstantRail.is-active ~ #${PROGRESS_ROOT_ID},
+      #lfInstantRail.is-active ~ #${PROGRESS_ROOT_ID}.is-visible {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        transition: none !important;
+      }
+
       #${PROGRESS_ROOT_ID} .app-top-loader__bar {
         position: relative;
         width: 100%;
         height: 100%;
         transform: scaleX(0);
         transform-origin: left center;
-        transition: transform 180ms ease, opacity 220ms ease;
-        background: linear-gradient(90deg, #58baff 0%, #8fdcff 55%, #58baff 100%);
-        box-shadow: 0 0 12px rgba(88, 186, 255, 0.75);
+        transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+        background: linear-gradient(90deg, #2563eb 0%, #38bdf8 50%, #6366f1 100%);
+        box-shadow: 0 0 12px rgba(56, 189, 248, 0.75);
       }
 
       #${PROGRESS_ROOT_ID} .app-top-loader__peg {
@@ -94,7 +103,7 @@
         height: 100%;
         opacity: 0.95;
         transform: translateX(38px);
-        background: linear-gradient(90deg, rgba(88, 186, 255, 0), rgba(143, 220, 255, 0.95));
+        background: linear-gradient(90deg, rgba(56, 189, 248, 0), rgba(143, 220, 255, 0.95));
         filter: blur(8px);
       }
 
@@ -113,7 +122,7 @@
   }
 
   function mount() {
-    if (state.mounted) {
+    if (state.mounted || !document.body) {
       return;
     }
 
@@ -142,9 +151,19 @@
   }
 
   function setProgress(value) {
-    state.progress = Math.min(1, Math.max(0, value));
+    state.progress = Math.min(1, Math.max(0, Number(value) || 0));
     if (state.bar) {
       state.bar.style.transform = `scaleX(${state.progress})`;
+    }
+  }
+
+  function set(value) {
+    if (!state.activeTokens.size) {
+      return;
+    }
+    const clamped = Math.min(0.96, Math.max(config.minimum, Number(value) || 0));
+    if (clamped > state.progress) {
+      setProgress(clamped);
     }
   }
 
@@ -166,18 +185,24 @@
       }
 
       const remaining = config.maximum - state.progress;
-      const step = Math.min(remaining, Math.max(0.015, remaining * (0.18 + Math.random() * 0.16)));
+      const step = Math.min(remaining, Math.max(0.015, remaining * (0.16 + Math.random() * 0.14)));
       setProgress(state.progress + step);
     }, config.trickleMs);
   }
 
   function reveal() {
-    state.showTimer = null;
+    if (state.showTimer) {
+      window.clearTimeout(state.showTimer);
+      state.showTimer = null;
+    }
     if (!state.activeTokens.size) {
       return;
     }
 
     mount();
+    if (!state.root) {
+      return;
+    }
     state.visible = true;
     state.root.classList.add("is-visible");
     if (state.progress < config.minimum) {
@@ -186,7 +211,11 @@
     startTrickle();
   }
 
-  function scheduleReveal() {
+  function scheduleReveal(immediate) {
+    if (immediate) {
+      reveal();
+      return;
+    }
     if (state.visible || state.showTimer) {
       return;
     }
@@ -245,15 +274,19 @@
     }
 
     const token = `top-loader-${++state.seq}`;
+    const immediate = Boolean(options && options.immediate);
     state.activeTokens.add(token);
+    state.tokenMeta.set(token, { label: label || "task", immediate });
 
-    if (state.progress === 0) {
-      setProgress(config.minimum);
-    } else if (state.progress < config.minimum) {
-      setProgress(config.minimum);
+    const initialProgress = options && typeof options.progress === "number"
+      ? Math.max(config.minimum, Math.min(0.9, options.progress))
+      : config.minimum;
+
+    if (state.progress < initialProgress) {
+      setProgress(initialProgress);
     }
 
-    scheduleReveal();
+    scheduleReveal(immediate);
     startTrickle();
 
     return token;
@@ -262,8 +295,10 @@
   function done(token) {
     if (token) {
       state.activeTokens.delete(token);
+      state.tokenMeta.delete(token);
     } else {
       state.activeTokens.clear();
+      state.tokenMeta.clear();
     }
 
     finishIfIdle();
@@ -448,7 +483,9 @@
   window.AppTopLoader = {
     start,
     done,
+    set,
     wrap,
+    isActive: () => state.activeTokens.size > 0,
     scanLegacyLoaders
   };
 

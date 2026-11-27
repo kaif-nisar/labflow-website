@@ -1361,12 +1361,21 @@ async function allcases() {
 
             if (target.classList.contains("view-bill")) {
                 saveBookingToLocalStorage(booking, row);
-                window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                if (typeof window.loadPage === "function") {
+                    window.loadPage("labreport");
+                } else {
+                    window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                }
             }
             else if (target.classList.contains("edit-report")) {
                 saveBookingToLocalStorage(booking, row);
-                const url = `${BASE_URL}/admin/admin.html?page=${user.role === "staff" ? user.tenantId.adminDetails.userId.pdfFormat : user.pdfFormat}&value1=${booking.bookingId}`;
-                window.location.href = url;
+                const formatPage = user.role === "staff" ? user.tenantId.adminDetails.userId.pdfFormat : user.pdfFormat;
+                if (typeof window.loadPage === "function") {
+                    window.loadPage(formatPage, null, null, null, null, { queryParams: { value1: booking.bookingId } });
+                } else {
+                    const url = `${BASE_URL}/admin/admin.html?page=${formatPage}&value1=${booking.bookingId}`;
+                    window.location.href = url;
+                }
             }
             else if (target.classList.contains("download-report")) {
                 const badge = row.querySelector(".booking-id-badge");
@@ -1374,7 +1383,11 @@ async function allcases() {
                     await downloadSingleReport(badge);
                 } else {
                     saveBookingToLocalStorage(booking, row);
-                    window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                    if (typeof window.loadPage === "function") {
+                        window.loadPage("labreport");
+                    } else {
+                        window.location.href = `${BASE_URL}/admin/admin.html?page=labreport`;
+                    }
                 }
             }
             else if (target.classList.contains("edit-booking")) {

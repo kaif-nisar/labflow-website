@@ -875,7 +875,7 @@ body.lf-sidebar-collapsed .top-navbar {
     gap: 14px;
 }
 
-/* Topbar Left: Sidebar Toggle + Compact Logo + Dynamic Breadcrumb */
+/* Topbar Left: Sidebar Toggle + Compact Logo */
 .lf-topbar-left {
     display: flex;
     align-items: center;
@@ -963,42 +963,6 @@ body.lf-sidebar-collapsed .lf-topbar-brand {
     max-width: 132px;
     object-fit: contain;
     display: block;
-}
-
-/* Dynamic Route Breadcrumb */
-.lf-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    margin-left: 2px;
-    padding-left: 14px;
-    border-left: 1px solid var(--lf-border);
-    font-family: var(--lf-font-sans);
-}
-
-.lf-breadcrumb__section {
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #94a3b8;
-    white-space: nowrap;
-}
-
-.lf-breadcrumb .lf-breadcrumb__sep {
-    font-size: 8.5px;
-    color: #cbd5e1;
-}
-
-.lf-breadcrumb__current {
-    font-size: 14.5px;
-    font-weight: 700;
-    color: var(--lf-text-main);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 220px;
 }
 
 /* Topbar Center: Segmented Quick Navigation Pills */
@@ -2126,8 +2090,8 @@ body.lf-sidebar-collapsed .content-box {
 }
 
 /* Special Viewport-Fit Mode for AI Copilot (Higher specificity than aiCopilot.html inline overrides) */
-body.lf-admin-body:has(#ai-copilot-app) #content-box.content-box,
-.content-box:has(#ai-copilot-app) {
+body.lf-admin-body:has(#content-box:not([data-staging-content-box="true"]) #ai-copilot-app) #content-box.content-box,
+#content-box.content-box:not([data-staging-content-box="true"]):has(#ai-copilot-app) {
     padding-top: calc(var(--lf-topbar-height) + 14px + var(--lf-sub-banner-offset)) !important;
     padding-bottom: 14px !important;
     padding-left: var(--lf-workspace-pad-x) !important;
@@ -2498,19 +2462,10 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
     body:not(.lf-sidebar-collapsed) .nav-copilot-badge {
         display: none !important;
     }
-
-    body:not(.lf-sidebar-collapsed) .lf-breadcrumb__current {
-        max-width: 160px;
-    }
 }
 
 /* Standard Laptops (<= 1300px): Clean graceful collapse */
 @media (max-width: 1300px) {
-    body:not(.lf-sidebar-collapsed) .lf-breadcrumb__section,
-    body:not(.lf-sidebar-collapsed) .lf-breadcrumb .lf-breadcrumb__sep {
-        display: none !important;
-    }
-
     body:not(.lf-sidebar-collapsed) .lf-cmd-trigger__label {
         display: none !important;
     }
@@ -2604,15 +2559,6 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
         height: auto;
     }
 
-    .lf-breadcrumb {
-        min-width: 0;
-        flex: 0 1 auto;
-    }
-
-    .lf-breadcrumb__current {
-        max-width: clamp(90px, 22vw, 180px);
-    }
-
     .inner-nav {
         display: none !important;
     }
@@ -2659,7 +2605,6 @@ body.lf-admin-body .spa-page-canvas #ai-copilot-app {
     .lf-hide-sm,
     .lf-cmd-trigger__kbd,
     .lf-cmd-trigger__label,
-    .lf-breadcrumb,
     .lf-action-pill.video-btn,
     #helpTriggerBtn {
         display: none !important;
@@ -3833,4 +3778,280 @@ body > #toastStack.oh5-toast-stack .oh5-toast {
 body > #toastStack.oh5-toast-stack .oh5-toast.is-success { border-left-color: #10b981; }
 body > #toastStack.oh5-toast-stack .oh5-toast.is-error { border-left-color: #ef4444; }
 body > #toastStack.oh5-toast-stack .oh5-toast.is-warn { border-left-color: #f59e0b; }
+
+/* ==========================================================================
+   9. MINIMALIST GLOBAL PROGRESS RAIL, SINGLE SIDEBAR SPINNER & SNAPSHOT ENGINE
+   ========================================================================== */
+
+/* Sleek Global Top Progress Bar */
+.lf-instant-rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 2147483647;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateZ(0);
+    transition: opacity 0.2s ease;
+    overflow: hidden;
+    background: rgba(37, 99, 235, 0.08);
+}
+
+.lf-instant-rail.is-active {
+    opacity: 1;
+}
+
+.lf-instant-rail__bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(var(--lf-rail-progress, 0.14));
+    background: linear-gradient(90deg, #2563eb 0%, #38bdf8 52%, #6366f1 100%);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.65);
+    transition: transform 0.22s var(--lf-ease);
+    position: relative;
+}
+
+.lf-instant-rail__bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+    animation: lfRailShimmer 1.2s linear infinite;
+}
+
+@keyframes lfRailShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+@keyframes lfBufferSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Single Pending Spinner Strictly on Left Sidebar Navigation Item */
+.left-navbar .panel_list .m_dash.is-route-loading,
+.left-navbar .panel_list a.m_dash.nav-item.is-route-loading {
+    background: rgba(59, 130, 246, 0.14);
+    border-color: rgba(96, 165, 250, 0.35);
+    color: #ffffff !important;
+}
+
+.left-navbar .panel_list .subItem a.nav-item.is-route-loading .contar {
+    background: rgba(59, 130, 246, 0.16);
+    border-color: rgba(96, 165, 250, 0.32);
+    color: #ffffff !important;
+}
+
+.left-navbar .panel_list .m_dash.is-route-loading .toggle-symbol {
+    display: none;
+}
+
+.left-navbar .lf-nav-pending-spinner {
+    margin-left: auto;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(148, 163, 184, 0.28);
+    border-top-color: #38bdf8;
+    animation: lfBufferSpin 0.65s linear infinite;
+}
+
+/* Pre-Reload Restored Visual Snapshot Layer (Zero Blank Flash, Inert During Refresh) */
+.lf-snapshot-stage {
+    position: relative;
+    width: 100%;
+    pointer-events: none;
+    user-select: none;
+}
+
+.lf-snapshot-stage .lf-snapshot-canvas {
+    display: block;
+    max-width: 100%;
+}
+
+/* Disable enter fade animation when hydrating restored snapshot so frame-1 is rock steady */
+.lf-snapshot-stage .spa-page-canvas {
+    animation: none !important;
+}
+
+/* Cold-Start Enterprise Workspace Skeleton (Shown only when no prior snapshot exists) */
+.lf-workspace-skeleton {
+    width: 100%;
+    max-width: var(--lf-workspace-max);
+    margin: 0 auto;
+    display: grid;
+    gap: 16px;
+}
+
+.lf-skel-card {
+    background: var(--lf-surface);
+    border: 1px solid var(--lf-border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--lf-shadow-xs);
+}
+
+.lf-skel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+}
+
+.lf-skel-line {
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+    background-size: 200% 100%;
+    animation: lfSkeletonWave 1.4s ease-in-out infinite;
+}
+
+.lf-skel-line--lg { height: 20px; width: 42%; }
+.lf-skel-line--md { height: 14px; width: 65%; }
+.lf-skel-line--sm { height: 11px; width: 35%; }
+.lf-skel-block { height: 220px; border-radius: 12px; }
+
+html[data-theme="dark"] .lf-skel-line {
+    background: linear-gradient(90deg, #1f2d47 0%, #2a3c5c 50%, #1f2d47 100%);
+    background-size: 200% 100%;
+}
+
+@keyframes lfSkeletonWave {
+    0% { background-position: 100% 50%; }
+    100% { background-position: -100% 50%; }
+}
+
+/* Non-Destructive Route Error Toast (Keeps current page alive on failed navigation) */
+.lf-route-toast-host {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 2147483645;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: min(400px, calc(100vw - 24px));
+    pointer-events: none;
+    font-family: var(--lf-font-sans);
+}
+
+.lf-route-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 13px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid #fecaca;
+    border-left: 4px solid #dc2626;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+    backdrop-filter: blur(12px);
+    color: var(--lf-text-main);
+    animation: lfCmdEnter 0.18s var(--lf-ease);
+}
+
+.lf-route-toast__icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: #fef2f2;
+    color: #dc2626;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.lf-route-toast__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.lf-route-toast__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 2px;
+}
+
+.lf-route-toast__msg {
+    font-size: 12px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.lf-route-toast__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.lf-route-toast__btn {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--lf-border);
+    background: #f8fafc;
+    color: #334155;
+}
+
+.lf-route-toast__btn--primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
+.lf-route-toast__close {
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+
+html[data-theme="dark"] .lf-route-toast {
+    background: rgba(27, 38, 59, 0.97);
+    border-color: rgba(248, 113, 113, 0.35);
+    border-left-color: #ef4444;
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .lf-route-toast__icon {
+    background: rgba(239, 68, 68, 0.16);
+    color: #f87171;
+}
+
+html[data-theme="dark"] .lf-route-toast__title {
+    color: #f8fafc;
+}
+
+html[data-theme="dark"] .lf-route-toast__msg {
+    color: #9db0c9;
+}
+
+html[data-theme="dark"] .lf-route-toast__btn {
+    background: #22304a;
+    border-color: var(--lf-border);
+    color: #e2e8f0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lf-nav-pending-spinner,
+    .lf-instant-rail__bar::after,
+    .lf-skel-line {
+        animation: none !important;
+    }
+}
+
 

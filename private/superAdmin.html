@@ -9,27 +9,13 @@
     <meta name="theme-color" content="#091a3b">
     <link rel="stylesheet" href="/portal-ui.css">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-    <!-- <link rel="stylesheet" href="pages/adminPanel.css"> -->
-    <script src="/vendor/chart.js/chart.umd.min.js"></script>
     <link href="/vendor/bootstrap5/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-4Q6Gf2aSP4eDXB8Miphtr37CMZZQ5oXLH2yaXMJ2w8e2ZtHTl7GptT4jmndRuHDT" crossorigin="anonymous">
     <link rel="stylesheet" href="/css/tailwind-offline.css">
-<link rel="stylesheet" href="/vendor/bootstrap4/css/bootstrap.min.css"
+    <link rel="stylesheet" href="/vendor/bootstrap4/css/bootstrap.min.css"
         integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <script src="/vendor/tinymce/tinymce.min.js"
-        referrerpolicy="origin"></script>
-    <script src="/vendor/jquery/jquery.min.js"
-        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
-        crossorigin="anonymous"></script>
-    <script src="/vendor/popper.js/popper.min.js"
-        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
-        crossorigin="anonymous"></script>
-    <script src="/vendor/bootstrap4/js/bootstrap.min.js"
-        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
-        crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/vendor/ckeditor5/ckeditor5.css">
     <link rel="stylesheet" href="/css/catalog-studio.css?v=1">
-    <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
     <style>
         :root {
             --primary: #4361ee;
@@ -389,10 +375,189 @@
             outline: 0;
             height: 70vh;
         }
+
+        /* Minimalist Global Top Progress Rail & Single Sidebar Spinner */
+        .lf-instant-rail {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            z-index: 2147483647;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            overflow: hidden;
+            background: rgba(67, 97, 238, 0.08);
+        }
+
+        .lf-instant-rail.is-active {
+            opacity: 1;
+        }
+
+        .lf-instant-rail__bar {
+            height: 100%;
+            width: 100%;
+            transform-origin: left center;
+            transform: scaleX(var(--lf-rail-progress, 0.14));
+            background: linear-gradient(90deg, #4361ee 0%, #38bdf8 52%, #3f37c9 100%);
+            box-shadow: 0 0 10px rgba(67, 97, 238, 0.6);
+            transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+        }
+
+        .lf-instant-rail__bar::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+            animation: lfSaRailShimmer 1.2s linear infinite;
+        }
+
+        @keyframes lfSaRailShimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        @keyframes lfSaSpin { to { transform: rotate(360deg); } }
+
+        .sidebar .menu-item.is-route-loading {
+            background-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .sidebar .lf-nav-pending-spinner {
+            margin-left: auto;
+            width: 14px;
+            height: 14px;
+            flex: 0 0 14px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.32);
+            border-top-color: #ffffff;
+            animation: lfSaSpin 0.65s linear infinite;
+        }
+
+        .lf-snapshot-stage {
+            position: relative;
+            width: 100%;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .lf-snapshot-stage .lf-snapshot-canvas {
+            display: block;
+            max-width: 100%;
+        }
+
+        .lf-workspace-skeleton {
+            display: grid;
+            gap: 16px;
+        }
+
+        .lf-skel-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 20px;
+        }
+
+        .lf-skel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 14px;
+        }
+
+        .lf-skel-line {
+            height: 12px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+            background-size: 200% 100%;
+            animation: lfSaSkeletonWave 1.4s ease-in-out infinite;
+        }
+
+        .lf-skel-line--lg { height: 20px; width: 42%; }
+        .lf-skel-line--md { height: 14px; width: 65%; }
+        .lf-skel-line--sm { height: 11px; width: 35%; }
+        .lf-skel-block { height: 220px; border-radius: 12px; }
+
+        @keyframes lfSaSkeletonWave {
+            0% { background-position: 100% 50%; }
+            100% { background-position: -100% 50%; }
+        }
+
+        .lf-route-toast-host {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 2147483645;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: min(400px, calc(100vw - 24px));
+            pointer-events: none;
+        }
+
+        .lf-route-toast {
+            pointer-events: auto;
+            display: flex;
+            align-items: flex-start;
+            gap: 11px;
+            padding: 13px 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.97);
+            border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+            color: #0f172a;
+        }
+
+        .lf-route-toast__icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            background: #fef2f2;
+            color: #dc2626;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .lf-route-toast__body { flex: 1; min-width: 0; }
+        .lf-route-toast__title { font-size: 13px; font-weight: 700; margin: 0 0 2px; }
+        .lf-route-toast__msg { font-size: 12px; color: #64748b; margin: 0; line-height: 1.4; }
+        .lf-route-toast__actions { display: flex; gap: 8px; margin-top: 9px; }
+        .lf-route-toast__btn {
+            padding: 5px 11px;
+            border-radius: 7px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+        }
+        .lf-route-toast__btn--primary {
+            background: #4361ee;
+            border-color: #4361ee;
+            color: #ffffff;
+        }
+        .lf-route-toast__close {
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
+    <div class="lf-instant-rail" id="lfInstantRail" aria-hidden="true">
+        <div class="lf-instant-rail__bar" id="lfInstantRailBar"></div>
+    </div>
+    <div class="lf-route-toast-host" id="lfRouteToastHost" aria-live="assertive"></div>
     <div class="loader">
         <div class="shape"></div>
         <div class="shape"></div>
@@ -524,12 +689,131 @@
         <main class="content" id="main-content">
             <!-- Dynamic content will be loaded here -->
         </main>
-        <script src="/js/portal-guard.js?v=2"></script>
-        <script src="/js/portal-ui.js"></script>
-        <script src="/js/top-progress.js"></script>
-        <script src="/js/catalogStudioEngine.js"></script>
-        <script src="/js/catalogStudioPages.js"></script>
-        <script src="main.js"></script>
+    </div>
+
+    <!-- Synchronous Pre-Paint Snapshot & Buffer Hydration -->
+    <script>
+        (function () {
+            try {
+                var SNAPSHOT_KEY = "lf_spa_snapshot_superadmin";
+                var params = new URLSearchParams(window.location.search);
+                var targetPage = params.get("page") || "dashboard";
+                var escapeAttr = function (v) {
+                    var s = String(v || "");
+                    return (window.CSS && typeof window.CSS.escape === "function")
+                        ? window.CSS.escape(s)
+                        : s.replace(/["\\]/g, "");
+                };
+                var rail = document.getElementById("lfInstantRail");
+                var mainContent = document.getElementById("main-content");
+
+                var setInitialProgress = function (pct) {
+                    var clamped = Math.max(8, Math.min(95, pct));
+                    var ratio = (clamped / 100).toFixed(3);
+                    document.documentElement.style.setProperty("--lf-rail-progress", ratio);
+                };
+
+                var attachSingleSidebarSpinner = function (pageKey) {
+                    var sidebarEl = document.getElementById("sidebar");
+                    if (!sidebarEl || !pageKey) return;
+                    var candidate = sidebarEl.querySelector('.menu-item[data-page="' + escapeAttr(pageKey) + '"]');
+                    if (!candidate) return;
+                    candidate.classList.add("is-route-loading");
+                    candidate.setAttribute("aria-busy", "true");
+                    if (!candidate.querySelector(".lf-nav-pending-spinner")) {
+                        var sp = document.createElement("span");
+                        sp.className = "lf-nav-pending-spinner";
+                        sp.setAttribute("aria-hidden", "true");
+                        candidate.appendChild(sp);
+                    }
+                };
+
+                var raw = null;
+                try { raw = sessionStorage.getItem(SNAPSHOT_KEY); } catch (e) {}
+                var snapshot = null;
+                if (raw) {
+                    try { snapshot = JSON.parse(raw); } catch (e) { snapshot = null; }
+                }
+
+                var isValidSnapshot = Boolean(
+                    snapshot &&
+                    snapshot.pathname === window.location.pathname &&
+                    typeof snapshot.contentHtml === "string" &&
+                    snapshot.contentHtml.trim().length > 0 &&
+                    (!snapshot.ts || (Date.now() - Number(snapshot.ts)) < 15 * 60 * 1000)
+                );
+
+                if (isValidSnapshot && mainContent) {
+                    var activeSnapshotPage = snapshot.page || targetPage;
+                    document.querySelectorAll(".menu-item").forEach(function (el) {
+                        el.classList.remove("active");
+                    });
+                    document.querySelectorAll('.menu-item[data-page="' + escapeAttr(activeSnapshotPage) + '"]').forEach(function (el) {
+                        el.classList.add("active");
+                    });
+
+                    var stage = document.createElement("div");
+                    stage.className = "lf-snapshot-stage";
+                    stage.setAttribute("data-lf-snapshot", "true");
+                    stage.setAttribute("aria-hidden", "true");
+                    try { stage.inert = true; } catch (e) {}
+                    stage.innerHTML = snapshot.contentHtml;
+                    mainContent.innerHTML = "";
+                    mainContent.appendChild(stage);
+                    window.__lfHasBootSnapshot = true;
+
+                    if (snapshot.scrollY) {
+                        requestAnimationFrame(function () {
+                            window.scrollTo(0, Number(snapshot.scrollY) || 0);
+                        });
+                    }
+                } else if (mainContent) {
+                    mainContent.innerHTML =
+                        '<div class="lf-workspace-skeleton" data-lf-boot-skeleton="true" aria-hidden="true">' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--lg"></div><div class="lf-skel-line lf-skel-line--sm" style="margin-top:10px;"></div></div>' +
+                        '<div class="lf-skel-grid">' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-line--sm"></div><div class="lf-skel-line lf-skel-line--md" style="margin-top:12px;"></div></div>' +
+                        '</div>' +
+                        '<div class="lf-skel-card"><div class="lf-skel-line lf-skel-block"></div></div>' +
+                        '</div>';
+                }
+
+                attachSingleSidebarSpinner(targetPage);
+                if (rail) rail.classList.add("is-active");
+                setInitialProgress(14);
+
+                var bootPct = 14;
+                window.__lfBootProgress = bootPct;
+                window.__lfBootProgressTimer = window.setInterval(function () {
+                    bootPct = Math.min(48, bootPct + (48 - bootPct) * 0.14);
+                    window.__lfBootProgress = bootPct;
+                    setInitialProgress(bootPct);
+                }, 140);
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- Core Vendor Scripts (Loaded sequentially at end of body so pre-paint snapshot renders instantly) -->
+    <script src="/vendor/chart.js/chart.umd.min.js"></script>
+    <script src="/vendor/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
+    <script src="/vendor/jquery/jquery.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="/vendor/popper.js/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="/vendor/bootstrap4/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="/vendor/ckeditor5/browser/ckeditor5.umd.js"></script>
+    <script src="/js/portal-guard.js?v=2"></script>
+    <script src="/js/portal-ui.js"></script>
+    <script src="/js/top-progress.js"></script>
+    <script src="/js/catalogStudioEngine.js"></script>
+    <script src="/js/catalogStudioPages.js"></script>
+    <script src="main.js"></script>
 </body>
 
 </html>

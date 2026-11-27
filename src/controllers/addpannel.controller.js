@@ -7,6 +7,7 @@ import { SuperAdmin } from "../models/superAdmin.model.js";
 import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
 import { getNextBookingCodeForScope } from "../utils/bookingCode.js";
+import { resolveCategoryForScope } from "../utils/categorySnapshot.js";
 
 const parseBooleanInput = (value) => value === true || value === "true" || value === 1 || value === "1";
 
@@ -99,13 +100,18 @@ const addpannelcontroller = asyncHandler(async (req, res) => {
     createdBy: userId,
     createdByRole: "superAdmin"
   });
+  const resolvedCategory = await resolveCategoryForScope({
+    categoryInput: category,
+    tenantId: null,
+    createdBy: userId
+  });
 
   const createPannel = {
     order: nextOrder,
     bookingCode: nextBookingCode,
     name: cleanPanelName,
     Short_name: resolvedShortName,
-    category,
+    category: resolvedCategory || category,
     price: Number.isFinite(price) ? price : 0,
     tests: inputarray,
     interpretation: interpretion ?? interpretation ?? "",
@@ -209,13 +215,18 @@ const addpannelcontrollerforadmin = asyncHandler(async (req, res) => {
 
   const nextOrder = (Number(lastPanel?.order) || 0) + 1;
   const nextBookingCode = await getNextBookingCodeForScope({ tenantId });
+  const resolvedCategory = await resolveCategoryForScope({
+    categoryInput: category,
+    tenantId,
+    createdBy: req.user._id
+  });
 
   const createPannel = {
     order: nextOrder,
     bookingCode: nextBookingCode,
     name: cleanPanelName,
     Short_name: resolvedShortName,
-    category,
+    category: resolvedCategory || category,
     price: Number.isFinite(price) ? price : 0,
     tests: inputarray,
     interpretation: interpretion ?? interpretation ?? "",
@@ -325,11 +336,16 @@ const editPannelController = asyncHandler(async (req, res) => {
   }
 
   const ownerId = req.user.role === "staff" ? req.user.parentUser : req.user._id;
+  const resolvedCategory = await resolveCategoryForScope({
+    categoryInput: category,
+    tenantId: null,
+    createdBy: ownerId
+  });
   const editedPannel = await addPannel.findOneAndUpdate(
     { _id: value1, createdBy: ownerId },
     {
       name: String(pannelname).trim(),
-      category,
+      category: resolvedCategory || category,
       price,
       tests: inputarray,
       sample_types,
@@ -404,12 +420,17 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
 
   const tenantId = req.user.tenantId?._id || req.user.tenantId;
   const filter = tenantId ? { _id: value1, tenantId } : { _id: value1 };
+  const resolvedCategory = await resolveCategoryForScope({
+    categoryInput: category,
+    tenantId,
+    createdBy: req.user._id
+  });
 
   const editedPannel = await addPannel.findOneAndUpdate(
     filter,
     {
       name: String(pannelname).trim(),
-      category,
+      category: resolvedCategory || category,
       price,
       tests: inputarray,
       sample_types,

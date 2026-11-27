@@ -22,8 +22,16 @@ let pageTransitionSequence = 0;
 let activePageTransitionSession = null;
 let isPageFetchTrackingInstalled = false;
 let isSubpageListenerTrackingInstalled = false;
+let isSubpageTimerTrackingInstalled = false;
 let isCapturingSubpageListeners = false;
-const activeSubpageGlobalListeners = [];
+let activeSubpageCaptureTarget = null;
+let activeDomReadyCaptureQueue = null;
+let currentTimerCaptureOwner = null;
+let committedPageState = null;
+let currentActivePage = null;
+let currentActiveQueryKey = null;
+const ADMIN_SNAPSHOT_STORAGE_KEY = "lf_spa_snapshot_admin";
+const reExecIsolatedScripts = new Set();
 let userMenuListenersInstalled = false;
 
 const MOBILE_DRAWER_BREAKPOINT = 1024;
@@ -249,35 +257,425 @@ function getSubscriptionReminderCopy(daysLeft, severity) {
 }
 
 // ==========================================================================
-// SPA STAGING, FETCH TRACKING & SUBPAGE CSS ISOLATION ENGINE
+// SPA STAGING, DUAL NETWORK TRACKING, SNAPSHOTS & BUFFER HUD ENGINE
 // ==========================================================================
 
-function installPageFetchTracking() {
-  if (isPageFetchTrackingInstalled || typeof window.fetch !== "function") return;
+const SILENT_BACKGROUND_API_PATTERNS = [
+  "/api/v1/user/getnewnotificationforadmin",
+  "/api/v1/user/check-subscription",
+  "/api/v1/user/theme-preference"
+];
 
-  const originalFetch = window.fetch.bind(window);
-  isPageFetchTrackingInstalled = true;
+function isSilentTransitionUrl(rawUrl) {
+  const url = String(rawUrl || "");
+  if (!url) return false;
+  return SILENT_BACKGROUND_API_PATTERNS.some((pattern) => url.includes(pattern));
+}
 
-  window.fetch = function trackedPageFetch(input, init) {
-    const session = activePageTransitionSession;
-    const isSilent = Boolean(init && init.__topLoaderSilent);
+function getRouteDisplayTitle(page) {
+  if (!page) return "Page";
+  const meta = ROUTE_META_MAP[page];
+  if (meta?.title) return meta.title;
+  const navMatch = document.querySelector(`.nav-item[data-page="${CSS.escape ? CSS.escape(page) : page}"]`);
+  const attrTitle = navMatch?.getAttribute("data-page-title");
+  if (attrTitle) return attrTitle;
+  return String(page)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
-    if (!session || isSilent) {
-      return originalFetch(input, init);
+const RouteBufferHud = (() => {
+  let progress = 0;
+  let trickleTimer = null;
+  let hideTimer = null;
+
+  function stopTrickle() {
+    if (trickleTimer) {
+      window.clearInterval(trickleTimer);
+      trickleTimer = null;
+    }
+  }
+
+  function paintProgress(pct) {
+    progress = Math.max(0, Math.min(100, Number(pct) || 0));
+    const ratio = (progress / 100).toFixed(3);
+    document.documentElement.style.setProperty("--lf-rail-progress", ratio);
+  }
+
+  function clearNavLoadingIndicators() {
+    document.querySelectorAll(".is-route-loading").forEach((el) => {
+      el.classList.remove("is-route-loading");
+      el.removeAttribute("aria-busy");
+    });
+    document.querySelectorAll(".lf-nav-pending-spinner").forEach((sp) => sp.remove());
+  }
+
+  function resolveSingleSidebarTarget(page, preferredTrigger = null) {
+    const panelList = document.getElementById("lfPanelList");
+    if (!panelList) return null;
+
+    // 1. If the user explicitly clicked a sidebar menu item, attach ONLY to that item
+    if (
+      preferredTrigger instanceof HTMLElement &&
+      panelList.contains(preferredTrigger) &&
+      !preferredTrigger.closest(".logo-div")
+    ) {
+      return preferredTrigger;
     }
 
-    session.pendingFetches += 1;
-    return Promise.resolve(originalFetch(input, init)).finally(() => {
-      session.pendingFetches = Math.max(0, session.pendingFetches - 1);
+    if (!page) return null;
+    const mappedPage = ROUTE_META_MAP[page]?.parent || page;
+    const candidateKeys = page === mappedPage ? [page] : [page, mappedPage];
+
+    for (const key of candidateKeys) {
+      const safeKey = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(key) : key;
+      const matches = Array.from(panelList.querySelectorAll(`a.nav-item[data-page="${safeKey}"]`))
+        .filter((el) => {
+          const parentLi = el.closest("li");
+          const parentSub = el.closest(".subItem");
+          return parentLi?.dataset.permissionHidden !== "true" && parentSub?.dataset.permissionHidden !== "true";
+        });
+
+      if (matches.length === 0) continue;
+
+      // Prefer an already-visible sidebar link (e.g. top-level over collapsed submenu duplicate)
+      const visibleMatch = matches.find((el) => {
+        const sub = el.closest(".subItem");
+        return !sub || sub.style.display === "block";
+      });
+      if (visibleMatch) return visibleMatch;
+
+      // Otherwise attach cleanly to the single parent group toggle row if its submenu is collapsed
+      const firstMatch = matches[0];
+      const collapsedSub = firstMatch.closest(".subItem");
+      if (collapsedSub && collapsedSub.previousElementSibling) {
+        const groupBtn = collapsedSub.previousElementSibling.querySelector(".m_dash");
+        if (groupBtn) return groupBtn;
+      }
+      return firstMatch;
+    }
+
+    return null;
+  }
+
+  function markNavLoading(page, preferredTrigger = null) {
+    clearNavLoadingIndicators();
+    const targetEl = resolveSingleSidebarTarget(page, preferredTrigger);
+    if (!targetEl) return;
+
+    targetEl.classList.add("is-route-loading");
+    targetEl.setAttribute("aria-busy", "true");
+    const host = targetEl.querySelector(".contar") || targetEl;
+    if (!host.querySelector(".lf-nav-pending-spinner")) {
+      const spinner = document.createElement("span");
+      spinner.className = "lf-nav-pending-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      host.appendChild(spinner);
+    }
+  }
+
+  function start(page, { isBoot = false, triggerEl = null } = {}) {
+    if (hideTimer) {
+      window.clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    if (window.__lfBootProgressTimer) {
+      window.clearInterval(window.__lfBootProgressTimer);
+      window.__lfBootProgressTimer = null;
+    }
+
+    const startPct = isBoot && typeof window.__lfBootProgress === "number"
+      ? Math.max(14, Math.min(58, window.__lfBootProgress))
+      : 16;
+
+    const rail = document.getElementById("lfInstantRail");
+    rail?.classList.add("is-active");
+    markNavLoading(page, triggerEl);
+
+    paintProgress(startPct);
+    stopTrickle();
+    trickleTimer = window.setInterval(() => {
+      if (progress >= 92) return;
+      const cap = 92;
+      const step = Math.max(0.6, (cap - progress) * 0.08);
+      paintProgress(Math.min(cap, progress + step));
+    }, 180);
+  }
+
+  function setStage(minPct) {
+    if (typeof minPct === "number" && minPct > progress) {
+      paintProgress(minPct);
+    }
+  }
+
+  function updateNetworkStatus(session) {
+    if (!session || session !== activePageTransitionSession) return;
+    if (session.pendingFetches > 0) {
+      setStage(Math.max(progress, 74));
+    } else if (session.totalFetchesStarted > 0) {
+      setStage(Math.max(progress, 90));
+    }
+  }
+
+  function finish({ immediate = false } = {}) {
+    stopTrickle();
+    clearNavLoadingIndicators();
+    paintProgress(100);
+
+    const hideNow = () => {
+      document.getElementById("lfInstantRail")?.classList.remove("is-active");
+      hideTimer = null;
+    };
+
+    if (immediate) {
+      hideNow();
+    } else {
+      hideTimer = window.setTimeout(hideNow, 180);
+    }
+  }
+
+  function abort() {
+    stopTrickle();
+    clearNavLoadingIndicators();
+    document.getElementById("lfInstantRail")?.classList.remove("is-active");
+  }
+
+  return { start, setStage, updateNetworkStatus, finish, abort };
+})();
+
+function showRouteNavigationErrorToast(page, errorMessage, onRetry) {
+  const host = document.getElementById("lfRouteToastHost");
+  if (!host) return;
+
+  host.querySelectorAll(".lf-route-toast").forEach((node) => node.remove());
+  const label = getRouteDisplayTitle(page);
+  const toast = document.createElement("div");
+  toast.className = "lf-route-toast";
+  toast.setAttribute("role", "alert");
+
+  const safeMsg = String(errorMessage || "Unable to fetch page or API data.")
+    .replace(/[<>&"]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "\"": "&quot;" }[ch]));
+
+  toast.innerHTML = `
+    <span class="lf-route-toast__icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+    <div class="lf-route-toast__body">
+      <p class="lf-route-toast__title">Could not open ${label}</p>
+      <p class="lf-route-toast__msg">${safeMsg} Staying on your current page.</p>
+      <div class="lf-route-toast__actions">
+        <button type="button" class="lf-route-toast__btn lf-route-toast__btn--primary" data-toast-retry="1">Retry</button>
+        <button type="button" class="lf-route-toast__btn" data-toast-dismiss="1">Dismiss</button>
+      </div>
+    </div>
+    <button type="button" class="lf-route-toast__close" aria-label="Close" data-toast-dismiss="1">&times;</button>
+  `;
+
+  const closeToast = () => toast.remove();
+  toast.querySelectorAll("[data-toast-dismiss='1']").forEach((btn) => {
+    btn.addEventListener("click", closeToast);
+  });
+  toast.querySelector("[data-toast-retry='1']")?.addEventListener("click", () => {
+    closeToast();
+    if (typeof onRetry === "function") onRetry();
+  });
+
+  host.appendChild(toast);
+  window.setTimeout(() => {
+    if (toast.isConnected) toast.remove();
+  }, 8000);
+}
+
+function clearScreenSnapshot() {
+  try {
+    sessionStorage.removeItem(ADMIN_SNAPSHOT_STORAGE_KEY);
+  } catch (e) {}
+}
+
+function serializeLiveContentForSnapshot(liveContainer) {
+  if (!(liveContainer instanceof HTMLElement)) return "";
+  if (liveContainer.querySelector("[data-lf-snapshot='true'], [data-lf-boot-skeleton='true'], .lf-route-error")) {
+    return "";
+  }
+  const canvas = liveContainer.querySelector(".spa-page-canvas");
+  if (!canvas) return "";
+
+  const clone = liveContainer.cloneNode(true);
+  clone.querySelectorAll("script, [data-lf-transient='true'], .modal-backdrop, .app-toast").forEach((el) => el.remove());
+
+  // Close open Bootstrap/legacy modals inside clone so snapshot stays clean
+  clone.querySelectorAll(".modal.show").forEach((modal) => {
+    modal.classList.remove("show");
+    modal.style.display = "none";
+  });
+
+  // Sync live form values into HTML attributes
+  const origInputs = liveContainer.querySelectorAll("input, textarea, select");
+  const cloneInputs = clone.querySelectorAll("input, textarea, select");
+  origInputs.forEach((origEl, idx) => {
+    const targetEl = cloneInputs[idx];
+    if (!targetEl) return;
+    if (origEl instanceof HTMLInputElement) {
+      if (origEl.type === "checkbox" || origEl.type === "radio") {
+        if (origEl.checked) targetEl.setAttribute("checked", "checked");
+        else targetEl.removeAttribute("checked");
+      } else if (origEl.type !== "password" && origEl.type !== "file") {
+        targetEl.setAttribute("value", origEl.value);
+      }
+    } else if (origEl instanceof HTMLTextAreaElement) {
+      targetEl.textContent = origEl.value;
+    } else if (origEl instanceof HTMLSelectElement) {
+      const selectedValues = new Set(Array.from(origEl.selectedOptions).map((o) => o.value));
+      Array.from(targetEl.options).forEach((opt) => {
+        if (selectedValues.has(opt.value)) opt.setAttribute("selected", "selected");
+        else opt.removeAttribute("selected");
+      });
+    }
+  });
+
+  // Preserve rendered Chart.js / canvas visuals as lightweight images
+  const origCanvases = liveContainer.querySelectorAll("canvas");
+  const cloneCanvases = clone.querySelectorAll("canvas");
+  let canvasBytesUsed = 0;
+  origCanvases.forEach((origCanvas, idx) => {
+    const targetCanvas = cloneCanvases[idx];
+    if (!targetCanvas || !targetCanvas.parentNode) return;
+    if (origCanvas.width <= 0 || origCanvas.height <= 0 || canvasBytesUsed > 650000) return;
+    try {
+      const dataUrl = origCanvas.toDataURL("image/png");
+      if (!dataUrl || dataUrl.length > 320000) return;
+      canvasBytesUsed += dataUrl.length;
+      const img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "";
+      img.className = `${origCanvas.className ? origCanvas.className + " " : ""}lf-snapshot-canvas`;
+      const rect = origCanvas.getBoundingClientRect();
+      img.style.width = rect.width ? `${Math.round(rect.width)}px` : "100%";
+      img.style.height = rect.height ? `${Math.round(rect.height)}px` : "auto";
+      targetCanvas.parentNode.replaceChild(img, targetCanvas);
+    } catch (e) {}
+  });
+
+  const html = clone.innerHTML;
+  if (html.length > 1600000) {
+    // Retry without embedded canvas images if over budget
+    clone.querySelectorAll("img.lf-snapshot-canvas").forEach((img) => img.remove());
+    const compactHtml = clone.innerHTML;
+    return compactHtml.length <= 1600000 ? compactHtml : "";
+  }
+  return html;
+}
+
+function captureScreenSnapshot() {
+  try {
+    if (!currentActivePage || !committedPageState) return;
+    const liveContainer = getLiveContentBox();
+    const contentHtml = serializeLiveContentForSnapshot(liveContainer);
+    if (!contentHtml) return;
+
+    const payload = {
+      pathname: window.location.pathname,
+      search: window.location.search,
+      page: currentActivePage,
+      ts: Date.now(),
+      scrollY: Math.round(window.scrollY || window.pageYOffset || 0),
+      sidebarCollapsed: document.body.classList.contains("lf-sidebar-collapsed"),
+      shellMeta: {
+        logoSrc: document.getElementById("logo")?.getAttribute("src") || "",
+        avatarSrc: document.getElementById("userAvatarImg")?.getAttribute("src") || "",
+        brandName: document.querySelector(".name_text")?.textContent || "",
+        roleText: document.querySelector(".nt1")?.textContent || "",
+        userName: document.getElementById("userName")?.textContent || "",
+        userEmail: document.getElementById("userEmail")?.textContent || ""
+      },
+      contentHtml
+    };
+
+    sessionStorage.setItem(ADMIN_SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // Ignore storage quota / private browsing errors
+  }
+}
+
+let isSnapshotPersistenceInstalled = false;
+function installSnapshotPersistence() {
+  if (isSnapshotPersistenceInstalled) return;
+  isSnapshotPersistenceInstalled = true;
+  window.addEventListener("pagehide", captureScreenSnapshot);
+  window.addEventListener("beforeunload", captureScreenSnapshot);
+}
+
+function installPageFetchTracking() {
+  if (isPageFetchTrackingInstalled) return;
+  isPageFetchTrackingInstalled = true;
+
+  if (typeof window.fetch === "function") {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function trackedPageFetch(input, init) {
+      const session = activePageTransitionSession;
+      const reqUrl = typeof input === "string" ? input : (input && input.url ? input.url : "");
+      const isSilent = Boolean((init && init.__topLoaderSilent) || isSilentTransitionUrl(reqUrl));
+
+      if (!session || isSilent) {
+        return originalFetch(input, init);
+      }
+
+      session.pendingFetches += 1;
+      session.totalFetchesStarted += 1;
       session.lastActivityAt = performance.now();
-    });
-  };
+      RouteBufferHud.updateNetworkStatus(session);
+
+      return Promise.resolve(originalFetch(input, init)).finally(() => {
+        session.pendingFetches = Math.max(0, session.pendingFetches - 1);
+        session.lastActivityAt = performance.now();
+        RouteBufferHud.updateNetworkStatus(session);
+      });
+    };
+  }
+
+  if (typeof window.XMLHttpRequest === "function" && window.XMLHttpRequest.prototype) {
+    const origOpen = window.XMLHttpRequest.prototype.open;
+    const origSend = window.XMLHttpRequest.prototype.send;
+
+    window.XMLHttpRequest.prototype.open = function trackedXhrOpen(method, url) {
+      this.__lfRequestUrl = String(url || "");
+      return origOpen.apply(this, arguments);
+    };
+
+    window.XMLHttpRequest.prototype.send = function trackedXhrSend() {
+      const session = activePageTransitionSession;
+      const isSilent = Boolean(this.__lfTopLoaderSilent || isSilentTransitionUrl(this.__lfRequestUrl));
+
+      if (!session || isSilent) {
+        return origSend.apply(this, arguments);
+      }
+
+      session.pendingFetches += 1;
+      session.totalFetchesStarted += 1;
+      session.lastActivityAt = performance.now();
+      RouteBufferHud.updateNetworkStatus(session);
+
+      const topToken = window.AppTopLoader?.start(this.__lfRequestUrl || "xhr");
+      let settled = false;
+      const onFinish = () => {
+        if (settled) return;
+        settled = true;
+        session.pendingFetches = Math.max(0, session.pendingFetches - 1);
+        session.lastActivityAt = performance.now();
+        RouteBufferHud.updateNetworkStatus(session);
+        if (topToken) {
+          window.AppTopLoader?.done(topToken);
+        }
+      };
+
+      this.addEventListener("loadend", onFinish, { once: true });
+      return origSend.apply(this, arguments);
+    };
+  }
 }
 
 /**
  * Tracks global `window` & `document` listeners attached by dynamically loaded
- * subpage scripts so they can be cleanly removed when navigating to a new route,
- * preventing stale handler crashes and duplicate event firing across SPA routes.
+ * subpage scripts per page session, AND captures `DOMContentLoaded` listeners
+ * registered after initial document load so legacy subpages initialize properly.
  */
 function installSubpageListenerTracking() {
   if (isSubpageListenerTrackingInstalled) return;
@@ -288,21 +686,112 @@ function installSubpageListenerTracking() {
     const origRemove = target.removeEventListener.bind(target);
 
     target.addEventListener = function trackedAddEventListener(type, listener, options) {
-      if (isCapturingSubpageListeners && typeof listener === "function") {
-        activeSubpageGlobalListeners.push({ target, type, listener, options, origRemove });
+      const isFnOrObj = typeof listener === "function" || (listener && typeof listener.handleEvent === "function");
+      if (isCapturingSubpageListeners && isFnOrObj) {
+        if (target === document && type === "DOMContentLoaded" && document.readyState !== "loading") {
+          if (Array.isArray(activeDomReadyCaptureQueue)) {
+            activeDomReadyCaptureQueue.push(listener);
+          }
+          return;
+        }
+        if (Array.isArray(activeSubpageCaptureTarget)) {
+          activeSubpageCaptureTarget.push({ target, type, listener, options, origRemove });
+        }
       }
       return origAdd(type, listener, options);
     };
   });
 }
 
-function cleanupSubpageGlobalListeners() {
-  while (activeSubpageGlobalListeners.length > 0) {
-    const entry = activeSubpageGlobalListeners.pop();
-    try {
-      entry.origRemove(entry.type, entry.listener, entry.options);
-    } catch (e) {}
-  }
+function installSubpageTimerTracking() {
+  if (isSubpageTimerTrackingInstalled) return;
+  isSubpageTimerTrackingInstalled = true;
+
+  const origSetInterval = window.setInterval.bind(window);
+  const origClearInterval = window.clearInterval.bind(window);
+  const origSetTimeout = window.setTimeout.bind(window);
+  const origClearTimeout = window.clearTimeout.bind(window);
+  const trackedTimeoutTokens = new Map();
+
+  window.setInterval = function trackedSetInterval(fn, delay) {
+    const owner = currentTimerCaptureOwner;
+    if (!owner || typeof fn !== "function") {
+      return origSetInterval.apply(window, arguments);
+    }
+
+    const args = Array.prototype.slice.call(arguments, 2);
+    let intervalId = null;
+    const wrapped = () => {
+      if (owner.destroyed) {
+        if (intervalId !== null) origClearInterval(intervalId);
+        return;
+      }
+      // Pause committed page background intervals while a new page is staging off-screen
+      if (activePageTransitionSession && committedPageState === owner) {
+        return;
+      }
+      fn.apply(window, args);
+    };
+
+    intervalId = origSetInterval(wrapped, delay);
+    owner.intervals.add(intervalId);
+    return intervalId;
+  };
+
+  window.clearInterval = function trackedClearInterval(id) {
+    if (committedPageState?.intervals) committedPageState.intervals.delete(id);
+    if (activePageTransitionSession?.pageState?.intervals) activePageTransitionSession.pageState.intervals.delete(id);
+    return origClearInterval(id);
+  };
+
+  window.setTimeout = function trackedSetTimeout(fn, delay) {
+    const owner = currentTimerCaptureOwner;
+    const session = activePageTransitionSession;
+    const ms = Number(delay) || 0;
+
+    if (!owner || typeof fn !== "function") {
+      return origSetTimeout.apply(window, arguments);
+    }
+
+    const args = Array.prototype.slice.call(arguments, 2);
+    const shouldAwaitStartup = Boolean(session && session.pageState === owner && session.isBootstrappingTimers && ms <= 750);
+    if (shouldAwaitStartup) {
+      session.pendingStartupTimers += 1;
+    }
+
+    let timeoutId = null;
+    const wrapped = () => {
+      trackedTimeoutTokens.delete(timeoutId);
+      try {
+        if (!owner.destroyed) {
+          fn.apply(window, args);
+        }
+      } finally {
+        if (shouldAwaitStartup) {
+          session.pendingStartupTimers = Math.max(0, session.pendingStartupTimers - 1);
+          session.lastActivityAt = performance.now();
+        }
+      }
+    };
+
+    timeoutId = origSetTimeout(wrapped, delay);
+    owner.timeouts.add(timeoutId);
+    if (shouldAwaitStartup) {
+      trackedTimeoutTokens.set(timeoutId, session);
+    }
+    return timeoutId;
+  };
+
+  window.clearTimeout = function trackedClearTimeout(id) {
+    const session = trackedTimeoutTokens.get(id);
+    if (session) {
+      trackedTimeoutTokens.delete(id);
+      session.pendingStartupTimers = Math.max(0, session.pendingStartupTimers - 1);
+    }
+    if (committedPageState?.timeouts) committedPageState.timeouts.delete(id);
+    if (activePageTransitionSession?.pageState?.timeouts) activePageTransitionSession.pageState.timeouts.delete(id);
+    return origClearTimeout(id);
+  };
 }
 
 function getLiveContentBox() {
@@ -1125,7 +1614,47 @@ function extractSafeBodyClasses(rawHtml) {
     .filter((cls) => cls && !ignored.test(cls));
 }
 
-function mountNormalizedSubpage(stagingContainer, rawHtml, pageName) {
+function stashCollidingBodyModals(canvas, stashedModals) {
+  if (!(canvas instanceof HTMLElement) || !Array.isArray(stashedModals)) return;
+  const protectedIds = new Set([
+    "subscriptionModal",
+    "lfCommandModal",
+    "lfAppShell",
+    "app-top-loader",
+    "subscription-alert-portal",
+    "lfInstantRail",
+    "lfRouteBuffer",
+    "lfRouteToastHost"
+  ]);
+
+  canvas.querySelectorAll("[id]").forEach((incomingNode) => {
+    const id = incomingNode.id;
+    if (!id || protectedIds.has(id)) return;
+    const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id;
+    document.querySelectorAll(`body > [id="${escapedId}"]`).forEach((existingNode) => {
+      stashedModals.push({
+        node: existingNode,
+        parent: existingNode.parentNode,
+        nextSibling: existingNode.nextSibling
+      });
+      existingNode.remove();
+    });
+  });
+}
+
+function restoreStashedModals(stashedModals) {
+  if (!Array.isArray(stashedModals)) return;
+  while (stashedModals.length > 0) {
+    const entry = stashedModals.pop();
+    if (entry?.node && entry.parent && !entry.node.isConnected) {
+      try {
+        entry.parent.insertBefore(entry.node, entry.nextSibling || null);
+      } catch (e) {}
+    }
+  }
+}
+
+function mountNormalizedSubpage(stagingContainer, rawHtml, pageName, stashedModals = null) {
   const canvas = document.createElement("div");
   canvas.className = "spa-page-canvas";
   canvas.dataset.spaPage = pageName;
@@ -1137,22 +1666,9 @@ function mountNormalizedSubpage(stagingContainer, rawHtml, pageName) {
   canvas.innerHTML = rawHtml;
   scopeSubpageStyles(canvas, pageName);
 
-  // Remove any stale body-mounted modals from previous navigations that share an ID with incoming elements
-  canvas.querySelectorAll("[id]").forEach((incomingNode) => {
-    const id = incomingNode.id;
-    if (!id) return;
-    document.querySelectorAll(`body > [id="${CSS.escape(id)}"]`).forEach((staleNode) => {
-      if (
-        staleNode.id !== "subscriptionModal" &&
-        staleNode.id !== "lfCommandModal" &&
-        staleNode.id !== "lfAppShell" &&
-        staleNode.id !== "app-top-loader" &&
-        staleNode.id !== "subscription-alert-portal"
-      ) {
-        staleNode.remove();
-      }
-    });
-  });
+  if (Array.isArray(stashedModals)) {
+    stashCollidingBodyModals(canvas, stashedModals);
+  }
 
   stagingContainer.innerHTML = "";
   stagingContainer.appendChild(canvas);
@@ -1178,10 +1694,11 @@ function waitForAnimationFrame() {
 }
 
 async function waitForPageStability(container, session, options = {}) {
-  const quietWindowMs = options.quietWindowMs || 220;
-  const timeoutMs = options.timeoutMs || 12000;
+  const quietWindowMs = options.quietWindowMs || 280;
+  const timeoutMs = options.timeoutMs || 20000;
   const startedAt = performance.now();
   let lastMutationAt = performance.now();
+  let slowHintShown = false;
 
   const observer = new MutationObserver(() => {
     lastMutationAt = performance.now();
@@ -1201,14 +1718,27 @@ async function waitForPageStability(container, session, options = {}) {
 
   try {
     while (performance.now() - startedAt < timeoutMs) {
+      if (session && activePageTransitionSession && activePageTransitionSession.id !== session.id) {
+        return false;
+      }
+
       await waitForAnimationFrame();
       await waitForAnimationFrame();
 
       const now = performance.now();
-      const noPendingFetches = !session || session.pendingFetches === 0;
+      const pendingNetwork = session ? session.pendingFetches : 0;
+      const pendingTimers = session ? session.pendingStartupTimers : 0;
       const domQuiet = now - lastMutationAt >= quietWindowMs;
 
-      if (noPendingFetches && domQuiet) {
+      if (!slowHintShown && now - startedAt > 2600 && pendingNetwork > 0) {
+        slowHintShown = true;
+        RouteBufferHud.setStage(
+          84,
+          `Still syncing API data (${pendingNetwork} pending)...`
+        );
+      }
+
+      if (pendingNetwork === 0 && pendingTimers === 0 && domQuiet) {
         await waitForAnimationFrame();
         return true;
       }
@@ -2869,6 +3399,7 @@ async function logout() {
     console.warn("Logout request failed, proceeding with client-side cleanup:", error);
   } finally {
     const savedThemeEntries = [];
+    clearScreenSnapshot();
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -3099,6 +3630,7 @@ async function verifyAccessToken() {
 
     if (!response.ok) {
       console.error("Authentication failed");
+      clearScreenSnapshot();
       localStorage.clear();
       sessionStorage.clear();
       return false;
@@ -3538,7 +4070,7 @@ function pageUsesEditor(container) {
   return Boolean(container?.querySelector("#editor"));
 }
 
-function updateBreadcrumbAndTitle(page) {
+function updatePageTitle(page) {
   const meta = ROUTE_META_MAP[page];
   const navMatch = document.querySelector(`.nav-item[data-page="${page}"]`);
   const fallbackTitle =
@@ -3547,13 +4079,6 @@ function updateBreadcrumbAndTitle(page) {
     page.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   const title = meta?.title || fallbackTitle;
-  const section = meta?.section || "Workspace";
-
-  const sectionNode = document.getElementById("lfBreadcrumbSection");
-  const currentNode = document.getElementById("lfBreadcrumbCurrent");
-  if (sectionNode) sectionNode.textContent = section;
-  if (currentNode) currentNode.textContent = title;
-
   document.title = `${title} — LabFlow Admin`;
 }
 
@@ -3594,60 +4119,116 @@ function highlightActiveMenuItem(page) {
     }
   });
 
-  updateBreadcrumbAndTitle(page);
+  updatePageTitle(page);
 }
 
-function clearOldPage() {
-  const container =
-    document.querySelector(".content-box[data-staging-content-box='true']") ||
-    getLiveContentBox();
+function createPageStateRecord(page) {
+  return {
+    page,
+    destroyed: false,
+    scripts: [],
+    globalListeners: [],
+    intervals: new Set(),
+    timeouts: new Set(),
+    cleanupFn: null
+  };
+}
 
-  cleanupSubpageGlobalListeners();
+function teardownPageState(pageState, { clearLiveDom = false } = {}) {
+  if (!pageState || pageState.destroyed) {
+    if (clearLiveDom) {
+      const liveBox = getLiveContentBox();
+      if (liveBox) liveBox.innerHTML = "";
+    }
+    return;
+  }
 
-  // Call subpage cleanup if registered
-  if (typeof window.cleanupCurrentPage === "function") {
+  pageState.destroyed = true;
+
+  pageState.intervals.forEach((id) => {
+    try { window.clearInterval(id); } catch (e) {}
+  });
+  pageState.intervals.clear();
+
+  pageState.timeouts.forEach((id) => {
+    try { window.clearTimeout(id); } catch (e) {}
+  });
+  pageState.timeouts.clear();
+
+  while (pageState.globalListeners.length > 0) {
+    const entry = pageState.globalListeners.pop();
+    try {
+      entry.origRemove(entry.type, entry.listener, entry.options);
+    } catch (e) {}
+  }
+
+  if (typeof pageState.cleanupFn === "function") {
+    try {
+      pageState.cleanupFn();
+    } catch (error) {
+      console.warn("cleanupCurrentPage failed:", error);
+    }
+    pageState.cleanupFn = null;
+  }
+
+  if (committedPageState === pageState && typeof window.cleanupCurrentPage === "function") {
     try {
       window.cleanupCurrentPage();
     } catch (error) {
-      console.warn("cleanupCurrentPage failed:", error);
+      console.warn("window.cleanupCurrentPage failed:", error);
     }
     window.cleanupCurrentPage = null;
   }
 
-  // Remove any stale or orphaned teleported modals attached to document.body
-  document.querySelectorAll([
-    "body > #machineModal",
-    "body > #detailModal",
-    "body > #simulatorModal",
-    "body > .mc-modal-overlay",
-    "body > #sampleTypeModal",
-    "body > #invoiceCustomizerModal",
-    "body > #excelExportModal",
-    "body > .modal-backdrop"
-  ].join(", ")).forEach((el) => el.remove());
+  // Remove orphaned body-mounted overlays/modals from the outgoing page
+  if (committedPageState === pageState) {
+    document.querySelectorAll([
+      "body > #machineModal",
+      "body > #detailModal",
+      "body > #simulatorModal",
+      "body > .mc-modal-overlay",
+      "body > #sampleTypeModal",
+      "body > #invoiceCustomizerModal",
+      "body > #excelExportModal",
+      "body > #allcases-dropdown-popover",
+      "body > #popupModal",
+      "body > #toastStack",
+      "body > .modal-backdrop"
+    ].join(", ")).forEach((el) => el.remove());
 
-  if (window.editor && typeof window.editor.destroy === "function") {
-    window.editor.destroy().catch((error) => console.warn("Editor cleanup failed:", error));
-    window.editor = null;
+    if (window.editor && typeof window.editor.destroy === "function") {
+      window.editor.destroy().catch((error) => console.warn("Editor cleanup failed:", error));
+      window.editor = null;
+    }
+
+    document.body.classList.remove("modal-open");
+    if (document.getElementById("subscriptionModal")?.style.display !== "flex") {
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+    }
   }
 
-  document.querySelectorAll(DYNAMIC_PAGE_SCRIPT_SELECTOR).forEach((script) => {
-    if (script.dataset.preserve !== "true") {
-      script.remove();
+  pageState.scripts.forEach((script) => {
+    if (script && script.dataset?.preserve !== "true") {
+      try { script.remove(); } catch (e) {}
     }
   });
+  pageState.scripts = [];
 
-  // Clean up any leftover Bootstrap modal backdrop from a previous page
-  document.querySelectorAll("body > .modal-backdrop").forEach((backdrop) => backdrop.remove());
-  document.body.classList.remove("modal-open");
-  if (document.getElementById("subscriptionModal")?.style.display !== "flex") {
-    document.body.style.overflow = "";
-    document.body.style.paddingRight = "";
+  if (clearLiveDom) {
+    const liveBox = getLiveContentBox();
+    if (liveBox) liveBox.innerHTML = "";
   }
+}
 
-  if (container) {
-    container.innerHTML = "";
+function clearOldPage() {
+  if (committedPageState) {
+    teardownPageState(committedPageState, { clearLiveDom: true });
+    committedPageState = null;
+    return;
   }
+  const liveBox = getLiveContentBox();
+  if (liveBox) liveBox.innerHTML = "";
 }
 
 function renderRouteError(liveContainer, page, errorMessage) {
@@ -3666,8 +4247,100 @@ function renderRouteError(liveContainer, page, errorMessage) {
     </div>
   `;
 
-  liveContainer.querySelector("#lfRetryRouteBtn")?.addEventListener("click", () => loadPage(page));
-  liveContainer.querySelector("#lfHomeRouteBtn")?.addEventListener("click", () => loadPage("dashboard"));
+  liveContainer.querySelector("#lfRetryRouteBtn")?.addEventListener("click", () => loadPage(page, undefined, undefined, undefined, undefined, { forceReload: true }));
+  liveContainer.querySelector("#lfHomeRouteBtn")?.addEventListener("click", () => loadPage("dashboard", undefined, undefined, undefined, undefined, { forceReload: true }));
+}
+
+function extractTopLevelFunctionNames(codeText) {
+  const names = [];
+  const seen = new Set();
+  const re = /^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm;
+  let match;
+  while ((match = re.exec(codeText)) !== null) {
+    if (match[1] && !seen.has(match[1])) {
+      seen.add(match[1]);
+      names.push(match[1]);
+    }
+  }
+  return names;
+}
+
+async function runIsolatedSubpageScript(url, baseKey, pageState) {
+  const response = await fetch(url, { __topLoaderSilent: true });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch script: ${url} (${response.status})`);
+  }
+  const sourceText = await response.text();
+  const fnNames = extractTopLevelFunctionNames(sourceText);
+  const exportsBlock = fnNames
+    .map((fn) => `try { if (typeof ${fn} === "function") window["${fn}"] = ${fn}; } catch (_) {}`)
+    .join("\n");
+
+  const inlineScript = document.createElement("script");
+  inlineScript.type = "text/javascript";
+  inlineScript.dataset.dynamicPageScript = "true";
+  inlineScript.dataset.scriptUrl = url;
+  inlineScript.textContent =
+    `(function () {\n` +
+    `${sourceText}\n` +
+    `${exportsBlock}\n` +
+    `})();\n//# sourceURL=${baseKey}`;
+
+  document.body.appendChild(inlineScript);
+  if (pageState?.scripts) {
+    pageState.scripts.push(inlineScript);
+  }
+  return inlineScript;
+}
+
+async function loadSubpageScriptForTransition(url, baseKey, pageState) {
+  if (reExecIsolatedScripts.has(baseKey)) {
+    return runIsolatedSubpageScript(url, baseKey, pageState);
+  }
+
+  let syntaxCollisionDetected = false;
+  const errorListener = (event) => {
+    const msg = String(event?.message || event?.error?.message || "");
+    if (/already been declared/i.test(msg)) {
+      syntaxCollisionDetected = true;
+      event.preventDefault?.();
+    }
+  };
+
+  window.addEventListener("error", errorListener);
+  try {
+    const scriptEl = await loadScript(url, pageState);
+    if (syntaxCollisionDetected) {
+      reExecIsolatedScripts.add(baseKey);
+      scriptEl?.remove?.();
+      return runIsolatedSubpageScript(url, baseKey, pageState);
+    }
+    return scriptEl;
+  } finally {
+    window.removeEventListener("error", errorListener);
+  }
+}
+
+async function flushCapturedDomReadyCallbacks(queue) {
+  if (!Array.isArray(queue) || queue.length === 0) return;
+  for (const listener of queue) {
+    try {
+      const evt = new Event("DOMContentLoaded");
+      if (typeof listener === "function") {
+        const result = listener.call(document, evt);
+        if (result && typeof result.then === "function") {
+          await result;
+        }
+      } else if (listener && typeof listener.handleEvent === "function") {
+        const result = listener.handleEvent(evt);
+        if (result && typeof result.then === "function") {
+          await result;
+        }
+      }
+    } catch (err) {
+      console.error("Subpage DOMContentLoaded handler error:", err);
+    }
+  }
 }
 
 async function loadPage(page, Name, _id, customBaseUrl, name, options = {}) {
@@ -3676,58 +4349,212 @@ async function loadPage(page, Name, _id, customBaseUrl, name, options = {}) {
   closeAllPopovers();
   closeMobileSidebar();
 
+  const currentSearch = new URLSearchParams(window.location.search);
+  const nextParams = new URLSearchParams();
+  nextParams.set("page", page);
+
+  if (options.queryParams && typeof options.queryParams === "object") {
+    const entries = options.queryParams instanceof URLSearchParams
+      ? Array.from(options.queryParams.entries())
+      : Object.entries(options.queryParams);
+    entries.forEach(([key, val]) => {
+      if (key !== "page" && val !== undefined && val !== null && val !== "") {
+        nextParams.set(key, String(val));
+      }
+    });
+  } else if (options.preserveUrlParams) {
+    currentSearch.forEach((val, key) => {
+      if (key !== "page") nextParams.set(key, val);
+    });
+  } else {
+    if (Name !== undefined && Name !== null && Name !== "") nextParams.set("Name", Name);
+    if (_id !== undefined && _id !== null && _id !== "") nextParams.set("_id", _id);
+    if (name !== undefined && name !== null && name !== "") nextParams.set("name", name);
+    if (currentSearch.has("debug")) nextParams.set("debug", currentSearch.get("debug"));
+  }
+
+  const nextQuery = `?${nextParams.toString()}`;
+
+  // Deduplicate rapid double-clicks targeting the exact same route already buffering
+  if (
+    activePageTransitionSession &&
+    activePageTransitionSession.targetQueryKey === nextQuery &&
+    !options.forceReload
+  ) {
+    return;
+  }
+
+  const liveContainer = getLiveContentBox();
+  const hasLiveContent = Boolean(
+    committedPageState &&
+    liveContainer &&
+    liveContainer.querySelector(".spa-page-canvas") &&
+    !liveContainer.querySelector("[data-lf-snapshot='true'], [data-lf-boot-skeleton='true']")
+  );
+
   const transitionId = ++pageTransitionSequence;
+  const pendingPageState = createPageStateRecord(page);
   const transitionSession = {
     id: transitionId,
+    page,
+    targetQueryKey: nextQuery,
     pendingFetches: 0,
-    lastActivityAt: performance.now()
+    totalFetchesStarted: 0,
+    pendingStartupTimers: 0,
+    isBootstrappingTimers: false,
+    lastActivityAt: performance.now(),
+    pageState: pendingPageState,
+    stashedModals: []
   };
   activePageTransitionSession = transitionSession;
-  const routeToken = window.AppTopLoader?.start(`route:${page}`);
-  let stagingContainer = null;
+
+  RouteBufferHud.start(page, {
+    isBoot: Boolean(options.isInitialHydration),
+    triggerEl: options.triggerEl || null
+  });
 
   fetchNotifications();
 
-  const liveContainer =
-    document.querySelector(".content-box:not([data-staging-content-box='true'])") ||
-    document.querySelector(".content-box");
+  const prevHref = window.location.href;
+  const prevState = window.history.state;
+  const prevWindowCleanup = window.cleanupCurrentPage;
+  let urlTemporarilyReplaced = false;
+  let stagingContainer = null;
 
   try {
     if (!liveContainer) {
       throw new Error("Live content container not found.");
     }
 
-    stagingContainer = createHiddenPageBuildContainer(liveContainer);
-    if (!stagingContainer) {
-      throw new Error("Unable to create hidden build container.");
+    RouteBufferHud.setStage(26, "Fetching page template...");
+    const cacheBust = Date.now();
+    let response = null;
+    if (options.preFetchedHtmlPromise) {
+      response = await options.preFetchedHtmlPromise;
+    }
+    if (!response) {
+      response = await fetch(`pages/pages/${page}.html?t=${cacheBust}`, {
+        __topLoaderSilent: true
+      });
     }
 
-    const cacheBust = Date.now();
-    const response = await fetch(`pages/pages/${page}.html?t=${cacheBust}`, {
-      __topLoaderSilent: true
-    });
+    if (activePageTransitionSession?.id !== transitionId) {
+      return;
+    }
+
+    if (response.status === 401) {
+      clearScreenSnapshot();
+      window.location.href = `${BASE_URL}/franchiseelogin.html?sessionExpired=1&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      return;
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to load page "${page}" (HTTP ${response.status}).`);
     }
 
     const html = await response.text();
-    clearOldPage();
-
-    // Update URL & History BEFORE running the page script (many subpages read URLSearchParams on init!)
-    const currentSearch = new URLSearchParams(window.location.search);
-    const nextParams = new URLSearchParams();
-    nextParams.set("page", page);
-
-    if (options.preserveUrlParams) {
-      currentSearch.forEach((val, key) => {
-        if (key !== "page") nextParams.set(key, val);
-      });
-    } else {
-      if (Name !== undefined && Name !== null && Name !== "") nextParams.set("Name", Name);
-      if (_id !== undefined && _id !== null && _id !== "") nextParams.set("_id", _id);
-      if (name !== undefined && name !== null && name !== "") nextParams.set("name", name);
-      if (currentSearch.has("debug")) nextParams.set("debug", currentSearch.get("debug"));
+    if (activePageTransitionSession?.id !== transitionId) {
+      return;
     }
+
+    RouteBufferHud.setStage(44, "Staging layout & styles...");
+    stagingContainer = createHiddenPageBuildContainer(liveContainer);
+    if (!stagingContainer) {
+      throw new Error("Unable to create hidden build container.");
+    }
+
+    // Temporarily align URL query params so subpage scripts reading URLSearchParams see target params
+    if (!options.fromPopstate && window.location.search !== nextQuery) {
+      window.history.replaceState(prevState, "", nextQuery);
+      urlTemporarilyReplaced = true;
+    }
+
+    mountNormalizedSubpage(stagingContainer, html, page, transitionSession.stashedModals);
+
+    if (pageUsesEditor(stagingContainer)) {
+      RouteBufferHud.setStage(52, "Loading rich editor...");
+      await loadScript("./editor.js");
+      if (activePageTransitionSession?.id !== transitionId) {
+        return;
+      }
+    }
+
+    RouteBufferHud.setStage(58, "Initializing page logic...");
+    window.cleanupCurrentPage = null;
+    window.subpageReady = null;
+    isCapturingSubpageListeners = true;
+    activeSubpageCaptureTarget = pendingPageState.globalListeners;
+    activeDomReadyCaptureQueue = [];
+    currentTimerCaptureOwner = pendingPageState;
+    transitionSession.isBootstrappingTimers = true;
+
+    const scriptBaseKey = `pages/pages/${page}.js`;
+    try {
+      await loadSubpageScriptForTransition(`${scriptBaseKey}?t=${cacheBust}`, scriptBaseKey, pendingPageState)
+        .catch((scriptErr) => {
+          console.warn(`Optional/companion script notice for "${page}":`, scriptErr.message);
+        });
+
+      if (activePageTransitionSession?.id === transitionId) {
+        await flushCapturedDomReadyCallbacks(activeDomReadyCaptureQueue);
+      }
+    } finally {
+      isCapturingSubpageListeners = false;
+      activeSubpageCaptureTarget = null;
+      activeDomReadyCaptureQueue = null;
+      transitionSession.isBootstrappingTimers = false;
+      pendingPageState.cleanupFn = window.cleanupCurrentPage;
+      window.cleanupCurrentPage = prevWindowCleanup;
+    }
+
+    if (activePageTransitionSession?.id !== transitionId) {
+      return;
+    }
+
+    RouteBufferHud.setStage(70, "Waiting for live API data...");
+
+    // Subpages with an asynchronous first render can expose a readiness promise.
+    if (window.subpageReady && typeof window.subpageReady.then === "function") {
+      try {
+        await window.subpageReady;
+      } finally {
+        window.subpageReady = null;
+      }
+    } else {
+      window.subpageReady = null;
+    }
+
+    if (activePageTransitionSession?.id !== transitionId) {
+      return;
+    }
+
+    if (user && user.role === "staff") {
+      checkAndHidePrintSettingButton(user);
+    }
+
+    await waitForPageStability(stagingContainer, transitionSession);
+    currentTimerCaptureOwner = null;
+
+    if (activePageTransitionSession?.id !== transitionId) {
+      return;
+    }
+
+    RouteBufferHud.setStage(97, "Rendering verified view...");
+
+    // ATOMIC COMMIT: Teardown old live page ONLY now that new page + APIs are 100% ready
+    const outgoingPageState = committedPageState;
+    committedPageState = null;
+    if (outgoingPageState) {
+      teardownPageState(outgoingPageState, { clearLiveDom: false });
+    }
+    transitionSession.stashedModals.length = 0;
+
+    swapBuiltPageIntoLiveContainer(stagingContainer, liveContainer);
+    committedPageState = pendingPageState;
+    window.cleanupCurrentPage = pendingPageState.cleanupFn || null;
+    currentActivePage = page;
+    currentActiveQueryKey = nextQuery;
+    window.__lfHasBootSnapshot = false;
 
     const statePayload = {
       page,
@@ -3737,80 +4564,83 @@ async function loadPage(page, Name, _id, customBaseUrl, name, options = {}) {
     };
 
     if (!options.fromPopstate) {
-      const nextQuery = `?${nextParams.toString()}`;
-      if (window.location.search !== nextQuery) {
+      if (urlTemporarilyReplaced) {
+        window.history.replaceState(prevState, "", prevHref);
         window.history.pushState(statePayload, "", nextQuery);
       } else {
         window.history.replaceState(statePayload, "", nextQuery);
       }
     }
 
-    // Mount subpage inside `.spa-page-canvas` and isolate any leaked global CSS rules
-    mountNormalizedSubpage(stagingContainer, html, page);
-
-    if (pageUsesEditor(stagingContainer)) {
-      await loadScript("./editor.js");
-    }
-
-    isCapturingSubpageListeners = true;
-    await loadScript(`pages/pages/${page}.js?t=${cacheBust}`)
-      .catch((scriptErr) => {
-        // Allow static HTML-only subpages to still render even if they have no companion .js
-        console.warn(`Optional/companion script notice for "${page}":`, scriptErr.message);
-      })
-      .finally(() => {
-        isCapturingSubpageListeners = false;
-      });
-
-    // Subpages with an asynchronous first render can expose a readiness promise.
-    // Wait for it before swapping the hidden build into view so users never see
-    // an empty table/form flash and the router's loader does not finish early.
-    if (window.subpageReady && typeof window.subpageReady.then === "function") {
-      await window.subpageReady;
-    }
-    window.subpageReady = null;
-
-    if (user && user.role === "staff") {
-      checkAndHidePrintSettingButton(user);
-    }
-
-    await waitForPageStability(stagingContainer, transitionSession);
-
-    if (activePageTransitionSession?.id !== transitionId) {
-      return;
-    }
-
-    swapBuiltPageIntoLiveContainer(stagingContainer, liveContainer);
     if (getCurrentTheme() === "dark") {
       adaptSubpageInlineStylesForTheme(liveContainer, true);
       syncChartsForTheme(true);
     }
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    const restoreY = options.isInitialHydration && typeof options.restoreScrollY === "number"
+      ? options.restoreScrollY
+      : 0;
+    window.scrollTo({ top: restoreY, left: 0, behavior: "auto" });
 
     ensureSubscriptionBannerShell();
     renderSubscriptionBanner(getPortalSubscriptionState(user));
     positionSubscriptionBanner();
 
     highlightActiveMenuItem(page);
+    RouteBufferHud.finish();
+
+    // Capture fresh snapshot once layout & charts settle for instant next reload
+    window.requestAnimationFrame(() => {
+      window.setTimeout(captureScreenSnapshot, 120);
+    });
   } catch (error) {
     console.error(error);
+    if (currentTimerCaptureOwner === pendingPageState) {
+      currentTimerCaptureOwner = null;
+    }
+    window.cleanupCurrentPage = prevWindowCleanup;
+
+    if (urlTemporarilyReplaced) {
+      try {
+        window.history.replaceState(prevState, "", prevHref);
+      } catch (e) {}
+    }
+
+    restoreStashedModals(transitionSession.stashedModals);
+    teardownPageState(pendingPageState, { clearLiveDom: false });
+
     if (activePageTransitionSession?.id === transitionId) {
-      renderRouteError(liveContainer, page, error?.message);
+      RouteBufferHud.abort();
+      if (hasLiveContent) {
+        // Keep current page completely intact on screen and notify user cleanly
+        showRouteNavigationErrorToast(page, error?.message, () =>
+          loadPage(page, Name, _id, customBaseUrl, name, options)
+        );
+      } else {
+        renderRouteError(liveContainer, page, error?.message);
+      }
     }
   } finally {
+    if (currentTimerCaptureOwner === pendingPageState) {
+      currentTimerCaptureOwner = null;
+    }
     destroyHiddenPageBuildContainer(stagingContainer);
     if (activePageTransitionSession?.id === transitionId) {
       activePageTransitionSession = null;
-    }
-    if (routeToken) {
-      window.AppTopLoader?.done(routeToken);
+    } else if (!committedPageState || committedPageState !== pendingPageState) {
+      // Clean up any superseded transition's pending artifacts without harming committedPageState
+      restoreStashedModals(transitionSession.stashedModals);
+      teardownPageState(pendingPageState, { clearLiveDom: false });
+      if (urlTemporarilyReplaced && (!activePageTransitionSession || activePageTransitionSession.id < transitionId)) {
+        try { window.history.replaceState(prevState, "", prevHref); } catch (e) {}
+      }
     }
   }
 }
 
 window.loadPage = loadPage;
 
-function loadScript(url) {
+function loadScript(url, ownerPageState = null) {
   if (url === "./editor.js") {
     if (typeof window.editorInit === "function") {
       return Promise.resolve(null);
@@ -3843,6 +4673,8 @@ function loadScript(url) {
     script.onload = () => {
       if (url === "./editor.js") {
         window.__editorPageScriptPromise = Promise.resolve(script);
+      } else if (ownerPageState?.scripts) {
+        ownerPageState.scripts.push(script);
       }
       resolve(script);
     };
@@ -3867,14 +4699,55 @@ window.loadScript = loadScript;
 
 function attachMenuEventListeners() {
   document.querySelectorAll(".nav-item").forEach((item) => {
+    if (item.dataset.lfNavBound === "true") return;
+    item.dataset.lfNavBound = "true";
     item.addEventListener("click", (e) => {
       e.preventDefault();
       const page = item.getAttribute("data-page");
       if (page) {
-        loadPage(page);
+        loadPage(page, undefined, undefined, undefined, undefined, { triggerEl: item });
       }
     });
   });
+
+  const liveContainer = getLiveContentBox();
+  if (liveContainer && liveContainer.dataset.lfDelegatedLinks !== "true") {
+    liveContainer.dataset.lfDelegatedLinks = "true";
+    liveContainer.addEventListener("click", (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+        return;
+      }
+      const dataPageTrigger = e.target.closest("[data-page]");
+      if (dataPageTrigger && liveContainer.contains(dataPageTrigger)) {
+        e.preventDefault();
+        const nextPage = dataPageTrigger.getAttribute("data-page");
+        if (nextPage) {
+          loadPage(
+            nextPage,
+            dataPageTrigger.getAttribute("data-test-name"),
+            dataPageTrigger.getAttribute("data-id"),
+            null,
+            dataPageTrigger.getAttribute("data-panel-name")
+          );
+        }
+        return;
+      }
+
+      const anchor = e.target.closest("a[href]");
+      if (anchor && liveContainer.contains(anchor) && anchor.target !== "_blank" && !anchor.hasAttribute("download")) {
+        try {
+          const parsed = new URL(anchor.href, window.location.origin);
+          if (parsed.origin === window.location.origin && parsed.pathname === window.location.pathname) {
+            const targetPage = parsed.searchParams.get("page");
+            if (targetPage) {
+              e.preventDefault();
+              loadPage(targetPage, null, null, null, null, { queryParams: parsed.searchParams });
+            }
+          }
+        } catch (err) {}
+      }
+    });
+  }
 }
 
 // Debug function to help troubleshoot admin layers
@@ -3951,6 +4824,8 @@ function debugAdminLayer() {
 document.addEventListener("DOMContentLoaded", async function () {
   installPageFetchTracking();
   installSubpageListenerTracking();
+  installSubpageTimerTracking();
+  installSnapshotPersistence();
   initThemeControls();
   installThemeDomObserver();
   initPopovers();
@@ -3970,8 +4845,34 @@ document.addEventListener("DOMContentLoaded", async function () {
     positionSubscriptionBanner();
   });
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentPage = urlParams.get("page") || "dashboard";
+
+  // Read saved scrollY if refreshing the same route
+  let bootRestoreScrollY = 0;
+  try {
+    const rawSnap = sessionStorage.getItem(ADMIN_SNAPSHOT_STORAGE_KEY);
+    if (rawSnap) {
+      const parsedSnap = JSON.parse(rawSnap);
+      if (parsedSnap && parsedSnap.search === window.location.search) {
+        bootRestoreScrollY = Number(parsedSnap.scrollY) || 0;
+      }
+    }
+  } catch (e) {}
+
+  // Kick off HTML fetch in parallel with session/token verification to minimize refresh latency
+  const preFetchedHtmlPromise = fetch(`pages/pages/${currentPage}.html?t=${Date.now()}`, {
+    __topLoaderSilent: true
+  }).catch(() => null);
+
   // Verify token and initialize user data & permissions
-  await verifyAccessToken();
+  const isAuthorized = await verifyAccessToken();
+  if (!isAuthorized) {
+    RouteBufferHud.abort();
+    clearScreenSnapshot();
+    window.location.href = `${BASE_URL}/franchiseelogin.html?sessionExpired=1&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    return;
+  }
 
   if (subscriptionStatusInterval) {
     clearInterval(subscriptionStatusInterval);
@@ -4040,16 +4941,19 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   attachMenuEventListeners();
 
-  // Load initial page from URL (preserving any existing deep-link params like _id / Name)
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentPage = urlParams.get("page") || "dashboard";
+  // Load initial page from URL (preserving any existing deep-link params like _id / Name / value1)
   loadPage(
     currentPage,
     urlParams.get("Name") || undefined,
     urlParams.get("_id") || undefined,
     BASE_URL,
     urlParams.get("name") || undefined,
-    { preserveUrlParams: true }
+    {
+      preserveUrlParams: true,
+      isInitialHydration: true,
+      preFetchedHtmlPromise,
+      restoreScrollY: bootRestoreScrollY
+    }
   );
 
   // Handle browser back/forward navigation cleanly without duplicating history entries
@@ -4062,7 +4966,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       event.state?._id || params.get("_id") || undefined,
       BASE_URL,
       event.state?.name || params.get("name") || undefined,
-      { fromPopstate: true, preserveUrlParams: true }
+      { fromPopstate: true, preserveUrlParams: true, forceReload: true }
     );
   });
 

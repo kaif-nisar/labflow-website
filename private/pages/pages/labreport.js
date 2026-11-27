@@ -3164,6 +3164,71 @@ async function loadfunction() {
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
+    const CATEGORY_HEX_ID_RE = /^[a-f0-9]{24}$/i;
+
+    function extractCategoryLabel(rawCategory, depth = 0) {
+        if (!rawCategory || depth > 3) return "";
+        if (Array.isArray(rawCategory)) {
+            return rawCategory.length > 0 ? extractCategoryLabel(rawCategory[0], depth + 1) : "";
+        }
+        if (typeof rawCategory === "string") {
+            const trimmed = rawCategory.trim();
+            return CATEGORY_HEX_ID_RE.test(trimmed) ? "" : trimmed;
+        }
+        if (typeof rawCategory === "object") {
+            const candidates = [
+                rawCategory.category,
+                rawCategory.name,
+                rawCategory.Name,
+                rawCategory.categoryName,
+                rawCategory.label,
+                rawCategory.title,
+            ];
+            for (const candidate of candidates) {
+                if (candidate == null) continue;
+                const label = typeof candidate === "object"
+                    ? extractCategoryLabel(candidate, depth + 1)
+                    : String(candidate).trim();
+                if (label && !CATEGORY_HEX_ID_RE.test(label)) {
+                    return label;
+                }
+            }
+        }
+        return "";
+    }
+
+    function normalizeCategoryKey(rawName) {
+        return String(rawName || "").trim().toLowerCase();
+    }
+
+    function normalizeCategoryMeta(rawCategory, fallbackName = "General") {
+        const sourceObj = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
+        const name = extractCategoryLabel(rawCategory) || String(fallbackName || "General").trim() || "General";
+        const orderId = resolveNumericOrder(
+            sourceObj && typeof sourceObj === "object" ? (sourceObj.orderId ?? sourceObj.order) : undefined,
+            9999
+        );
+        return {
+            ...(sourceObj && typeof sourceObj === "object" && !Array.isArray(rawCategory) ? sourceObj : {}),
+            category: name,
+            orderId,
+        };
+    }
+
+    function resolvePanelCategoryMeta(panel) {
+        const directLabel = extractCategoryLabel(panel?.category);
+        if (directLabel) {
+            return normalizeCategoryMeta(panel.category, directLabel);
+        }
+        const childWithCategory = Array.isArray(panel?.testsId)
+            ? panel.testsId.find((child) => extractCategoryLabel(child?.category))
+            : null;
+        if (childWithCategory) {
+            return normalizeCategoryMeta(childWithCategory.category, "General");
+        }
+        return normalizeCategoryMeta(panel?.category, "General");
+    }
+
     /**
      * Build the Page Break cell with a non-intrusive drag handle beside the checkbox.
      * Placing the handle inside column 0 ensures `.test-name` (column 1) stays 100% pure
@@ -3179,14 +3244,15 @@ async function loadfunction() {
     async function createTable(title, category, data, isPanel = false, hideCategory = false, panelDetails = null) {
         const section = document.createElement("div");
         section.classList.add("section");
+        const resolvedCategory = normalizeCategoryMeta(category);
 
 
 
         // Table heading (only if not hidden)
         if (!hideCategory) {
             const categoryHeading = document.createElement("h2");
-            categoryHeading.textContent = category.category;
-            categoryHeading.setAttribute('data-order', category.orderId);
+            categoryHeading.textContent = resolvedCategory.category;
+            categoryHeading.setAttribute('data-order', resolvedCategory.orderId);
             section.appendChild(categoryHeading);
 
             const headingBar = document.createElement("div");
@@ -3211,7 +3277,8 @@ async function loadfunction() {
             headingBar.appendChild(secOnlyBtn);
             section.appendChild(headingBar);
 
-            section.dataset.catName = String(category?.category || "");
+            section.dataset.catName = resolvedCategory.category;
+            section.dataset.catKey = normalizeCategoryKey(resolvedCategory.category);
             section.dataset.panelTitle = String(title || "");
             section.dataset.isPanel = isPanel ? "1" : "0";
             if (isPanel && panelDetails?._id) {
@@ -3997,15 +4064,24 @@ async function loadfunction() {
         // Create a map to group sections by category
         const categoryMap = new Map();
 
-        // ðŸŸ¢ Step 1: Group sections by category
+        // Step 1: Group sections by category
         for (const section of sections) {
             const categoryHeading = section.querySelector("h2");
             if (categoryHeading) {
-                const category = categoryHeading.textContent;
-                const dataOrder = categoryHeading.getAttribute("data-order");
+                const displayCategory = String(categoryHeading.textContent || section.dataset.catName || "General").trim() || "General";
+                const categoryKey = normalizeCategoryKey(section.dataset.catKey || displayCategory);
+                const dataOrder = resolveNumericOrder(categoryHeading.getAttribute("data-order"), 9999);
 
-                if (!categoryMap.has(category)) {
-                    categoryMap.set(category, { sections: [], dataOrder });
+                if (!categoryMap.has(categoryKey)) {
+                    categoryMap.set(categoryKey, { displayCategory, sections: [], dataOrder });
+                } else {
+                    const existingGroup = categoryMap.get(categoryKey);
+                    if (dataOrder < existingGroup.dataOrder) {
+                        existingGroup.dataOrder = dataOrder;
+                    }
+                    if (existingGroup.displayCategory === "General" && displayCategory !== "General") {
+                        existingGroup.displayCategory = displayCategory;
+                    }
                 }
 
                 // Preserve the section header bar (or bare h3) above the first table
@@ -4061,27 +4137,29 @@ async function loadfunction() {
                 }
 
                 // Push section into category map
-                categoryMap.get(category).sections.push({ section, h3DataOrder: h3DataOrder ? parseInt(h3DataOrder, 10) : null });
+                categoryMap.get(categoryKey).sections.push({ section, h3DataOrder: h3DataOrder ? parseInt(h3DataOrder, 10) : null });
             }
         }
 
-        // ðŸŸ¢ Step 3: Clear the container and re-add grouped sections
+        // Step 3: Clear the container and re-add grouped sections
         container.innerHTML = "";
 
         // Sort categories by `data-order`
         const sortedCategories = Array.from(categoryMap.entries()).sort(
-            ([, { dataOrder: orderA }], [, { dataOrder: orderB }]) => (orderA || 0) - (orderB || 0)
+            ([, { dataOrder: orderA }], [, { dataOrder: orderB }]) =>
+                resolveNumericOrder(orderA, 9999) - resolveNumericOrder(orderB, 9999)
         );
 
-        // ðŸŸ¢ Step 4: Append sorted categories and sections
-        for (const [category, { sections, dataOrder }] of sortedCategories) {
+        // Step 4: Append sorted categories and sections
+        for (const [, { displayCategory, sections, dataOrder }] of sortedCategories) {
             const groupedSection = document.createElement("div");
             groupedSection.classList.add("grouped-section");
 
             // Add category heading
             const categoryHeading = document.createElement("h2");
-            categoryHeading.textContent = category;
-            if (dataOrder) categoryHeading.setAttribute("data-order", dataOrder);
+            categoryHeading.className = "lr-category-heading";
+            categoryHeading.textContent = displayCategory;
+            if (Number.isFinite(dataOrder)) categoryHeading.setAttribute("data-order", String(dataOrder));
             groupedSection.appendChild(categoryHeading);
 
             // Sort sections by `h3DataOrder`
@@ -4105,7 +4183,7 @@ async function loadfunction() {
         if (!testpanels) return;
 
 
-        const { singleTests, panels } = testpanels;
+        const { singleTests = [], panels = [] } = testpanels;
 
         // Group in O(n) using map for faster rendering on large reports.
         const singleTestsByCategoryMap = new Map();
@@ -4118,20 +4196,18 @@ async function loadfunction() {
                 uniquetestArray2.push(test.Short_name);
             }
 
-            // Defensive: normalize category — may be a populated object or a plain string/object
-            let cat = test.category;
-            if (!cat || typeof cat !== 'object') {
-                cat = { category: String(cat || 'General'), orderId: 0 };
-            } else if (!cat.category) {
-                cat = { ...cat, category: 'General' };
-            }
-
-            const key = cat.category;
+            const cat = normalizeCategoryMeta(test?.category, "General");
+            const key = normalizeCategoryKey(cat.category);
             if (!singleTestsByCategoryMap.has(key)) {
                 singleTestsByCategoryMap.set(key, {
-                    category: cat, // store full category object
+                    category: cat, // store normalized category object
                     tests: []
                 });
+            } else {
+                const existingEntry = singleTestsByCategoryMap.get(key);
+                if (cat.orderId < existingEntry.category.orderId) {
+                    existingEntry.category = cat;
+                }
             }
 
             singleTestsByCategoryMap.get(key).tests.push(test);
@@ -4220,23 +4296,24 @@ async function loadfunction() {
         // Render panels and collect matched categories
         if (panels && panels.length > 0) {
             for (const panel of panels) {
+                const panelCategory = resolvePanelCategoryMeta(panel);
                 await createTable(
                     `${panel.name}`,
-                    panel.category,
-                    panel.testsId,
+                    panelCategory,
+                    panel.testsId || [],
                     true,
                     false,
                     panel
                 );
 
-                matchedCategories.add(panel.category);
+                matchedCategories.add(normalizeCategoryKey(panelCategory.category));
             }
         }
 
         // Render single tests whose categories are already matched
         for (const entry of singleTestsByCategory) {
             const { category, tests } = entry;
-            if (matchedCategories.has(category.category)) {
+            if (matchedCategories.has(normalizeCategoryKey(category.category))) {
                 await createTable(category.category, category, tests, false, false);
             }
         }
@@ -4244,7 +4321,7 @@ async function loadfunction() {
         // Render single tests whose categories were not matched
         for (const entry of singleTestsByCategory) {
             const { category, tests } = entry;
-            if (!matchedCategories.has(category.category)) {
+            if (!matchedCategories.has(normalizeCategoryKey(category.category))) {
                 await createTable(category.category, category, tests);
             }
         }
