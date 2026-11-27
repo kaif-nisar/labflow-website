@@ -371,17 +371,18 @@
 
     .oh5-header-grid {
       display: grid;
-      grid-template-columns: 0.94fr 1.06fr;
-      gap: 0 12px;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 0 10px;
       align-items: stretch;
     }
 
     .oh5-patient-col {
-      padding-right: 10px;
+      padding-right: 8px;
       border-right: 1px solid var(--oh5-border-soft);
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
+      min-width: 0;
     }
 
     .oh5-specimen-col {
@@ -389,18 +390,19 @@
       flex-direction: column;
       justify-content: flex-start;
       gap: 3px;
+      min-width: 0;
     }
 
     .oh5-meta-table { width: 100%; border-collapse: collapse; }
     .oh5-meta-table td {
-      padding: 1px 2px;
+      padding: 1.5px 2px;
       vertical-align: top;
       font-size: 9.2px;
-      line-height: 1.24;
+      line-height: 1.26;
     }
-    .oh5-meta-label { width: 72px; font-weight: 600; color: var(--oh5-slate); white-space: nowrap; }
+    .oh5-meta-label { width: 68px; font-weight: 600; color: var(--oh5-slate); white-space: nowrap; }
     .oh5-meta-sep { width: 7px; color: var(--oh5-muted); text-align: center; }
-    .oh5-meta-val { color: var(--oh5-ink); font-weight: 500; word-break: break-word; }
+    .oh5-meta-val { color: var(--oh5-ink); font-weight: 500; word-break: break-word; min-width: 0; }
 
     .oh5-ts-grid {
       display: grid;
