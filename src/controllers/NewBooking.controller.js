@@ -3915,7 +3915,7 @@ const getTestNameController = async (req, res) => {
                                     { originalTestId: obj.id }
                                 ],
                                 tenantId: tid
-                            });
+                            }).populate('category');
 
                             return { singleTests: docs, panels: [] };
                         }
@@ -4041,7 +4041,7 @@ const getTestNameController = async (req, res) => {
                                     { _id: { $in: packageTestIds } },
                                     { originalTestId: { $in: packageTestIds } }
                                 ]
-                            });
+                            }).populate('category');
 
                             // Fetch full panel documents with populated tests
                             const packagePanels = await addPannel.find({

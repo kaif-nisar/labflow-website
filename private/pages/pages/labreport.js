@@ -4118,10 +4118,18 @@ async function loadfunction() {
                 uniquetestArray2.push(test.Short_name);
             }
 
-            const key = test.category.category;
+            // Defensive: normalize category — may be a populated object or a plain string/object
+            let cat = test.category;
+            if (!cat || typeof cat !== 'object') {
+                cat = { category: String(cat || 'General'), orderId: 0 };
+            } else if (!cat.category) {
+                cat = { ...cat, category: 'General' };
+            }
+
+            const key = cat.category;
             if (!singleTestsByCategoryMap.has(key)) {
                 singleTestsByCategoryMap.set(key, {
-                    category: test.category, // store full category object
+                    category: cat, // store full category object
                     tests: []
                 });
             }
