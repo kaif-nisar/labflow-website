@@ -277,17 +277,16 @@ class SPARouter {
     }
 
     updateBrowserHistory(page, Name, _id, name) {
-        // Preserve existing query parameters
-        const urlParams = new URLSearchParams(window.location.search);
+        const currentParams = new URLSearchParams(window.location.search);
+        const urlParams = new URLSearchParams();
 
-        // Update or add new query parameters
         urlParams.set('page', page);
-        if (Name) urlParams.set('Name', Name);
-        if (_id) urlParams.set('_id', _id);
-        if (name) urlParams.set('name', name);
+        if (Name !== undefined && Name !== null && Name !== '') urlParams.set('Name', Name);
+        if (_id !== undefined && _id !== null && _id !== '') urlParams.set('_id', _id);
+        if (name !== undefined && name !== null && name !== '') urlParams.set('name', name);
+        if (currentParams.has('debug')) urlParams.set('debug', currentParams.get('debug'));
 
-        // Push the updated URL with all parameters
-        window.history.pushState({ page }, '', `?${urlParams.toString()}`);
+        window.history.pushState({ page, Name, _id, name }, '', `?${urlParams.toString()}`);
     }
 
     setupDynamicLinks() {

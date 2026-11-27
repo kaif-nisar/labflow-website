@@ -398,7 +398,9 @@ const buildPdfFooterTemplate = async ({
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
         safeCss,
-        `.pdf-footer-div { width: 92%; display: flex; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
+        `.pdf-footer-div { width: 92%; display: ${sigResult.isCustom ? 'block' : 'flex'}; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
+        `.pdf-footer-div .signed-off-div { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; box-shadow: none !important; overflow: visible !important; }`,
+        `.pdf-footer-div .signed-off-div2 { width: 100%; }`,
         `.pdf-footer-div, .pdf-footer-div td, .pdf-footer-div th, .pdf-footer-div p, .pdf-footer-div span, .pdf-footer-div div, .pdf-footer-div label, .pdf-footer-div small, .pdf-footer-div strong { font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
         sigResult.layoutCss || '',
         '</style>',
@@ -724,13 +726,14 @@ const pdfgeneratorcontroller2 = async ({ pdfformat, layerone, showInvest, showIn
                     });
 
                     const normalizedSig = normalizeSignatureLayout(signatureLayout);
-                    const dynamicBottomPx = normalizedSig.isCustom
-                        ? Math.max(175, computeSignatureStageHeightPx(normalizedSig, {
+                    const hasCustomSigOrFooter = Boolean(normalizedSig.isCustom || normalizedSig.footer?.isCustom);
+                    const dynamicBottomPx = hasCustomSigOrFooter
+                        ? Math.max(80, computeSignatureStageHeightPx(normalizedSig, {
                             lab: showlab !== false,
                             doc1: showdoctorfirst !== false,
                             doc2: showdoctorsecond !== false,
-                        }) + footermarginPx + 45)
-                        : 175;
+                        }) + footermarginPx + 24)
+                        : Math.max(130, 88 + footermarginPx);
 
                     pdfBuffer = await page.pdf({
                         format: 'A4',
@@ -1312,13 +1315,14 @@ async function generateSinglePdfBuffer(mergedValues, user) {
             });
 
             const normalizedMergedSig = normalizeSignatureLayout(mergedValues.signatureLayout);
-            const mergedBottomPx = normalizedMergedSig.isCustom
-                ? Math.max(175, computeSignatureStageHeightPx(normalizedMergedSig, {
+            const hasCustomMergedSigOrFooter = Boolean(normalizedMergedSig.isCustom || normalizedMergedSig.footer?.isCustom);
+            const mergedBottomPx = hasCustomMergedSigOrFooter
+                ? Math.max(80, computeSignatureStageHeightPx(normalizedMergedSig, {
                     lab: mergedValues.showlab !== false,
                     doc1: mergedValues.showdoctorfirst !== false,
                     doc2: mergedValues.showdoctorsecond !== false,
-                }) + footermarginPx + 45)
-                : 175;
+                }) + footermarginPx + 24)
+                : Math.max(130, 88 + footermarginPx);
 
             pdfBuffer = await page.pdf({
                 format: 'A4',

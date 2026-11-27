@@ -1,255 +1,126 @@
-<html>
-
-<head>
-    <title>Test Database</title>
-    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-    <style>
-        .page-loader {
-            position: fixed;
-            inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(242, 237, 243, 0.78);
-            backdrop-filter: blur(4px);
-            z-index: 105000;
-        }
-
-        .page-loader__spinner {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            border: 6px solid #d7dfe9;
-            border-top-color: #3f4d67;
-            animation: page-loader-spin 0.85s linear infinite;
-        }
-
-        @keyframes page-loader-spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .container202 {
-            padding: 25px;
-        }
-
-        h1 {
-            font-size: 2em;
-            margin: 0px;
-        }
-
-        p {
-            font-size: 0.9em;
-            color: #555;
-        }
-
-        .filter-container button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        .filter-container button:hover {
-            background-color: #0056b3;
-        }
-
-        .categories {
-            margin: 10px 0;
-        }
-
-        .categories span {
-            display: inline-block;
-            margin: 5px;
-            padding: 5px 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .categories span:hover {
-            background-color: #f0f0f0;
-        }
-
-        .search-container {
-            display: flex;
-            align-items: center;
-            margin: 20px 0;
-        }
-
-        .search-container input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-
-        .search-container i {
-            margin-left: 10px;
-            color: #888;
-        }
-
-        .protip {
-            font-size: 0.9em;
-            color: #888;
-            margin-left: 10px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        table th,
-        table td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: left;
-        }
-
-        table th {
-            background-color: #f9f9f9;
-        }
-
-        .actions a {
-            margin-right: 10px;
-            color: #007bff;
-            text-decoration: none;
-        }
-
-        .actions a:hover {
-            text-decoration: underline;
-        }
-
-        /* Add smooth transition for all rows */
-        tbody tr {
-            transition: transform 0.2s ease, background-color 0.2s ease;
-        }
-
-        /* Highlight the row being dragged */
-        tbody tr.dragging {
-            background-color: #bde0ff;
-            /* Light blue background for dragging row */
-            opacity: 0.8;
-            /* Slightly transparent */
-            transform: scale(1.02);
-            /* Slightly enlarge the row */
-        }
-
-        /* Indicate the drop target */
-        tbody tr.drop-target {
-            border: 2px dashed #007bff;
-            /* Dashed border for drop target */
-        }
-
-        .order i {
-            padding-right: 20px;
-        }
-
-        #tableContainer {
-            max-height: 55vh;
-            overflow: auto;
-            border: 1px solid #c0c0c0;
-        }
-
-        #tableContainer::-webkit-scrollbar {
-            display: none;
-        }
-
-        .protip i {
-            color: rgb(185, 185, 0);
-        }
-
-        /* Keyframes for spinning animation */
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        .testheaderDiv {
-            padding: 12px;
-            border-radius: 5px;
-            margin: 2rem 0rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: #e2e2e2;
-        }
-
-        .testheaderDiv div {
-            display: flex;
-            gap: 10px;
-        }
-    </style>
-</head>
-
-<body>
-    <div id="page-loader" class="page-loader" aria-hidden="true">
-        <div class="page-loader__spinner" aria-label="Loading"></div>
+<div id="cs-page-root" class="cs-page">
+  <header class="cs-header">
+    <div class="cs-header-copy">
+      <div class="cs-eyebrow"><i class="fa-solid fa-flask"></i> Catalog Management</div>
+      <h1 class="cs-title">Test Database</h1>
+      <p class="cs-subtitle">Manage master diagnostic tests, sample types, parameter ranges, and print display sequence.</p>
     </div>
-    <div class="container202">
-        <div class="testheaderDiv">
-            <h1>Test database</h1>
-            <div>
-                <a onclick>
-                    <div class="filter-container">
-                        <button onclick="loadPage('addTest')" class="add-new">+ Add Test</button>
-                    </div>
-                </a>
-
-                <a onclick>
-                    <div class="filter-container">
-                        <button title="Add Test as Document" onclick="loadPage('addTestDocument')" class="add-new">+ Add
-                            Document</button>
-                    </div>
-                </a>
-            </div>
-        </div>
-
-        <div class="filter-container">
-        </div>
-
-        <div class="search-container">
-            <input type="text" placeholder="Search in page" id="searchInput" oninput="filterTable()">
-            <i class="fas fa-search"></i>
-            <span class="protip"><i class="fas fa-lightbulb"></i> ProTip! Drag and Drop row to reorder tests.</span>
-        </div>
-
-        <div style="margin-bottom: 15px; display: flex; justify-content: flex-start;">
-            <button id="bulkDeleteBtn" style="background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; display: none; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#c82333'" onmouseout="this.style.backgroundColor='#dc3545'" onclick="bulkDeleteTests()">
-                <i class="fas fa-trash"></i> Delete Selected
-            </button>
-        </div>
-
-        <div id="tableContainer">
-            <table id="categoriesTable">
-                <thead>
-                    <tr>
-                        <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-                        <th>ORDER</th>
-                        <th>Name</th>
-                        <th>PRICE</th>
-                        <th>SAMPLE TYPE</th>
-                        <th>SHORT NAME</th>
-                        <th>CATEGORY</th>
-                        <th>ACTIONS</th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyid">
-                </tbody>
-            </table>
-        </div>
+    <div class="cs-header-actions">
+      <button type="button" class="cs-btn cs-btn-secondary cs-btn-sm" data-cs-add-sample>
+        <i class="fa-solid fa-vial"></i> Add Sample Type
+      </button>
+      <button type="button" class="cs-btn cs-btn-secondary cs-btn-sm" data-cs-add-document>
+        <i class="fa-regular fa-file-lines"></i> Add Document
+      </button>
+      <button type="button" class="cs-btn cs-btn-primary cs-btn-sm" data-cs-add-test>
+        <i class="fa-solid fa-plus"></i> Add Test
+      </button>
     </div>
-    </div>
-    <script src="test.js"></script>
-</body>
+  </header>
 
-</html>
+  <section class="cs-metrics" aria-label="Catalog overview">
+    <div class="cs-metric-card">
+      <span class="cs-metric-label">Total Tests</span>
+      <span class="cs-metric-value" data-cs-stat-total>0</span>
+      <span class="cs-metric-sub">Active catalog entries</span>
+    </div>
+    <div class="cs-metric-card">
+      <span class="cs-metric-label">Parameter Tests</span>
+      <span class="cs-metric-value" data-cs-stat-standard>0</span>
+      <span class="cs-metric-sub">Structured analyte rows</span>
+    </div>
+    <div class="cs-metric-card">
+      <span class="cs-metric-label">Document Tests</span>
+      <span class="cs-metric-value" data-cs-stat-document>0</span>
+      <span class="cs-metric-sub">Rich-text report templates</span>
+    </div>
+    <div class="cs-metric-card">
+      <span class="cs-metric-label">Categories</span>
+      <span class="cs-metric-value" data-cs-stat-categories>0</span>
+      <span class="cs-metric-sub">Distinct departments</span>
+    </div>
+  </section>
+
+  <section class="cs-toolbar">
+    <div class="cs-toolbar-row">
+      <div class="cs-toolbar-left">
+        <div class="cs-search-wrap">
+          <i class="fa-solid fa-magnifying-glass cs-search-icon" aria-hidden="true"></i>
+          <input
+            type="text"
+            class="cs-search-input"
+            data-cs-search
+            placeholder="Search by test name, code, short name, or sample..."
+            autocomplete="off"
+          />
+          <button type="button" class="cs-search-clear" data-cs-search-clear aria-label="Clear search">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <select class="cs-filter-select" data-cs-filter-primary aria-label="Filter by category">
+          <option value="all">All Categories</option>
+        </select>
+
+        <select class="cs-filter-select" data-cs-filter-secondary aria-label="Filter by test type">
+          <option value="all">All Types</option>
+          <option value="standard">Parameter Tests</option>
+          <option value="document">Document Templates</option>
+        </select>
+      </div>
+
+      <div class="cs-toolbar-right">
+        <span class="cs-sync-pill" data-cs-sync-pill>
+          <span class="cs-sync-dot"></span>
+          <span data-cs-sync-text>Synced</span>
+        </span>
+        <button type="button" class="cs-btn cs-btn-secondary cs-btn-sm" data-cs-undo-btn disabled title="Undo last order move">
+          <i class="fa-solid fa-rotate-left"></i> Undo
+        </button>
+        <button type="button" class="cs-btn cs-btn-secondary cs-btn-sm" data-cs-normalize-btn title="Reset order numbers sequentially 1..N">
+          <i class="fa-solid fa-arrow-down-1-9"></i> Normalize 1..N
+        </button>
+      </div>
+    </div>
+
+    <div class="cs-filter-banner" data-cs-filter-banner>
+      <span><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>Filtered view active: reordering swaps only visible slots so hidden tests preserve their positions.</span>
+    </div>
+
+    <div class="cs-bulk-bar" data-cs-bulk-bar>
+      <span class="cs-bulk-info" data-cs-bulk-count>0 tests selected</span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="cs-btn cs-btn-secondary cs-btn-xs" data-cs-bulk-clear>Clear</button>
+        <button type="button" class="cs-btn cs-btn-danger cs-btn-xs" data-cs-bulk-delete>
+          <i class="fa-regular fa-trash-can"></i> Delete Selected
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="cs-table-card">
+    <div class="cs-table-scroll" data-cs-scroll>
+      <table class="cs-table">
+        <thead>
+          <tr>
+            <th class="cs-col-check">
+              <input type="checkbox" class="cs-checkbox" data-cs-check-all aria-label="Select all visible tests" />
+            </th>
+            <th class="cs-col-order">Order</th>
+            <th>Test Name</th>
+            <th>Category</th>
+            <th>Pricing</th>
+            <th>Sample Type</th>
+            <th>Structure</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody data-cs-tbody></tbody>
+      </table>
+    </div>
+    <div class="cs-table-footer">
+      <span data-cs-count-summary>Loading tests...</span>
+      <span>Tip: Click any <strong>#</strong> pill to jump directly to a position, or press <strong>Alt+↑/↓</strong> on a row.</span>
+    </div>
+  </section>
+</div>

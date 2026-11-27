@@ -10,7 +10,7 @@ const OFFLINE_REPORT_FIELDS = [
     "backgroundImg", "imageUrl", "templateImage", "template", "background", "headermargin", "footermargin",
     "marginRight", "marginLeft", "LeftsignPd", "Rightsignpd", "investigationmargin", "showlab", "showdoctorfirst",
     "showdoctorsecond", "fileInputLab", "fileInputDoctorleft", "fileInputDoctorright", "fileInputLabtext",
-    "fileInputDoctorlefttext", "fileInputDoctorrighttext", "isdocumented", "pdfFormat", "checkBox", "disableBackgroundImage"
+    "fileInputDoctorlefttext", "fileInputDoctorrighttext", "signatureLayout", "isdocumented", "pdfFormat", "checkBox", "disableBackgroundImage"
 ];
 
 const BG_CANDIDATE_FIELDS = [

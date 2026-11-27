@@ -45,6 +45,7 @@ const offlineReportSchema = new mongoose.Schema({
     fileInputLabtext: { type: String, default: "" },
     fileInputDoctorlefttext: { type: String, default: "" },
     fileInputDoctorrighttext: { type: String, default: "" },
+    signatureLayout: { type: Schema.Types.Mixed, default: null },
     isdocumented: { type: Boolean, default: false },
     checkBox: { type: Boolean, default: false },
     disableBackgroundImage: { type: Boolean, default: false },

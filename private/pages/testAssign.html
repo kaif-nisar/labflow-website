@@ -260,6 +260,29 @@
             margin: 20px auto;
         }
 
+        .overwrite-option {
+            max-width: 720px;
+            margin: 24px auto 0;
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            background: #fffbeb;
+            color: #78350f;
+            line-height: 1.5;
+            cursor: pointer;
+        }
+
+        .overwrite-option input {
+            margin-top: 4px;
+            width: 18px;
+            height: 18px;
+            flex: 0 0 auto;
+            accent-color: #d97706;
+        }
+
         .assign-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
@@ -518,6 +541,11 @@
                     </div>
                 </div>
 
+                <label class="overwrite-option" for="overwriteExisting">
+                    <input type="checkbox" id="overwriteExisting">
+                    <span><strong>Replace previously assigned catalog data</strong><br>
+                    Remove the target user’s existing Super Admin catalog copies and assign the current selection fresh. User-created records are kept.</span>
+                </label>
                 <button class="assign-btn" id="assignModelsBtn">
                     <i class="fas fa-paper-plane"></i> Assign Selected Models to Franchisee
                 </button>

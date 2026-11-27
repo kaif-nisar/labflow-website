@@ -3762,6 +3762,14 @@ async function loadPage(page, Name, _id, customBaseUrl, name, options = {}) {
         isCapturingSubpageListeners = false;
       });
 
+    // Subpages with an asynchronous first render can expose a readiness promise.
+    // Wait for it before swapping the hidden build into view so users never see
+    // an empty table/form flash and the router's loader does not finish early.
+    if (window.subpageReady && typeof window.subpageReady.then === "function") {
+      await window.subpageReady;
+    }
+    window.subpageReady = null;
+
     if (user && user.role === "staff") {
       checkAndHidePrintSettingButton(user);
     }

@@ -10,18 +10,54 @@ import { getNextBookingCodeForScope } from "../utils/bookingCode.js";
 
 const parseBooleanInput = (value) => value === true || value === "true" || value === 1 || value === "1";
 
-// superAdmin add Panel 
+const isBlankValue = (value) => value === undefined || value === null || String(value).trim() === "";
+
+const parsePanelOrderPayload = (body = {}) => {
+  const { updatedOrder, orderedIds } = body;
+  const normalized = [];
+
+  if (Array.isArray(orderedIds) && orderedIds.length > 0) {
+    orderedIds.forEach((rawId, idx) => {
+      if (mongoose.isValidObjectId(rawId)) {
+        normalized.push({ id: new mongoose.Types.ObjectId(rawId), order: idx + 1 });
+      }
+    });
+  } else if (Array.isArray(updatedOrder) && updatedOrder.length > 0) {
+    for (const entry of updatedOrder) {
+      const rawId = entry?.id ?? entry?._id;
+      const numericOrder = Number(entry?.order);
+      if (!mongoose.isValidObjectId(rawId)) {
+        throw new ApiError(400, `Invalid panel id: ${rawId}`);
+      }
+      if (!Number.isFinite(numericOrder) || numericOrder < 1) {
+        throw new ApiError(400, `Invalid order value for panel ${rawId}`);
+      }
+      normalized.push({ id: new mongoose.Types.ObjectId(rawId), order: Math.round(numericOrder) });
+    }
+  }
+
+  if (normalized.length === 0) {
+    throw new ApiError(400, "Invalid or empty panel order payload");
+  }
+
+  const dedupedMap = new Map();
+  for (const item of normalized) {
+    dedupedMap.set(String(item.id), item);
+  }
+  return Array.from(dedupedMap.values());
+};
+
+// superAdmin add Panel
 const addpannelcontroller = asyncHandler(async (req, res) => {
   const {
     pannelname,
     category,
+    price: bodyPrice,
     rawPrice,
     inputarray,
     interpretion,
+    interpretation,
     sample_types,
-    hideInterpretation,
-    hideMethodInstrument,
-    hidePanelInterpretation,
     final_price,
     testsId,
     Short_name,
@@ -33,52 +69,46 @@ const addpannelcontroller = asyncHandler(async (req, res) => {
   const normalizedHidePanelInterpretation = parseBooleanInput(req.body.hidePanelInterpretation);
   const resolvedShortName = String(Short_name ?? shortName ?? short_name ?? "").trim();
 
-  let userId
-  if (req.user.role === 'staff') {
-    userId = req.user.parentUser
-  } else {
-    userId = req.user._id
-  }
+  const userId = req.user.role === "staff" ? req.user.parentUser : req.user._id;
 
-  // Check for missing fields
-  if (!pannelname || !category || !final_price) {
+  if (!pannelname || !category || isBlankValue(final_price)) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
+  const cleanPanelName = String(pannelname).trim();
   const allreadyExistedpannel = await addPannel.findOne({
-    name: pannelname,
+    name: cleanPanelName,
     createdBy: userId
   });
 
   if (allreadyExistedpannel) {
     return res
       .status(400)
-      .json({ message: "Pannel already exists in database" });
+      .json({ message: "Panel already exists in database" });
   }
 
-  const price = Number(rawPrice); // Convert the price to a number
+  const price = Number(bodyPrice ?? rawPrice ?? 0);
 
   const lastPanel = await addPannel
-    .findOne({ createdBy: userId }) // optionally filter by tenant
-    .sort({ order: -1 })             // highest order first
-    .select('order');                // only fetch order field
+    .findOne({ createdBy: userId })
+    .sort({ order: -1 })
+    .select("order");
 
-  const nextOrder = lastPanel ? lastPanel.order + 1 : 1;
+  const nextOrder = (Number(lastPanel?.order) || 0) + 1;
   const nextBookingCode = await getNextBookingCodeForScope({
     createdBy: userId,
     createdByRole: "superAdmin"
   });
 
-  // Create the pannel in the database
   const createPannel = {
     order: nextOrder,
     bookingCode: nextBookingCode,
-    name: pannelname,
+    name: cleanPanelName,
     Short_name: resolvedShortName,
     category,
-    price,
+    price: Number.isFinite(price) ? price : 0,
     tests: inputarray,
-    interpretation: interpretion,
+    interpretation: interpretion ?? interpretation ?? "",
     sample_types,
     hideInterpretation: normalizedHideInterpretation,
     hideMethodInstrument: normalizedHideMethodInstrument,
@@ -86,23 +116,21 @@ const addpannelcontroller = asyncHandler(async (req, res) => {
     hidepanelinterpretation: normalizedHidePanelInterpretation,
     final_price,
     originalPanelId: null,
-    isBasePanel: true, // Set to true if this is a base test
-    createdByRole: 'superAdmin', // Add the role of the user creating the test
+    isBasePanel: true,
+    createdByRole: "superAdmin",
     purchasedFromBasePanel: false,
-    tenantId: null, // Set tenantId to null for SuperAdmin tests
+    tenantId: null,
     createdBy: userId,
-    testsId,
+    testsId
   };
 
   const panelCreated = await addPannel.create(createPannel);
 
-  // Check if the pannel was successfully created
   if (!panelCreated) {
-    return res.status(400).json({ message: "Failed to create pannel" });
+    return res.status(400).json({ message: "Failed to create panel" });
   }
 
-  // अगर staff का parentUser है तो उसे भी notify करें
-  if (req.user.role === 'staff') {
+  if (req.user.role === "staff") {
     await SuperAdmin.findByIdAndUpdate(req.user._id, {
       $push: {
         activities: {
@@ -111,7 +139,7 @@ const addpannelcontroller = asyncHandler(async (req, res) => {
             staffId: req.user._id,
             staffName: req.user.fullName,
             action: "Staff created a new Pannel",
-            panelName: pannelname,
+            panelName: cleanPanelName,
             panelId: panelCreated._id
           },
           reference: {
@@ -124,9 +152,8 @@ const addpannelcontroller = asyncHandler(async (req, res) => {
     });
   }
 
-  // Send a success response
   return res.status(200).json(
-    { message: "Pannel created successfully", panelCreated, status: "success" }
+    { message: "Panel created successfully", panelCreated, status: "success" }
   );
 });
 
@@ -135,13 +162,12 @@ const addpannelcontrollerforadmin = asyncHandler(async (req, res) => {
   const {
     pannelname,
     category,
-    price: rawPrice,
+    price: bodyPrice,
+    rawPrice,
     inputarray,
     interpretion,
+    interpretation,
     sample_types,
-    hideInterpretation,
-    hideMethodInstrument,
-    hidePanelInterpretation,
     final_price,
     testsId,
     Short_name,
@@ -153,76 +179,68 @@ const addpannelcontrollerforadmin = asyncHandler(async (req, res) => {
   const normalizedHidePanelInterpretation = parseBooleanInput(req.body.hidePanelInterpretation);
   const resolvedShortName = String(Short_name ?? shortName ?? short_name ?? "").trim();
 
-
-  let userId;
-  if (req.user.role === 'staff') {
-    userId = req.user.parentUser
-  } else {
-    userId = req.user._id
+  const tenantId = req.user.tenantId?._id || req.user.tenantId;
+  if (!tenantId) {
+    throw new ApiError(403, "Tenant context required");
   }
-  const tenantId = req.user.tenantId._id;
-  // Check for missing fields
-  if (!pannelname || !category || !final_price) {
+
+  if (!pannelname || !category || isBlankValue(final_price)) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
+  const cleanPanelName = String(pannelname).trim();
   const allreadyExistedpannel = await addPannel.findOne({
-    name: pannelname,
-    createdBy: userId,
-    tenantId: tenantId
+    name: cleanPanelName,
+    tenantId
   });
 
   if (allreadyExistedpannel) {
     return res
       .status(400)
-      .json({ message: "Pannel already exists in database" });
+      .json({ message: "Panel already exists in database" });
   }
 
-  const price = Number(rawPrice); // Convert the price to a number
+  const price = Number(bodyPrice ?? rawPrice ?? 0);
 
   const lastPanel = await addPannel
-    .findOne({ tenantId })            // optionally filter by tenant
-    .sort({ order: -1 })             // highest order first
-    .select('order');                // only fetch order field
+    .findOne({ tenantId })
+    .sort({ order: -1 })
+    .select("order");
 
-  const nextOrder = lastPanel ? lastPanel.order + 1 : 1;
+  const nextOrder = (Number(lastPanel?.order) || 0) + 1;
   const nextBookingCode = await getNextBookingCodeForScope({ tenantId });
 
-  // Create the pannel in the database
   const createPannel = {
     order: nextOrder,
     bookingCode: nextBookingCode,
-    name: pannelname,
+    name: cleanPanelName,
     Short_name: resolvedShortName,
     category,
-    price,
+    price: Number.isFinite(price) ? price : 0,
     tests: inputarray,
-    interpretation: interpretion,
+    interpretation: interpretion ?? interpretation ?? "",
     sample_types,
     hideInterpretation: normalizedHideInterpretation,
     hideMethodInstrument: normalizedHideMethodInstrument,
     hidePanelInterpretation: normalizedHidePanelInterpretation,
     hidepanelinterpretation: normalizedHidePanelInterpretation,
     final_price,
-    createdBy: userId, // add the super admin id to the test
     originalPanelId: null,
-    isBasePanel: true, // Set to true if this is a base test
-    createdByRole: 'admin', // Add the role of the user creating the test
+    isBasePanel: true,
+    createdByRole: "admin",
     purchasedFromBasePanel: false,
-    tenantId: tenantId, // Set tenantId to null for SuperAdmin tests
+    tenantId,
     createdBy: req.user._id,
-    testsId,
+    testsId
   };
 
   const panelCreated = await addPannel.create(createPannel);
 
-  // Check if the pannel was successfully created
   if (!panelCreated) {
-    return res.status(400).json({ message: "Failed to create pannel" });
+    return res.status(400).json({ message: "Failed to create panel" });
   }
 
-  // अगर staff का parentUser है तो उसे भी notify करें
-  if (req.user.role === 'staff') {
+  if (req.user.role === "staff") {
     await User.findByIdAndUpdate(req.user._id, {
       $push: {
         activities: {
@@ -231,7 +249,7 @@ const addpannelcontrollerforadmin = asyncHandler(async (req, res) => {
             staffId: req.user._id,
             staffName: req.user.fullName,
             action: "Staff created a new Pannel",
-            panelName: pannelname,
+            panelName: cleanPanelName,
             panelId: panelCreated._id
           },
           reference: {
@@ -243,52 +261,42 @@ const addpannelcontrollerforadmin = asyncHandler(async (req, res) => {
       }
     });
   }
-  // Send a success response
+
   return res.status(200).json(
-    { message: "Pannel created successfully", panelCreated, status: "success" }
+    { message: "Panel created successfully", panelCreated, status: "success" }
   );
 });
 
-// superAdmin fetch all Panels 
+// superAdmin fetch all Panels
 const allPannelcontroller = asyncHandler(async function (req, res) {
-  let query = {};
+  const query = {
+    createdBy: req.user.role === "staff" ? req.user.parentUser : req.user._id,
+    createdByRole: "superAdmin"
+  };
 
-  if (req.user.role === 'staff') {
-    query.createdBy = req.user.parentUser;
-    query.createdByRole = 'superAdmin'
-  } else {
-    query.createdBy = req.user._id
-    query.createdByRole = 'superAdmin'
-  }
-  const allpanels = await addPannel.find(query);
-
-  if (!allpanels) {
-    throw new ApiError(400, "internal server error");
-  }
-
+  const allpanels = await addPannel.find(query).sort({ order: 1, _id: 1 });
   return res.json(allpanels);
 });
 
 const onePannelcontroller = asyncHandler(async function (req, res) {
-
   const { value1 } = req.params;
-  // console.log(value1);
 
   const Apannel = await addPannel
     .findOne({ _id: value1 })
-    .populate('testsId', 'Name');
+    .populate("testsId", "Name");
 
   if (!Apannel) {
     throw new ApiError(404, "Panel not found");
   }
 
-  // Directly update `tests` field for response only
-  Apannel.tests = Apannel.testsId.map(obj => obj.Name);
+  Apannel.tests = (Apannel.testsId || [])
+    .filter(Boolean)
+    .map((obj) => obj.Name || obj.name)
+    .filter(Boolean);
 
   res.set("Cache-Control", "no-store");
   return res.json(Apannel);
 });
-
 
 // superAdmin editPannel controller
 const editPannelController = asyncHandler(async (req, res) => {
@@ -302,9 +310,7 @@ const editPannelController = asyncHandler(async (req, res) => {
     inputarray,
     sample_types,
     interpretation,
-    hideInterpretation,
-    hideMethodInstrument,
-    hidePanelInterpretation,
+    interpretion,
     testsId,
     Short_name,
     short_name,
@@ -314,21 +320,20 @@ const editPannelController = asyncHandler(async (req, res) => {
   const normalizedHideMethodInstrument = parseBooleanInput(req.body.hideMethodInstrument);
   const normalizedHidePanelInterpretation = parseBooleanInput(req.body.hidePanelInterpretation);
 
-  if (!final_price || !pannelname || !category || !price) {
-    return res.status(401).json({ message: "missing required feilds", status: "error" })
+  if (isBlankValue(final_price) || !pannelname || !category || isBlankValue(price)) {
+    return res.status(400).json({ message: "Missing required fields", status: "error" });
   }
 
+  const ownerId = req.user.role === "staff" ? req.user.parentUser : req.user._id;
   const editedPannel = await addPannel.findOneAndUpdate(
+    { _id: value1, createdBy: ownerId },
     {
-      _id: value1,
-    },
-    {
-      name: pannelname,
+      name: String(pannelname).trim(),
       category,
       price,
       tests: inputarray,
       sample_types,
-      interpretation,
+      interpretation: interpretation ?? interpretion ?? "",
       hideInterpretation: normalizedHideInterpretation,
       hideMethodInstrument: normalizedHideMethodInstrument,
       hidePanelInterpretation: normalizedHidePanelInterpretation,
@@ -343,11 +348,10 @@ const editPannelController = asyncHandler(async (req, res) => {
   );
 
   if (!editedPannel) {
-    return res.status(401).json({ message: "Something went wrong, please try again", status: "error" })
+    return res.status(404).json({ message: "Panel not found or access denied", status: "error" });
   }
 
-  // अगर staff का parentUser है तो उसे भी notify करें
-  if (req.user.role === 'staff') {
+  if (req.user.role === "staff") {
     await SuperAdmin.findByIdAndUpdate(req.user._id, {
       $push: {
         activities: {
@@ -356,7 +360,7 @@ const editPannelController = asyncHandler(async (req, res) => {
             staffId: req.user._id,
             staffName: req.user.fullName,
             action: "Staff Update a Pannel",
-            panelName: pannelname,
+            panelName: editedPannel.name,
             panelId: editedPannel._id
           },
           reference: {
@@ -369,9 +373,8 @@ const editPannelController = asyncHandler(async (req, res) => {
     });
   }
 
-  return res.status(200).json({ message: "panel edited successfully", status: "success", edited: editedPannel })
+  return res.status(200).json({ message: "Panel updated successfully", status: "success", edited: editedPannel });
 });
-
 
 // Admin editPannel controller
 const adminEditPannelController = asyncHandler(async (req, res) => {
@@ -385,9 +388,7 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
     inputarray,
     sample_types,
     interpretation,
-    hideInterpretation,
-    hideMethodInstrument,
-    hidePanelInterpretation,
+    interpretion,
     testsId,
     Short_name,
     short_name,
@@ -397,21 +398,22 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
   const normalizedHideMethodInstrument = parseBooleanInput(req.body.hideMethodInstrument);
   const normalizedHidePanelInterpretation = parseBooleanInput(req.body.hidePanelInterpretation);
 
-  if (!final_price || !pannelname || !category || !price) {
-    return res.status(401).json({ message: "missing required feilds", status: "error" })
+  if (isBlankValue(final_price) || !pannelname || !category || isBlankValue(price)) {
+    return res.status(400).json({ message: "Missing required fields", status: "error" });
   }
 
+  const tenantId = req.user.tenantId?._id || req.user.tenantId;
+  const filter = tenantId ? { _id: value1, tenantId } : { _id: value1 };
+
   const editedPannel = await addPannel.findOneAndUpdate(
+    filter,
     {
-      _id: value1,
-    },
-    {
-      name: pannelname,
+      name: String(pannelname).trim(),
       category,
       price,
       tests: inputarray,
       sample_types,
-      interpretation: interpretation,
+      interpretation: interpretation ?? interpretion ?? "",
       hideInterpretation: normalizedHideInterpretation,
       hideMethodInstrument: normalizedHideMethodInstrument,
       hidePanelInterpretation: normalizedHidePanelInterpretation,
@@ -426,11 +428,10 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
   );
 
   if (!editedPannel) {
-    return res.status(401).json({ message: "Something went wrong, please try again", status: "error" })
+    return res.status(404).json({ message: "Panel not found or access denied", status: "error" });
   }
 
-  // अगर staff का parentUser है तो उसे भी notify करें
-  if (req.user.role === 'staff') {
+  if (req.user.role === "staff") {
     await User.findByIdAndUpdate(req.user._id, {
       $push: {
         activities: {
@@ -439,7 +440,7 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
             staffId: req.user._id,
             staffName: req.user.fullName,
             action: "Staff Update a Pannel",
-            panelName: pannelname,
+            panelName: editedPannel.name,
             panelId: editedPannel._id
           },
           reference: {
@@ -452,147 +453,86 @@ const adminEditPannelController = asyncHandler(async (req, res) => {
     });
   }
 
-  return res.status(200).json({ message: "panel edited successfully", status: "success", edited: editedPannel })
+  return res.status(200).json({ message: "Panel updated successfully", status: "success", edited: editedPannel });
 });
 
 const updatePannelOrder = asyncHandler(async (req, res) => {
-  const { updatedOrder } = req.body;
-  // console.log(updatedOrder);
-
-  if (!Array.isArray(updatedOrder) || updatedOrder.length === 0) {
-    throw new ApiError(400, "Invalid or empty order data");
+  const tenantId = req.user?.tenantId?._id || req.user?.tenantId;
+  if (!tenantId) {
+    throw new ApiError(403, "Tenant context required");
   }
 
-  try {
-    const bulkOperations = await Promise.all(
-      updatedOrder.map(async (orderData) => {
-        let { id, order } = orderData;
+  const entries = parsePanelOrderPayload(req.body);
+  const bulkOperations = entries.map(({ id, order }) => ({
+    updateOne: {
+      filter: { _id: id, tenantId },
+      update: { $set: { order } }
+    }
+  }));
 
-        // If id is a valid MongoDB ObjectId, use it directly
-        if (mongoose.isValidObjectId(id)) {
-          id = new mongoose.Types.ObjectId(id); // Convert string ObjectId to ObjectId type
-        }
-        // If id is a numeric value (e.g., '4'), map it to ObjectId by querying the database
-        else if (typeof id !== "number") {
-          const idofNumber = parseInt(id);
-          const panel = await addPannel.findOne({
-            order: idofNumber,
-            tenantId: req.user.tenantId._id
-          }); // Use panel schema here
-          if (!panel) {
-            throw new ApiError(400, `Panel with order ${id} not found`);
-          }
-          id = panel._id; // Use the found ObjectId
-        } else {
-          throw new ApiError(400, `Invalid ObjectId: ${id}`);
-        }
+  await addPannel.bulkWrite(bulkOperations, { ordered: false });
 
-        return {
-          updateOne: {
-            filter: { _id: id },
-            update: { order },
-          },
-        };
-      })
-    );
-
-    // Execute the bulk write operation
-    await addPannel.bulkWrite(bulkOperations); // Use panel schema here
-
-    res.json({
-      status: 200,
-      message: "Panel order updated successfully",
-    });
-  } catch (error) {
-    console.error("Error updating panel order:", error);
-    throw new ApiError(500, "Failed to update panel order");
-  }
+  return res.status(200).json({
+    status: 200,
+    message: "Panel order updated successfully"
+  });
 });
 
 // update panel order super
 const updatePannelOrdersuper = asyncHandler(async (req, res) => {
-  const { updatedOrder } = req.body;
-
-  if (!Array.isArray(updatedOrder) || updatedOrder.length === 0) {
-    throw new ApiError(400, "Invalid or empty order data");
+  const ownerId = req.user.role === "staff" ? req.user.parentUser : req.user._id;
+  if (!ownerId) {
+    throw new ApiError(403, "Owner context required");
   }
 
-  try {
-    const bulkOperations = await Promise.all(
-      updatedOrder.map(async (orderData) => {
-        let { id, order } = orderData;
+  const entries = parsePanelOrderPayload(req.body);
+  const bulkOperations = entries.map(({ id, order }) => ({
+    updateOne: {
+      filter: { _id: id, createdBy: ownerId },
+      update: { $set: { order } }
+    }
+  }));
 
-        // If id is a valid MongoDB ObjectId, use it directly
-        if (mongoose.isValidObjectId(id)) {
-          id = new mongoose.Types.ObjectId(id); // Convert string ObjectId to ObjectId type
-        }
-        // If id is a numeric value (e.g., '4'), map it to ObjectId by querying the database
-        else if (typeof id !== "number") {
-          const idofNumber = parseInt(id);
-          const panel = await addPannel.findOne({
-            order: idofNumber,
-            createdBy: req.user._id
-          }); // Use panel schema here
-          if (!panel) {
-            throw new ApiError(400, `Panel with order ${id} not found`);
-          }
-          id = panel._id; // Use the found ObjectId
-        } else {
-          throw new ApiError(400, `Invalid ObjectId: ${id}`);
-        }
+  await addPannel.bulkWrite(bulkOperations, { ordered: false });
 
-        return {
-          updateOne: {
-            filter: { _id: id },
-            update: { order },
-          },
-        };
-      })
-    );
-
-    // Execute the bulk write operation
-    await addPannel.bulkWrite(bulkOperations); // Use panel schema here
-
-    res.json({
-      status: 200,
-      message: "Panel order updated successfully",
-    });
-  } catch (error) {
-    console.error("Error updating panel order:", error);
-    throw new ApiError(500, "Failed to update panel order");
-  }
+  return res.status(200).json({
+    status: 200,
+    message: "Panel order updated successfully"
+  });
 });
 
 const tenantAllPanel = asyncHandler(async (req, res) => {
-  const tenantId = req.user.tenantId._id; // Assuming tenant is logged in
-  const createdBy = req.user._id;
-
-  try {
-    const panels = await addPannel.find({
-      tenantId: tenantId,
-      createdBy: createdBy,
-    });
-
-    res.status(200).json({
-      status: 200,
-      message: "Tests fetched successfully",
-      count: panels.length,
-      panels,
-    });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch tests", error: error.message });
+  const tenantId = req.user?.tenantId?._id || req.user?.tenantId;
+  if (!tenantId) {
+    throw new ApiError(403, "Tenant context required");
   }
+
+  const panels = await addPannel.find({ tenantId }).sort({ order: 1, _id: 1 });
+
+  return res.status(200).json({
+    status: 200,
+    message: "Panels fetched successfully",
+    count: panels.length,
+    panels
+  });
 });
 
 const deletePanelsController = asyncHandler(async (req, res) => {
-    const { panelIds } = req.body;
-    if (!panelIds || !Array.isArray(panelIds) || panelIds.length === 0) {
-        throw new ApiError(400, "panelIds array is required");
-    }
-    const deletedPanels = await addPannel.deleteMany({ _id: { $in: panelIds } });
-    return res.status(200).json(new ApiResponse(200, deletedPanels, "Panels deleted successfully"));
+  const { panelIds } = req.body;
+  if (!panelIds || !Array.isArray(panelIds) || panelIds.length === 0) {
+    throw new ApiError(400, "panelIds array is required");
+  }
+
+  const tenantId = req.user?.tenantId?._id || req.user?.tenantId;
+  const ownerId = req.user.role === "staff" ? req.user.parentUser : req.user._id;
+  const scope = tenantId ? { tenantId } : { createdBy: ownerId };
+
+  const deletedPanels = await addPannel.deleteMany({
+    _id: { $in: panelIds },
+    ...scope
+  });
+
+  return res.status(200).json(new ApiResponse(200, deletedPanels, "Panels deleted successfully"));
 });
 
 export {
@@ -605,5 +545,5 @@ export {
   tenantAllPanel,
   addpannelcontrollerforadmin,
   adminEditPannelController,
-  deletePanelsController,
+  deletePanelsController
 };

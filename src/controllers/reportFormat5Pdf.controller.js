@@ -1593,7 +1593,7 @@ export async function generateFormat5PdfBuffer(options = {}, helpers = {}) {
       const safeHeaderHeight = inlinedHeader
         ? Math.min(460, Math.max(headermarginPx + 45, measured.headerHeight || headermarginPx + 100))
         : headermarginPx;
-      const safeFooterHeight = Math.min(480, Math.max(footermarginPx + 58, measured.footerHeight || footermarginPx + 88));
+      const safeFooterHeight = Math.min(480, Math.max(footermarginPx + 36, measured.footerHeight || footermarginPx + 64));
 
       const marginTopPx = safeHeaderHeight + headerContentGapPx;
       const marginBottomPx = safeFooterHeight + 10;

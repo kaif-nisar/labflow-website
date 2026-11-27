@@ -40,7 +40,10 @@ export function resolveEffectiveSignatureLayout({
   ];
 
   for (const candidate of candidates) {
-    if (candidate && typeof candidate === "object" && candidate.slots) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return normalizeSignatureLayout(candidate);
+    }
+    if (candidate && typeof candidate === "object" && (candidate.slots || candidate.footer)) {
       return normalizeSignatureLayout(candidate);
     }
   }
@@ -63,15 +66,19 @@ export function applySignatureLayoutToFooterHtml({
   showDoc2,
 } = {}) {
   const normalizedLayout = normalizeSignatureLayout(signatureLayout);
+  const hasCustomSlots = Boolean(normalizedLayout.isCustom);
+  const hasCustomFooter = Boolean(normalizedLayout.footer?.isCustom);
   const raw = String(rawFooterHtml || "");
 
-  if (!raw.trim() || !normalizedLayout.isCustom) {
+  if (!raw.trim() || (!hasCustomSlots && !hasCustomFooter)) {
     return {
       footerHtml: raw,
       layoutCss: "",
       layout: normalizedLayout,
       stageHeightPx: 0,
       isCustom: false,
+      hasCustomSlots: false,
+      hasCustomFooter: false,
     };
   }
 
@@ -134,7 +141,7 @@ export function applySignatureLayoutToFooterHtml({
 
       // Keep optional inline QR (in legacy Standard reportFormat.js) centered & non-overlapping
       const $inlineQr = $stage.children(".qr-div").first();
-      if ($inlineQr.length) {
+      if ($inlineQr.length && hasCustomSlots) {
         $inlineQr.attr("style", "position:absolute;left:50%;transform:translateX(-50%);bottom:2px;z-index:1;");
       }
     }
@@ -158,8 +165,9 @@ export function applySignatureLayoutToFooterHtml({
 
   const stageHeightPx = computeSignatureStageHeightPx(normalizedLayout, visibility);
   const layoutCss = buildCustomSignatureStageCss({
-    containerSelector: isFormat5 ? ".signatures, .oh5-signatures" : ".signed-off-div2",
+    containerSelector: isFormat5 ? ".signatures, .oh5-signatures" : ".pdf-footer-div .signed-off-div2",
     slotSelector: isFormat5 ? ".oh5-sign-slot" : ".left-sign",
+    footerWrapSelector: isFormat5 ? ".oh5-footer-wrap" : null,
     layout: normalizedLayout,
     visibility,
     baseFontSizePx,
@@ -171,5 +179,7 @@ export function applySignatureLayoutToFooterHtml({
     layout: normalizedLayout,
     stageHeightPx,
     isCustom: true,
+    hasCustomSlots,
+    hasCustomFooter,
   };
 }

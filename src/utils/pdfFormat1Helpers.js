@@ -366,18 +366,25 @@ export const buildFormat1PdfFooterTemplate = async ({
     showDoc2: showdoctorsecond,
   });
   const resolvedFooterMarkup = sigResult.footerHtml || safeFooter;
+  const isCompactFooter = Boolean(sigResult.hasCustomFooter && sigResult.stageHeightPx < 82);
+  const shellTopPad = isCompactFooter ? 2 : 6;
+  const divTopPad = isCompactFooter ? 3 : 6;
 
   const fragment = [
     "<style>",
     "* { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }",
     safeCss,
-    `.rf1-pdf-footer-shell { width: 100%; padding: 6px ${FORMAT1_SIDE_PAD_PX}px ${Math.max(8, footermarginPx)}px ${FORMAT1_SIDE_PAD_PX}px; font-family: ${fontStack}; color: #0f172a; background: transparent; }`,
-    `.pdf-footer-div { width: 100% !important; margin: 0 !important; padding-left: ${leftPadding}cm !important; padding-right: ${rightPadding}cm !important; border-top: 1px solid #cbd5e1; padding-top: 6px; font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
+    `.rf1-pdf-footer-shell { width: 100%; padding: ${shellTopPad}px ${FORMAT1_SIDE_PAD_PX}px ${Math.max(8, footermarginPx)}px ${FORMAT1_SIDE_PAD_PX}px; font-family: ${fontStack}; color: #0f172a; background: transparent; }`,
+    `.pdf-footer-div { width: 100% !important; margin: 0 !important; padding-left: ${leftPadding}cm !important; padding-right: ${rightPadding}cm !important; border-top: 1px solid #cbd5e1; padding-top: ${divTopPad}px; font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
     `.pdf-footer-div .signed-off-div { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; background: transparent !important; }`,
-    `.pdf-footer-div .signed-off-div2 { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: flex-end !important; gap: 18px !important; }`,
-    `.pdf-footer-div .left-sign { flex: 1 1 0; max-width: 210px; min-width: 110px; text-align: center !important; }`,
-    `.pdf-footer-div .left-sign img { max-height: 36px; max-width: 120px; width: auto; height: auto; object-fit: contain; margin: 0 auto 3px auto; display: block; }`,
-    `.pdf-footer-div .textspan { width: auto !important; min-width: 0 !important; max-width: 100% !important; text-align: center !important; font-family: ${fontStack} !important; font-size: ${Math.max(8.5, fontSize - 1).toFixed(1)}px !important; line-height: 1.28 !important; white-space: pre-line !important; color: #1e293b !important; }`,
+    ...(sigResult.isCustom
+      ? []
+      : [
+          `.pdf-footer-div .signed-off-div2 { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: flex-end !important; gap: 18px !important; }`,
+          `.pdf-footer-div .left-sign { flex: 1 1 0; max-width: 210px; min-width: 110px; text-align: center !important; }`,
+          `.pdf-footer-div .left-sign img { max-height: 36px; max-width: 120px; width: auto; height: auto; object-fit: contain; margin: 0 auto 3px auto; display: block; }`,
+          `.pdf-footer-div .textspan { width: auto !important; min-width: 0 !important; max-width: 100% !important; text-align: center !important; font-family: ${fontStack} !important; font-size: ${Math.max(8.5, fontSize - 1).toFixed(1)}px !important; line-height: 1.28 !important; white-space: pre-line !important; color: #1e293b !important; }`,
+        ]),
     sigResult.layoutCss || "",
     ".sign { display: none !important; }",
     "</style>",
@@ -609,7 +616,7 @@ export const generateFormat1PagePdf = async ({
   // Chromium places headerTemplate ~20-22px below top margin origin; +52px ensures ~30px crisp whitespace
   // between the Header Card bottom border and the first Main Category banner.
   const safeTopPx = Math.min(560, Math.max(headerMarginPx + 75, measured.headerHeight || headerMarginPx + 115)) + 52;
-  const safeBottomPx = Math.min(480, Math.max(footermarginPx + 48, measured.footerHeight || footermarginPx + 75)) + 20;
+  const safeBottomPx = Math.min(480, Math.max(footermarginPx + 36, measured.footerHeight || footermarginPx + 65)) + 14;
 
   const bodyDoc = buildFormat1PdfBodyDocument({
     cssContent,

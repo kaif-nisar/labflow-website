@@ -378,28 +378,29 @@ const addingTest = asyncHandler(async (req, res) => {
     } = req.body;
     // const superAdmin = req.user.id // get the super admin id from token 
 
-    if (!Name || !category || !final_price || !Price || !sampleType) {
-        return res.status(400).json({ message: "Missing required fields" })
+    const isBlankField = (v) => v === undefined || v === null || String(v).trim() === "";
+    if (!Name || !category || isBlankField(final_price) || isBlankField(Price) || !sampleType) {
+        return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // checking if test is allready in database
+    // checking if test is already in database
     const allreadyExistedTest = await testSchema.findOne(
         {
-            Name: Name,
+            Name: String(Name).trim(),
             createdBy: userId
         }
-    )
+    );
 
     if (allreadyExistedTest) {
-        return res.status(400).json({ message: "This test is already Exists" });
+        return res.status(400).json({ message: "A test with this name already exists" });
     }
 
     const lastPanel = await testSchema
-        .findOne({ createdBy: userId}) // optionally filter by tenant
-        .sort({ order: -1 })             // highest order first
-        .select('order');                // only fetch order field
+        .findOne({ createdBy: userId })
+        .sort({ order: -1 })
+        .select('order');
 
-    const nextOrder = lastPanel ? lastPanel.order + 1 : 1;
+    const nextOrder = (Number(lastPanel?.order) || 0) + 1;
     const nextBookingCode = await getNextBookingCodeForScope({
         createdBy: userId,
         createdByRole: "superAdmin"
@@ -506,28 +507,29 @@ const addingTesttenant = asyncHandler(async (req, res) => {
     } = req.body;
     // const superAdmin = req.user.id // get the super admin id from token 
 
-    if (!Name || !category || !final_price || !Price || !sampleType) {
-        return res.status(400).json({ message: "Missing required fields" })
+    const isBlankField = (v) => v === undefined || v === null || String(v).trim() === "";
+    if (!Name || !category || isBlankField(final_price) || isBlankField(Price) || !sampleType) {
+        return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // checking if test is allready in database
+    // checking if test is already in database
     const allreadyExistedTest = await testSchema.findOne(
         {
-            Name: Name,
+            Name: String(Name).trim(),
             tenantId: tenantId
         }
-    )
+    );
 
     if (allreadyExistedTest) {
-        return res.status(400).json({ message: "This test is already Exists" });
+        return res.status(400).json({ message: "A test with this name already exists" });
     }
 
     const lastPanel = await testSchema
-        .findOne({ createdBy: req.user._id }) // optionally filter by tenant
-        .sort({ order: -1 })             // highest order first
-        .select('order');                // only fetch order field
+        .findOne({ tenantId })
+        .sort({ order: -1 })
+        .select('order');
 
-    const nextOrder = lastPanel ? lastPanel.order + 1 : 1;
+    const nextOrder = (Number(lastPanel?.order) || 0) + 1;
     const nextBookingCode = await getNextBookingCodeForScope({ tenantId });
     const normalizedParameters = normalizeParameterPayload(parameters);
 
@@ -725,13 +727,13 @@ const fetchsample = async (req, res) => {
         query.createdBy = req.user._id
     }
 
-    const samples = await sampleSchema.find(query);
+    const samples = await sampleSchema.find(query).sort({ Name: 1 });
 
     if (!samples) {
-        return res.status(500).json({ message: "! No samples found" })
+        return res.status(500).json({ message: "No sample types found" })
     }
 
-    return res.status(200).json({ message: "sample added successfully", data: samples });
+    return res.status(200).json({ message: "Sample types fetched successfully", data: samples });
 }
 
 // admin fetch samples correct 
@@ -739,13 +741,13 @@ const fetchsampleadmin = async (req, res) => {
 
     const samples = await sampleSchema.find({
         tenantId: req.user.tenantId._id
-    })
+    }).sort({ Name: 1 });
 
     if (!samples) {
-        return res.status(500).json({ message: "! No samples found" })
+        return res.status(500).json({ message: "No sample types found" })
     }
 
-    return res.status(200).json({ message: "sample added successfully", data: samples });
+    return res.status(200).json({ message: "Sample types fetched successfully", data: samples });
 }
 // Todo: Update test interpretation
 const updateTestInterpretation = asyncHandler(async (req, res) => {
@@ -807,110 +809,129 @@ let userId;
     });
 });
 
+/**
+ * Resolve tenant/owner query scope consistently for catalog reorder APIs.
+ */
+const parseOrderPayload = (body = {}) => {
+    if (Array.isArray(body.updatedOrder) && body.updatedOrder.length > 0) {
+        return body.updatedOrder;
+    }
+    if (Array.isArray(body.orderedIds) && body.orderedIds.length > 0) {
+        return body.orderedIds.map((id, idx) => ({ id, order: idx + 1 }));
+    }
+    return [];
+};
+
 const updateTestOrder = asyncHandler(async (req, res) => {
-    const { updatedOrder } = req.body;
+    const updatedOrder = parseOrderPayload(req.body);
     const tid = req.user.tenantId._id;
     if (!Array.isArray(updatedOrder) || updatedOrder.length === 0) {
         throw new ApiError(400, "Invalid or empty order data");
     }
 
     try {
-        const bulkOperations = await Promise.all(updatedOrder.map(async (orderData) => {
-            let { id, order } = orderData;
-
-            // If id is a valid MongoDB ObjectId, use it directly
-            if (mongoose.isValidObjectId(id)) {
-                id = new mongoose.Types.ObjectId(id); // Convert string ObjectId to ObjectId type
+        const dedupedMap = new Map();
+        for (const orderData of updatedOrder) {
+            let { id, order } = orderData || {};
+            const numericOrder = Number(order);
+            if (!Number.isFinite(numericOrder) || numericOrder < 1) {
+                throw new ApiError(400, `Invalid order value: ${order}`);
             }
-            // If id is a numeric value (e.g., '4'), map it to ObjectId by querying the database
-            else if (typeof id !== "number") {
-                const idofNumber = parseInt(id);
+
+            if (mongoose.isValidObjectId(id)) {
+                id = new mongoose.Types.ObjectId(id);
+            } else if (typeof id !== "number" && id !== undefined && id !== null) {
+                const idofNumber = parseInt(id, 10);
                 const test = await testSchema.findOne({
                     order: idofNumber,
                     tenantId: tid
-                });
+                }).select("_id").lean();
                 if (!test) {
                     throw new ApiError(400, `Test with order ${id} not found`);
                 }
-                id = test._id; // Use the found ObjectId
-            }
-            else {
-                throw new ApiError(400, `Invalid ObjectId: ${id}`);
+                id = test._id;
+            } else {
+                throw new ApiError(400, `Invalid test ID: ${id}`);
             }
 
-            return {
+            dedupedMap.set(String(id), {
                 updateOne: {
-                    filter: { _id: id },
-                    update: { order },
+                    filter: { _id: id, tenantId: tid },
+                    update: { $set: { order: Math.round(numericOrder) } },
                 },
-            };
-        }));
+            });
+        }
 
-        // Execute the bulk write operation
-        await testSchema.bulkWrite(bulkOperations);
+        const bulkOperations = Array.from(dedupedMap.values());
+        if (bulkOperations.length > 0) {
+            await testSchema.bulkWrite(bulkOperations);
+        }
 
         res.json({
             status: 200,
+            updatedCount: bulkOperations.length,
             message: "Test order updated successfully",
         });
     } catch (error) {
         console.error("Error updating test order:", error);
+        if (error instanceof ApiError) throw error;
         throw new ApiError(500, "Failed to update test order");
     }
 });
+
 const updateTestOrdersuper = asyncHandler(async (req, res) => {
-    const { updatedOrder } = req.body;
-    let userId;
-    if (req.user.role === 'staff') {
-        userId = req.user.parentUser;
-    } else {
-        userId = req.user._id;
-    }
+    const updatedOrder = parseOrderPayload(req.body);
+    const userId = req.user.role === 'staff' ? req.user.parentUser : req.user._id;
     if (!Array.isArray(updatedOrder) || updatedOrder.length === 0) {
         throw new ApiError(400, "Invalid or empty order data");
     }
 
     try {
-        const bulkOperations = await Promise.all(updatedOrder.map(async (orderData) => {
-            let { id, order } = orderData;
-
-            // If id is a valid MongoDB ObjectId, use it directly
-            if (mongoose.isValidObjectId(id)) {
-                id = new mongoose.Types.ObjectId(id); // Convert string ObjectId to ObjectId type
+        const dedupedMap = new Map();
+        for (const orderData of updatedOrder) {
+            let { id, order } = orderData || {};
+            const numericOrder = Number(order);
+            if (!Number.isFinite(numericOrder) || numericOrder < 1) {
+                throw new ApiError(400, `Invalid order value: ${order}`);
             }
-            // If id is a numeric value (e.g., '4'), map it to ObjectId by querying the database
-            else if (typeof id !== "number") {
-                const idofNumber = parseInt(id);
+
+            if (mongoose.isValidObjectId(id)) {
+                id = new mongoose.Types.ObjectId(id);
+            } else if (typeof id !== "number" && id !== undefined && id !== null) {
+                const idofNumber = parseInt(id, 10);
                 const test = await testSchema.findOne({
                     order: idofNumber,
                     createdBy: userId
-                });
+                }).select("_id").lean();
                 if (!test) {
                     throw new ApiError(400, `Test with order ${id} not found`);
                 }
-                id = test._id; // Use the found ObjectId
-            }
-            else {
-                throw new ApiError(400, `Invalid ObjectId: ${id}`);
+                id = test._id;
+            } else {
+                throw new ApiError(400, `Invalid test ID: ${id}`);
             }
 
-            return {
+            dedupedMap.set(String(id), {
                 updateOne: {
-                    filter: { _id: id },
-                    update: { order },
+                    filter: { _id: id, createdBy: userId },
+                    update: { $set: { order: Math.round(numericOrder) } },
                 },
-            };
-        }));
+            });
+        }
 
-        // Execute the bulk write operation
-        await testSchema.bulkWrite(bulkOperations);
+        const bulkOperations = Array.from(dedupedMap.values());
+        if (bulkOperations.length > 0) {
+            await testSchema.bulkWrite(bulkOperations);
+        }
 
         res.json({
             status: 200,
+            updatedCount: bulkOperations.length,
             message: "Test order updated successfully",
         });
     } catch (error) {
         console.error("Error updating test order:", error);
+        if (error instanceof ApiError) throw error;
         throw new ApiError(500, "Failed to update test order");
     }
 });
@@ -1216,29 +1237,42 @@ const editTest = asyncHandler(async (req, res) => {
     }
     const normalizedHideMethodInstrument = parseBooleanInput(req.body.hideMethodInstrument);
     const normalizedHideInterpretation = parseBooleanInput(req.body.hideInterpretation);
-    if (!Name || !final_price || !Short_name || !category || !Price || !sampleType) {
-        return res.status(401).json({ message: "missing required fields", status: "error" })
+    const isBlankField = (v) => v === undefined || v === null || String(v).trim() === "";
+    if (!Name || isBlankField(final_price) || !category || isBlankField(Price) || !sampleType) {
+        return res.status(400).json({ message: "Missing required fields", status: "error" });
     }
-    const currentTest = await testSchema.findById({
+    const currentTest = await testSchema.findOne({
         createdBy: userId,
         _id
     });
 
     if (!currentTest) {
-        return res.status(401).json({ message: "something went wrong, Test not found", status: "error" });
+        return res.status(404).json({ message: "Test not found or access denied", status: "error" });
+    }
+    const trimmedName = String(Name).trim();
+    if (trimmedName && trimmedName !== currentTest.Name) {
+        const duplicateName = await testSchema.findOne({
+            createdBy: userId,
+            Name: trimmedName,
+            _id: { $ne: currentTest._id }
+        }).select("_id").lean();
+        if (duplicateName) {
+            return res.status(400).json({ message: "A test with this name already exists", status: "error" });
+        }
     }
     const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
-            _id
+            _id,
+            createdBy: userId
         },
         {
-            Name,
-            Short_name,
+            Name: trimmedName || currentTest.Name,
+            Short_name: Short_name !== undefined ? String(Short_name).trim() : (currentTest.Short_name || ""),
             category: category || "",
             Price,
-            parameters: normalizedParameters || null,
+            parameters: Array.isArray(normalizedParameters) ? normalizedParameters : [],
             sampleType,
             method: method || "",
             tat: tat || "",
@@ -1246,6 +1280,7 @@ const editTest = asyncHandler(async (req, res) => {
             interpretation: interpretation || "",
             hideMethodInstrument: normalizedHideMethodInstrument,
             hideInterpretation: normalizedHideInterpretation,
+            ...(req.body.isDocumentedTest !== undefined ? { isDocumentedTest: parseBooleanInput(req.body.isDocumentedTest) } : {}),
             final_price
         },
         { new: true }
@@ -1285,6 +1320,7 @@ const editTest = asyncHandler(async (req, res) => {
 const editTesttenant = asyncHandler(async (req, res) => {
     const {
         _id,
+        Name,
         final_price,
         Short_name,
         category,
@@ -1310,29 +1346,42 @@ const editTesttenant = asyncHandler(async (req, res) => {
     const normalizedHideMethodInstrument = parseBooleanInput(req.body.hideMethodInstrument);
     const normalizedHideInterpretation = parseBooleanInput(req.body.hideInterpretation);
 
-    if (!final_price || !Short_name || !category || !Price || !sampleType) {
-        return res.status(401).json({ message: "missing required fields", status: "error" })
+    const isBlankField = (v) => v === undefined || v === null || String(v).trim() === "";
+    if (isBlankField(final_price) || !category || isBlankField(Price) || !sampleType) {
+        return res.status(400).json({ message: "Missing required fields", status: "error" });
     }
 
-    const currentTest = await testSchema.findById({
+    const currentTest = await testSchema.findOne({
         tenantId: tid,
-        createdBy: userId,
         _id
     });
     if (!currentTest) {
-        return res.status(401).json({ message: "something went wrong, Test not found", status: "error" });
+        return res.status(404).json({ message: "Test not found", status: "error" });
+    }
+    const trimmedName = typeof Name === "string" ? Name.trim() : "";
+    if (trimmedName && trimmedName !== currentTest.Name) {
+        const duplicateName = await testSchema.findOne({
+            tenantId: tid,
+            Name: trimmedName,
+            _id: { $ne: currentTest._id }
+        }).select("_id").lean();
+        if (duplicateName) {
+            return res.status(400).json({ message: "A test with this name already exists", status: "error" });
+        }
     }
     const normalizedParameters = normalizeParameterPayload(parameters, currentTest.parameters);
 
     const editedTest = await testSchema.findOneAndUpdate(
         {
-            _id
+            _id,
+            tenantId: tid
         },
         {
-            Short_name,
+            ...(trimmedName ? { Name: trimmedName } : {}),
+            Short_name: Short_name !== undefined ? String(Short_name).trim() : (currentTest.Short_name || ""),
             category: category || "",
             Price,
-            parameters: normalizedParameters || null,
+            parameters: Array.isArray(normalizedParameters) ? normalizedParameters : [],
             sampleType,
             method: method || "",
             tat: tat || "",
@@ -1391,7 +1440,7 @@ const allTest = asyncHandler(async (req, res) => {
         query.createdBy = req.user._id;
     }
 
-    const allrecievedTest = await testSchema.find(query);
+    const allrecievedTest = await testSchema.find(query).sort({ order: 1, _id: 1 });
     await ensureTestDocumentsHaveMasterKeys(allrecievedTest);
 
     if (!allrecievedTest) {
@@ -2121,7 +2170,7 @@ const tenantTest = asyncHandler(async (req, res) => {
     try {
         const tests = await testSchema.find({
             tenantId: tenantId,
-        });
+        }).sort({ order: 1, _id: 1 });
         await ensureTestDocumentsHaveMasterKeys(tests);
 
         return res.status(200).json({
@@ -2146,7 +2195,8 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
             packageIds = [],
             categoryIds = [],
             unitIds = [],
-            sampleTypeIds = []
+            sampleTypeIds = [],
+            overwriteExisting = false
         } = req.body;
 
         if (!franchiseeId) {
@@ -2167,6 +2217,18 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
         // If you need the tenant inside the transaction for consistent reads, re-fetch using the session.
         const tenantInSession = await Tenant.findById(franchiseeId).session(session);
         const createdBy = tenantInSession?.adminDetails?.userId || tenant.adminDetails.userId;
+
+        // Replace only catalog copies previously assigned from the Super Admin.
+        // Tenant-created tests/models remain untouched. All removals happen in
+        // this transaction, so a failed copy restores the old assignment intact.
+        if (overwriteExisting === true) {
+            await categorydb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseCategory: true }, { session });
+            await unitdb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseUnit: true }, { session });
+            await sampleSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseSample: true }, { session });
+            await testSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseTest: true }, { session });
+            await addPannel.deleteMany({ tenantId: franchiseeId, purchasedFromBasePanel: true }, { session });
+            await Package.deleteMany({ tenantId: franchiseeId, purchasedFromBasePackage: true }, { session });
+        }
 
         let assignedCounts = {
             tests: 0,
@@ -2918,9 +2980,14 @@ const getAllAddOns = asyncHandler(async (req, res) => {
         userId = req.user._id
     }
     try {
-        const units = await unitdb.find({ createdBy: userId }).select("_id");
-        const sampleTypes = await sampleSchema.find({ createdBy: userId }).select("_id");
-        const categories = await categorydb.find({ createdBy: userId }).select("_id");
+        // Assignment is only allowed to copy catalog records. Tenant-created
+        // records must never be offered as global add-ons, even if their creator
+        // happens to be the same Super Admin account.
+        const [units, sampleTypes, categories] = await Promise.all([
+            unitdb.find({ createdBy: userId, isBaseUnit: true }).select("_id").lean(),
+            sampleSchema.find({ createdBy: userId, isBaseSample: true }).select("_id").lean(),
+            categorydb.find({ createdBy: userId, isBaseCategory: true }).select("_id").lean(),
+        ]);
         const unitIds = units.map(u => u._id);
         const sampleTypeIds = sampleTypes.map(s => s._id);
         const categoryIds = categories.map(c => c._id);

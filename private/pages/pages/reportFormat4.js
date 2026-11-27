@@ -1,4 +1,11 @@
 (async function () {
+    function parseStoredCheckboxFlag(value) {
+        if (typeof value === "boolean") return value;
+        if (typeof value === "number") return value === 1;
+        if (typeof value === "string") return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+        return false;
+    }
+
     const bootStartedAt = Date.now();
     const MIN_SKELETON_VISIBLE_MS = 150;
     const bootLoaderEl    = document.getElementById('pageBootLoader');
@@ -666,7 +673,7 @@
 
                 const secBox = document.createElement('div');
                 secBox.className = 'sec-box';
-                if (data.categorizedPDF && i > 0) secBox.classList.add('page-break');
+                if (parseStoredCheckboxFlag(data.categorizedPDF) && i > 0) secBox.classList.add('page-break');
 
                 // ── Category heading ──
                 const catDiv = document.createElement('div');

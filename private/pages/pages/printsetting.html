@@ -730,6 +730,76 @@
             font-weight: 700;
             color: #0f766e;
         }
+        /* Entire Footer Container Size Controls Card */
+        .ps-footer-size-box {
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 14px;
+            background: #f8fbff;
+        }
+        .ps-footer-size-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .ps-footer-size-title {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ps-footer-dims-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 8px;
+            padding: 8px;
+            background: #ffffff;
+            border: 1px solid #dbeafe;
+            border-radius: 6px;
+        }
+        .ps-footer-dims-grid .ps-sig-scale-row input[type="range"] {
+            accent-color: #2563eb;
+        }
+        .ps-footer-dims-grid .ps-sig-scale-val {
+            min-width: 42px;
+            color: #1d4ed8;
+        }
+        .ps-footer-align-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .ps-footer-align-btns {
+            display: inline-flex;
+            background: #e2e8f0;
+            padding: 2px;
+            border-radius: 6px;
+            gap: 2px;
+        }
+        .ps-footer-align-btn {
+            border: none;
+            background: transparent;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .ps-footer-align-btn.is-active {
+            background: #ffffff;
+            color: #1d4ed8;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+        }
         .ps-sig-toolbar {
             display: flex;
             align-items: center;
@@ -1030,8 +1100,9 @@
 
         /* Signatures Section on Report (Interactive Drag & Resize Canvas) */
         .ps-doc-signatures-wrap {
+            position: relative;
             margin-top: auto;
-            padding-top: 14px;
+            padding-top: 8px;
             border-top: 1px dashed #cbd5e1;
             width: 100%;
         }
@@ -1039,15 +1110,112 @@
         .ps-doc-signatures-grid {
             position: relative;
             width: 100%;
-            min-height: 175px;
+            min-height: 52px;
             border: 1.5px dashed #94a3b8;
             border-radius: 6px;
             background: rgba(248, 250, 252, 0.65);
             user-select: none;
-            transition: border-color 0.15s ease, min-height 0.12s ease;
+            box-sizing: border-box;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
         }
-        .ps-doc-signatures-grid:hover {
-            border-color: #0f766e;
+        .ps-doc-signatures-grid:hover,
+        .ps-doc-signatures-grid.is-footer-selected,
+        .ps-doc-signatures-grid.is-footer-interacting {
+            border-color: #2563eb;
+        }
+        .ps-doc-signatures-grid.is-footer-selected,
+        .ps-doc-signatures-grid.is-footer-interacting {
+            background: rgba(239, 246, 255, 0.55);
+            box-shadow: 0 4px 16px rgba(37, 99, 235, 0.14);
+        }
+        .ps-doc-signatures-grid.is-draggable-footer {
+            cursor: grab;
+        }
+        .ps-doc-signatures-grid.is-footer-interacting {
+            cursor: grabbing;
+        }
+        .ps-footer-box-pill {
+            position: absolute;
+            top: -19px;
+            left: 0;
+            padding: 1px 7px;
+            border-radius: 4px;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 700;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+            z-index: 26;
+        }
+        .ps-doc-signatures-grid:hover .ps-footer-box-pill,
+        .ps-doc-signatures-grid.is-footer-selected .ps-footer-box-pill,
+        .ps-doc-signatures-grid.is-footer-interacting .ps-footer-box-pill {
+            opacity: 1;
+        }
+        .ps-footer-handle {
+            position: absolute;
+            background: #ffffff;
+            border: 2px solid #2563eb;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+            opacity: 0;
+            transition: opacity 0.12s ease, transform 0.12s ease, background-color 0.12s ease;
+            z-index: 28;
+            touch-action: none;
+        }
+        .ps-doc-signatures-grid:hover .ps-footer-handle,
+        .ps-doc-signatures-grid.is-footer-selected .ps-footer-handle,
+        .ps-doc-signatures-grid.is-footer-interacting .ps-footer-handle {
+            opacity: 1;
+        }
+        .ps-footer-handle:hover {
+            background: #2563eb;
+        }
+        .ps-footer-handle.fh-nw,
+        .ps-footer-handle.fh-ne,
+        .ps-footer-handle.fh-se,
+        .ps-footer-handle.fh-sw {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+        }
+        .ps-footer-handle.fh-n,
+        .ps-footer-handle.fh-s {
+            width: 28px;
+            height: 6px;
+            border-radius: 999px;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: ns-resize;
+        }
+        .ps-footer-handle.fh-e,
+        .ps-footer-handle.fh-w {
+            width: 6px;
+            height: 28px;
+            border-radius: 999px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: ew-resize;
+        }
+        .ps-footer-handle.fh-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+        .ps-footer-handle.fh-n  { top: -4px; }
+        .ps-footer-handle.fh-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+        .ps-footer-handle.fh-e  { right: -4px; }
+        .ps-footer-handle.fh-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+        .ps-footer-handle.fh-s  { bottom: -4px; }
+        .ps-footer-handle.fh-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+        .ps-footer-handle.fh-w  { left: -4px; }
+        .ps-footer-snap-guide {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 0;
+            border-left: 1.5px dashed #2563eb;
+            display: none;
+            pointer-events: none;
+            z-index: 32;
         }
         .ps-sig-stage-hint {
             position: absolute;
@@ -1206,8 +1374,8 @@
             justify-content: space-between;
             font-size: 9.5px;
             color: #64748b;
-            margin-top: 14px;
-            padding-top: 8px;
+            margin-top: 8px;
+            padding-top: 6px;
             border-top: 1px solid #e2e8f0;
         }
 
@@ -1593,12 +1761,12 @@
                                 <div class="ps-hint">Reserved for logo / clinic banner</div>
                             </div>
                             <div class="ps-form-group">
-                                <label class="ps-label" for="footer">Footer Height / Bottom Margin</label>
+                                <label class="ps-label" for="footer">Bottom Page Gap / Pre-Printed Footer</label>
                                 <div class="ps-input-unit-wrapper">
                                     <input type="number" id="footer" class="ps-input" step="0.1" min="0" max="10" value="1.8">
                                     <span class="ps-input-unit-badge">cm</span>
                                 </div>
-                                <div class="ps-hint">Reserved for signatures & address</div>
+                                <div class="ps-hint">Space below footer (for pre-printed address/margin)</div>
                             </div>
                         </div>
 
@@ -1790,14 +1958,14 @@
                     </div>
                 </div>
 
-                <!-- 4. Advanced Signature Customization Engine -->
+                <!-- 4. Advanced Footer Size & Signature Customization Engine -->
                 <div class="ps-card" id="cardSignatures">
                     <div class="ps-card-header" onclick="togglePsCard('cardSignatures')">
                         <div class="ps-card-header-left">
                             <div class="ps-card-icon"><i class="fa-solid fa-signature"></i></div>
                             <div>
-                                <div class="ps-card-title">Doctor & Technician Signatures</div>
-                                <div class="ps-card-subtitle">Drag boxes to position & resize freely across PDFs</div>
+                                <div class="ps-card-title">Footer Size & Signatures</div>
+                                <div class="ps-card-subtitle">Resize footer height/width & drag signatures freely</div>
                             </div>
                         </div>
                         <i class="fa-solid fa-chevron-down ps-card-chevron"></i>
@@ -1806,12 +1974,53 @@
                         <!-- Interactive Drag & Resize Notice + Reset -->
                         <div class="ps-sig-canvas-banner">
                             <div>
-                                <strong><i class="fa-solid fa-up-down-left-right"></i> Free Drag & Resize Mode</strong><br>
-                                Right-side A4 Canvas par kisi bhi signature box ko cursor se drag karke set karein aur corners se chhota/bada karein.
+                                <strong><i class="fa-solid fa-up-down-left-right"></i> Free Drag & Resize (Footer + Signatures)</strong><br>
+                                Canvas par blue border handles se poore Footer ki height/width chhoti-badi karein, aur andar ke signature boxes ko drag/resize karein.
                             </div>
                             <button type="button" class="ps-btn ps-btn-secondary" id="btnResetSignatureLayout" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;" onclick="resetSignatureLayout()">
-                                <i class="fa-solid fa-rotate-left"></i> Reset
+                                <i class="fa-solid fa-rotate-left"></i> Reset All
                             </button>
+                        </div>
+
+                        <!-- Entire Footer Container Width & Height Controls -->
+                        <div class="ps-footer-size-box" id="footerSizeBox">
+                            <div class="ps-footer-size-header">
+                                <span class="ps-footer-size-title">
+                                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i> Entire Footer Box (Height & Width)
+                                </span>
+                                <button type="button" class="ps-btn ps-btn-secondary" id="btnResetFooterLayout" style="padding: 3px 8px; font-size: 10.5px;" onclick="resetFooterLayout()">
+                                    <i class="fa-solid fa-rotate-left"></i> Reset Footer
+                                </button>
+                            </div>
+                            <div class="ps-preset-chips" id="footerSizePresets">
+                                <span class="ps-chip" data-footer-preset="mini" onclick="applyFooterPreset(64, 100, 0)">Mini (64px)</span>
+                                <span class="ps-chip" data-footer-preset="compact" onclick="applyFooterPreset(80, 100, 0)">Compact (80px)</span>
+                                <span class="ps-chip is-active" data-footer-preset="standard" onclick="applyFooterPreset(100, 100, 0)">Standard (100px)</span>
+                                <span class="ps-chip" data-footer-preset="narrow" onclick="applyFooterPreset(76, 75, 12.5)">Compact 75%</span>
+                            </div>
+                            <div class="ps-footer-dims-grid">
+                                <div class="ps-sig-dim-field"><label for="footer-box-x">Left (%)</label><input type="number" id="footer-box-x" step="1" min="0" max="60" value="0"></div>
+                                <div class="ps-sig-dim-field"><label for="footer-box-w">Width (%)</label><input type="number" id="footer-box-w" step="1" min="40" max="100" value="100"></div>
+                                <div class="ps-sig-dim-field"><label for="footer-box-h">Height (px)</label><input type="number" id="footer-box-h" step="1" min="52" max="260" value="100"></div>
+                                <div class="ps-sig-scale-row">
+                                    <label for="footer-box-w-range">Footer Width</label>
+                                    <input type="range" id="footer-box-w-range" min="40" max="100" step="1" value="100">
+                                    <span class="ps-sig-scale-val" id="footer-box-w-val">100%</span>
+                                </div>
+                                <div class="ps-sig-scale-row">
+                                    <label for="footer-box-h-range">Footer Height</label>
+                                    <input type="range" id="footer-box-h-range" min="52" max="260" step="2" value="100">
+                                    <span class="ps-sig-scale-val" id="footer-box-h-val">100px</span>
+                                </div>
+                            </div>
+                            <div class="ps-footer-align-row">
+                                <span class="ps-label" style="margin-bottom: 0; font-size: 11px;">Footer Alignment</span>
+                                <div class="ps-footer-align-btns" role="group" aria-label="Footer horizontal alignment">
+                                    <button type="button" class="ps-footer-align-btn" id="footerAlignLeft" onclick="setFooterAlign('left')">Left</button>
+                                    <button type="button" class="ps-footer-align-btn is-active" id="footerAlignCenter" onclick="setFooterAlign('center')">Center</button>
+                                    <button type="button" class="ps-footer-align-btn" id="footerAlignRight" onclick="setFooterAlign('right')">Right</button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Signature Slot 1: Lab Incharge -->
@@ -1833,10 +2042,10 @@
                                     <div class="ps-sig-dim-field"><label>Left (%)</label><input type="number" id="sig-lab-x" step="1" min="0" max="88" value="0"></div>
                                     <div class="ps-sig-dim-field"><label>Top (px)</label><input type="number" id="sig-lab-y" step="1" min="0" max="170" value="10"></div>
                                     <div class="ps-sig-dim-field"><label>Width (%)</label><input type="number" id="sig-lab-w" step="1" min="12" max="75" value="28"></div>
-                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-lab-h" step="1" min="44" max="210" value="84"></div>
+                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-lab-h" step="1" min="36" max="210" value="84"></div>
                                     <div class="ps-sig-scale-row">
                                         <label for="sig-lab-scale">Overall Size</label>
-                                        <input type="range" id="sig-lab-scale" min="60" max="165" step="5" value="100">
+                                        <input type="range" id="sig-lab-scale" min="48" max="165" step="5" value="100">
                                         <span class="ps-sig-scale-val" id="sig-lab-scale-val">100%</span>
                                     </div>
                                 </div>
@@ -1882,10 +2091,10 @@
                                     <div class="ps-sig-dim-field"><label>Left (%)</label><input type="number" id="sig-doc1-x" step="1" min="0" max="88" value="36"></div>
                                     <div class="ps-sig-dim-field"><label>Top (px)</label><input type="number" id="sig-doc1-y" step="1" min="0" max="170" value="10"></div>
                                     <div class="ps-sig-dim-field"><label>Width (%)</label><input type="number" id="sig-doc1-w" step="1" min="12" max="75" value="28"></div>
-                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-doc1-h" step="1" min="44" max="210" value="84"></div>
+                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-doc1-h" step="1" min="36" max="210" value="84"></div>
                                     <div class="ps-sig-scale-row">
                                         <label for="sig-doc1-scale">Overall Size</label>
-                                        <input type="range" id="sig-doc1-scale" min="60" max="165" step="5" value="100">
+                                        <input type="range" id="sig-doc1-scale" min="48" max="165" step="5" value="100">
                                         <span class="ps-sig-scale-val" id="sig-doc1-scale-val">100%</span>
                                     </div>
                                 </div>
@@ -1931,10 +2140,10 @@
                                     <div class="ps-sig-dim-field"><label>Left (%)</label><input type="number" id="sig-doc2-x" step="1" min="0" max="88" value="72"></div>
                                     <div class="ps-sig-dim-field"><label>Top (px)</label><input type="number" id="sig-doc2-y" step="1" min="0" max="170" value="10"></div>
                                     <div class="ps-sig-dim-field"><label>Width (%)</label><input type="number" id="sig-doc2-w" step="1" min="12" max="75" value="28"></div>
-                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-doc2-h" step="1" min="44" max="210" value="84"></div>
+                                    <div class="ps-sig-dim-field"><label>Height (px)</label><input type="number" id="sig-doc2-h" step="1" min="36" max="210" value="84"></div>
                                     <div class="ps-sig-scale-row">
                                         <label for="sig-doc2-scale">Overall Size</label>
-                                        <input type="range" id="sig-doc2-scale" min="60" max="165" step="5" value="100">
+                                        <input type="range" id="sig-doc2-scale" min="48" max="165" step="5" value="100">
                                         <span class="ps-sig-scale-val" id="sig-doc2-scale-val">100%</span>
                                     </div>
                                 </div>
@@ -1963,13 +2172,13 @@
                     </div>
                 </div>
 
-                <!-- 5. QR Code & Footer Configurations -->
+                <!-- 5. QR Code & Timestamps Configurations -->
                 <div class="ps-card" id="cardFooter">
                     <div class="ps-card-header" onclick="togglePsCard('cardFooter')">
                         <div class="ps-card-header-left">
                             <div class="ps-card-icon"><i class="fa-solid fa-qrcode"></i></div>
                             <div>
-                                <div class="ps-card-title">Barcode, QR Code & Footer</div>
+                                <div class="ps-card-title">Timestamps & Verification</div>
                                 <div class="ps-card-subtitle">TAT tracking & report verification labels</div>
                             </div>
                         </div>
@@ -2168,8 +2377,18 @@
 
                             <!-- Signatures Section Live Interactive Stage -->
                             <div class="ps-doc-signatures-wrap" id="docSignaturesContainer">
+                                <div class="ps-footer-snap-guide" id="footerSnapGuideX"></div>
                                 <div class="ps-doc-signatures-grid" id="docSignaturesGrid">
-                                    <span class="ps-sig-stage-hint" id="sigStageHint">Drag to position • Corners/edges to resize</span>
+                                    <span class="ps-footer-box-pill" id="footerBoxPill">Footer Box • 100% × 100px</span>
+                                    <span class="ps-footer-handle fh-nw" data-footer-handle="nw" title="Resize Footer Width & Height"></span>
+                                    <span class="ps-footer-handle fh-n" data-footer-handle="n" title="Resize Footer Height"></span>
+                                    <span class="ps-footer-handle fh-ne" data-footer-handle="ne" title="Resize Footer Width & Height"></span>
+                                    <span class="ps-footer-handle fh-e" data-footer-handle="e" title="Resize Footer Width"></span>
+                                    <span class="ps-footer-handle fh-se" data-footer-handle="se" title="Resize Footer Width & Height"></span>
+                                    <span class="ps-footer-handle fh-s" data-footer-handle="s" title="Resize Footer Height"></span>
+                                    <span class="ps-footer-handle fh-sw" data-footer-handle="sw" title="Resize Footer Width & Height"></span>
+                                    <span class="ps-footer-handle fh-w" data-footer-handle="w" title="Resize Footer Width"></span>
+                                    <span class="ps-sig-stage-hint" id="sigStageHint">Blue handles: Footer Size • Inner boxes: Signatures</span>
                                     <div class="ps-sig-snap-guide is-vertical" id="sigSnapGuideX"></div>
                                     <div class="ps-sig-snap-guide is-horizontal" id="sigSnapGuideY"></div>
 

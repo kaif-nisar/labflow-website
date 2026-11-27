@@ -1,4 +1,11 @@
 (async function () {
+    function parseStoredCheckboxFlag(value) {
+        if (typeof value === "boolean") return value;
+        if (typeof value === "number") return value === 1;
+        if (typeof value === "string") return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+        return false;
+    }
+
     async function ensureReportActionHelpersLoaded() {
         if (window.ReportActionHelpers) {
             return window.ReportActionHelpers;
@@ -551,7 +558,7 @@
         data.CategoryAndTest.forEach((categoryData, index) => {
             const section = document.createElement("div");
             section.className = "section";
-            if (data.categorizedPDF && index > 0) {
+            if (parseStoredCheckboxFlag(data.categorizedPDF) && index > 0) {
                 section.classList.add("page-break");
             }
 

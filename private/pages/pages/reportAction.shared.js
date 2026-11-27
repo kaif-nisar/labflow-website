@@ -1119,6 +1119,9 @@
                 selectedFontSize: data?.selectedFontSize,
                 selectedFontFamily: data?.selectedFontFamily,
                 RowSpacing: data?.RowSpacing,
+                LeftsignPd: data?.LeftsignPd,
+                Rightsignpd: data?.Rightsignpd,
+                signatureLayout: data?.signatureLayout || null,
                 showInvest: hasExplicitInvest ? Boolean(data?.showInvest ?? true) : true,
                 showInvestExplicit: hasExplicitInvest,
                 hideCategories: Boolean(data?.hideCategories),
@@ -1126,6 +1129,16 @@
                 hasUserSavedPrintSettings: hasSaved,
             };
             applyLegacyAbnormalHighlightStyles(prefs);
+            const sigLayout = data?.signatureLayout;
+            if (sigLayout && (sigLayout.isCustom || sigLayout.footer?.isCustom)) {
+                const footerStageEl = document.querySelector(".signed-off-div2");
+                if (footerStageEl && !footerStageEl.closest("#oh5PageRoot")) {
+                    const safeBodyPx = Number(data?.selectedFontSize) || 12;
+                    applySignatureLayoutToFooterContainer(footerStageEl, sigLayout, {
+                        baseFontSizePx: Math.max(8.5, safeBodyPx - 1),
+                    }).catch(() => {});
+                }
+            }
             return prefs;
         } catch {
             applyLegacyAbnormalHighlightStyles(defaults);
@@ -2073,7 +2086,7 @@
                 }
                 for (const origin of candidateOrigins) {
                     try {
-                        const mod = await import(`${origin}/js/signatureLayoutEngine.mjs?v=1`);
+                        const mod = await import(`${origin}/js/signatureLayoutEngine.mjs?v=2`);
                         if (typeof mod?.normalizeSignatureLayout === "function") {
                             cachedSigLayoutMod = mod;
                             return mod;

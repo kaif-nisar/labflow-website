@@ -45,7 +45,9 @@ import {
   tenantAllPackage,
   addPackagecontrollerforadmin,
   adminEditPackageController,
-  deletePackagesController
+  deletePackagesController,
+  updatePackageOrder,
+  updatePackageOrdersuper
 } from "../controllers/Package.controller.js";
 import {
   getOneTest,
@@ -1112,6 +1114,8 @@ router.route("/updatecategoryOrdersuper").post(verifySuperAdmin, authorizeRoles(
 // adding category
 router.route("/updatePannelOrder").post(verifyJWT, updatePannelOrder);
 router.route("/updatePannelOrdersuper").post(verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageTest"), updatePannelOrdersuper);
+router.route("/updatePackageOrder").post(verifyJWT, updatePackageOrder);
+router.route("/updatePackageOrdersuper").post(verifySuperAdmin, authorizeRoles(["superAdmin", "staff"]), checkStaffPermission("canManageTest"), updatePackageOrdersuper);
 
 // send sms
 router.route("/send-sms").post(upload.fields([

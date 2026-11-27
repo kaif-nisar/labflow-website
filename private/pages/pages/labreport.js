@@ -2004,8 +2004,15 @@ async function loadfunction() {
     }
     // for getting individual parameter lower and upper value
     const patient = { age: booking.year, gender: booking.gender };
-    // //for pdf only (print tale on seperate page)
-    // document.getElementById('check1').checked = true;
+    // ✅ Restore "Print Categories from new Page" checkbox from saved booking data
+    // booking.categorizedPDF is set by the server (SaveReportController saves it, 
+    // NewBooking.controller.js restores it via getbooking API)
+    const check1El = document.getElementById('check1');
+    if (check1El) {
+        check1El.checked = resolveStoredCheckboxFlag(
+            booking?.categorizedPDF
+        );
+    }
     let isdocumented = false;
     //Array for filtering tests and pannels
     let testArray = [];

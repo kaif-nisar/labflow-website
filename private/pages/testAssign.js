@@ -374,10 +374,16 @@ document.getElementById("assignModelsBtn").addEventListener("click", async funct
     const selectedPanels = Array.from(document.querySelectorAll(".panel-checkbox:checked")).map(cb => cb.dataset.id);
     const selectedPackages = Array.from(document.querySelectorAll(".package-checkbox:checked")).map(cb => cb.dataset.id);
 
-    if (selectedTests.length === 0 && selectedPanels.length === 0 && selectedPackages.length === 0) {
+    if (selectedTests.length === 0 && selectedPanels.length === 0 && selectedPackages.length === 0 &&
+        unitIds.length === 0 && sampleIds.length === 0 && categoryIds.length === 0) {
         showMessage('error', 'Please select at least one model to assign.');
         return;
     }
+
+    const overwriteExisting = document.getElementById('overwriteExisting')?.checked === true;
+    if (overwriteExisting && !window.confirm(
+        'Overwrite the target user’s existing Super Admin catalog copies with the current selection? User-created records will be kept. This cannot be undone.'
+    )) return;
 
     // Show loading state
     const originalText = this.innerHTML;
@@ -398,7 +404,8 @@ document.getElementById("assignModelsBtn").addEventListener("click", async funct
                 packageIds: selectedPackages,
                 unitIds: unitIds,
                 sampleTypeIds: sampleIds,
-                categoryIds: categoryIds
+                categoryIds: categoryIds,
+                overwriteExisting
             }),
         });
 
@@ -417,7 +424,7 @@ document.getElementById("assignModelsBtn").addEventListener("click", async funct
             throw new Error(`Unexpected server response (HTTP ${assignRes.status}). Please refresh the page and try again.`);
         }
 
-        if (result.success || assignRes.ok) {
+        if (assignRes.ok && result.success === true) {
             const assignedCounts = result.assignedCounts || {};
             const skippedCounts = result.skippedCounts || {};
 

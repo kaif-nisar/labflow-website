@@ -285,7 +285,9 @@ const buildPdfFooterTemplate = async ({
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
         safeCss,
-        `.pdf-footer-div { width: 92%; display: flex; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
+        `.pdf-footer-div { width: 92%; display: ${sigResult.isCustom ? 'block' : 'flex'}; justify-content: center; font-size: ${fontSize}px !important; font-weight: 450; text-align: center; margin: 0 auto; padding-left: ${leftPadding}cm; padding-right: ${rightPadding}cm; margin-bottom: ${footermarginPx}px; }`,
+        `.pdf-footer-div .signed-off-div { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; box-shadow: none !important; overflow: visible !important; }`,
+        `.pdf-footer-div .signed-off-div2 { width: 100%; }`,
         `.pdf-footer-div, .pdf-footer-div td, .pdf-footer-div th, .pdf-footer-div p, .pdf-footer-div span, .pdf-footer-div div, .pdf-footer-div label, .pdf-footer-div small, .pdf-footer-div strong { font-family: ${fontStack} !important; font-size: ${fontSize}px !important; }`,
         sigResult.layoutCss || '',
         '</style>',
@@ -703,13 +705,14 @@ const offlinePdfGeneratorController = async (params) => {
                     showdoctorsecond: params?.showdoctorsecond,
                 });
                 const normalizedOfflineSig = normalizeSignatureLayout(params?.signatureLayout);
-                const offlineFooterBottomPx = normalizedOfflineSig.isCustom
-                    ? Math.max(175, computeSignatureStageHeightPx(normalizedOfflineSig, {
+                const hasCustomOfflineSigOrFooter = Boolean(normalizedOfflineSig.isCustom || normalizedOfflineSig.footer?.isCustom);
+                const offlineFooterBottomPx = hasCustomOfflineSigOrFooter
+                    ? Math.max(80, computeSignatureStageHeightPx(normalizedOfflineSig, {
                         lab: params?.showlab !== false,
                         doc1: params?.showdoctorfirst !== false,
                         doc2: params?.showdoctorsecond !== false,
-                    }) + footermarginPx + 45)
-                    : 175;
+                    }) + footermarginPx + 24)
+                    : Math.max(130, 88 + footermarginPx);
 
                 // omitBackground: true makes Puppeteer produce a PDF with a
                 // transparent page background instead of the default white fill.

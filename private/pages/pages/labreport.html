@@ -885,12 +885,7 @@
         .category-heading {
             margin: 5px 0px;
             font-family: sans-serif;
-            page-break-before: always;
-        }
-
-        .category-heading:first-child {
-            page-break-before: auto;
-            /* Don't apply page break on the first section */
+            /* page-break-before is now controlled by JS via .page-break class (check1 checkbox) */
         }
 
         .download-pdf-div {
