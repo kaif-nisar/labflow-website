@@ -2041,24 +2041,29 @@ async function loadfunction() {
 
         if (!response.ok) {
             // Handle non-2xx HTTP responses
-            const errorData = await response.json();
-
+            const errorData = await response.json().catch(() => ({}));
+            console.error("Failed to fetch barcode tests:", response.status, errorData);
             return;
         }
 
         const data = await response.json();
 
-        testpanels = data[0];
-        data[0].barcodes.barcodes.forEach(element => {
-            const array = element.testandpannelArray;
+        testpanels = Array.isArray(data) ? data[0] : data;
+        const fetchedBarcodes = Array.isArray(testpanels?.barcodes?.barcodes)
+            ? testpanels.barcodes.barcodes
+            : [];
+        fetchedBarcodes.forEach(element => {
+            const array = Array.isArray(element?.testandpannelArray) ? element.testandpannelArray : [];
             testArray.push(...array);
-        })
+        });
 
-        getallpptfromrelatedbarcode(data[0].barcodes.barcodes);
+        await getallpptfromrelatedbarcode(fetchedBarcodes);
 
-        recievedOn = formatDateTimeLocal(data[0].barcodes.createdAt);
+        recievedOn = testpanels?.barcodes?.createdAt
+            ? formatDateTimeLocal(testpanels.barcodes.createdAt)
+            : "";
     } catch (error) {
-
+        console.error("Error fetching barcode tests:", error);
     }
 
     // this is for testArray2
@@ -3308,7 +3313,10 @@ async function loadfunction() {
         tbody.className = "tbody";
         const previousContentMap = {};
         let previousContent = '';
-        for (const test of data) {
+        for (const test of (Array.isArray(data) ? data : [])) {
+            if (!test || typeof test !== "object") continue;
+            const safeTestName = String(test.Name || test.Short_name || "Unnamed Test");
+            const safeTestParameters = Array.isArray(test.parameters) ? test.parameters : [];
             const testOrderVal = resolveNumericOrder(test?.order, 9999);
             const testBlockId = String(test?._id || "");
             const testOrderBadgeText = Number.isFinite(Number(test?.order)) ? `#${test.order}` : "";
@@ -3442,18 +3450,18 @@ async function loadfunction() {
                 continue;
             }
 
-            const { lowerValue, upperValue } = await getLowerUpperValues(patient, test.parameters[0]?.NormalValue);
+            const { lowerValue, upperValue } = await getLowerUpperValues(patient, safeTestParameters[0]?.NormalValue);
 
             const row = document.createElement("tr");
             row.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
             row.setAttribute("data-test-block-id", testBlockId);
 
-            if (test.parameters && test.parameters.length > 1) {
+            if (safeTestParameters.length > 1) {
                 row.setAttribute("data-row-role", "multi-header");
                 // Row for tests with multiple parameters (dragging this moves the whole test block)
                 row.innerHTML = `
                 <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
-                <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-group-check lr-print-ui" checked tabindex="-1" title="Include this test and all its parameters in Selected Report" /><div class="test-name-cell">${test.Name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
+                <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-group-check lr-print-ui" checked tabindex="-1" title="Include this test and all its parameters in Selected Report" /><div class="test-name-cell">${safeTestName}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -3461,7 +3469,7 @@ async function loadfunction() {
                 tbody.appendChild(row);
 
                 // Respect persisted DB parameter order cleanly on initial render
-                const sortedParameters = [...test.parameters].sort((paramA, paramB) => {
+                const sortedParameters = [...safeTestParameters].sort((paramA, paramB) => {
                     const ordA = resolveNumericOrder(paramA?.order, Number.MAX_SAFE_INTEGER);
                     const ordB = resolveNumericOrder(paramB?.order, Number.MAX_SAFE_INTEGER);
                     return ordA - ordB;
@@ -3469,12 +3477,14 @@ async function loadfunction() {
 
                 // Rows for individual parameters (dragging these reorders parameters inside this test)
                 for (const param of sortedParameters) {
+                    if (!param || typeof param !== "object") continue;
+                    const safeParaName = String(param.Para_name || param.name || safeTestName || "Parameter");
                     const { lowerValue, upperValue } = await getLowerUpperValues(patient, param?.NormalValue);
                     const paramMasterKey =
                         param.masterParameterKey ||
                         param._id ||
                         test._id ||
-                        ("param_" + (param.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ""));
+                        ("param_" + safeParaName.toLowerCase().replace(/[^a-z0-9]/g, ""));
                     const paramOrderLabel = Number.isFinite(Number(param?.order)) ? ` (#${param.order})` : "";
                     const paramRow = document.createElement("tr");
                     paramRow.setAttribute("data-order", testOrderVal); // Keeps child row attached to parent test order
@@ -3482,10 +3492,10 @@ async function loadfunction() {
                     paramRow.setAttribute("data-row-role", "param-row");
                     paramRow.setAttribute("data-param-id", String(param._id || ""));
                     paramRow.setAttribute("data-master-param-key", String(paramMasterKey));
-                    paramRow.setAttribute("data-param-name", String(param.Para_name || ""));
+                    paramRow.setAttribute("data-param-name", safeParaName);
                     paramRow.innerHTML = `
-        <td>${buildPageBreakCellHtml("lr-drag-handle--param", `Drag to reorder parameter inside ${test.Name}${paramOrderLabel}`)}</td>
-        <td style="padding-left: 20px;" class="test-name" id="parameters"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-param-check lr-print-ui" checked tabindex="-1" title="Include parameter in Selected Report" /><div class="test-name-cell">${param.Para_name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
+        <td>${buildPageBreakCellHtml("lr-drag-handle--param", `Drag to reorder parameter inside ${safeTestName}${paramOrderLabel}`)}</td>
+        <td style="padding-left: 20px;" class="test-name" id="parameters"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-param-check lr-print-ui" checked tabindex="-1" title="Include parameter in Selected Report" /><div class="test-name-cell">${safeParaName}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
         <td class="unit">
             <div class="value-column">
                 <div class="formulaIcon"></div>
@@ -3493,13 +3503,13 @@ async function loadfunction() {
                 <div class="value-field ${(param.ValueType || (param.text ? "text" : "numeric") || "numeric").toString().toLowerCase() === "text" ? "is-text-ref" : "is-numeric-ref"}">
                     <input type="text" 
                         name="parameterName" 
-                        data-test-id="${test._id}" 
+                        data-test-id="${test._id || ""}" 
                         data-param-id="${param._id || ""}" 
                         data-master-param-key="${paramMasterKey}"
-                        data-param-name="${param.Para_name}" 
+                        data-param-name="${safeParaName}" 
                         data-reference-type="${(param.ValueType || (param.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
-                        data-Shortname="${test.Short_name}" 
-                        data-id="${param.Para_name.replace(/\s+/g, '')}" 
+                        data-Shortname="${test.Short_name || ""}" 
+                        data-id="${safeParaName.replace(/\s+/g, '')}" 
                         data-lower="${lowerValue || ""}" 
                         data-upper="${upperValue || ""}"
                         data-for-random="${param.forRandom || false}"
@@ -3514,7 +3524,7 @@ async function loadfunction() {
                 <button class="add-remark" tabindex="-1">+</button>
             </div>
         </td>
-        <td>${param.unit}</td>
+        <td>${param.unit || ""}</td>
         <td class="reference"><i class="fas fa-edit" onclick="openModal(this)"></i>${param?.text || (lowerValue && upperValue ? `${lowerValue} - ${upperValue}` : "")}</td>
     `;
                     tbody.appendChild(paramRow);
@@ -3525,7 +3535,7 @@ async function loadfunction() {
 
                     let paramRowCalc = null; // Pehle null se initialize karein
 
-                    if (param.Para_name === "Basophils Percentage") {
+                    if (safeParaName === "Basophils Percentage") {
                         paramRowCalc = document.createElement("tr");
                         paramRowCalc.setAttribute("data-order", testOrderVal); // Set a data attribute for sorting
                         paramRowCalc.setAttribute("data-test-block-id", testBlockId);
@@ -3574,39 +3584,42 @@ async function loadfunction() {
 
             } else {
                 row.setAttribute("data-row-role", "single-test");
+                const singleParam = safeTestParameters[0] || {};
+                const singleParaName = String(singleParam.Para_name || singleParam.name || safeTestName);
+                const singleRefType = (singleParam.ValueType || (singleParam.text ? "text" : "numeric") || "numeric").toString().toLowerCase();
                 row.innerHTML = `
     <td>${buildPageBreakCellHtml("lr-drag-handle--test", `Drag to reorder test in database${testOrderBadgeText ? ` (Order ${testOrderBadgeText})` : ""}`)}</td>
-    <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-test-check lr-print-ui" checked tabindex="-1" title="Include this test in Selected Report" /><div class="test-name-cell">${test.Name}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
+    <td class="test-name"><div class="lr-test-cell-wrap"><input type="checkbox" class="lr-row-print-check lr-print-test-check lr-print-ui" checked tabindex="-1" title="Include this test in Selected Report" /><div class="test-name-cell">${safeTestName}</div><button type="button" class="lr-row-only-btn lr-print-ui" tabindex="-1">Only</button></div></td>
     <td class="unit">
         <div class="value-column">
             <div class="formulaIcon"></div>
             <span class="HighLow"></span>
-            <div class="value-field ${(test.parameters?.[0]?.ValueType || (test.parameters?.[0]?.text ? "text" : "numeric") || "numeric").toString().toLowerCase() === "text" ? "is-text-ref" : "is-numeric-ref"}">
+            <div class="value-field ${singleRefType === "text" ? "is-text-ref" : "is-numeric-ref"}">
                 <input type="text" 
                     name="valueInput" 
                     class="value-input" 
-                    data-test-id="${test._id}" 
-                    data-param-id="${test.parameters?.[0]?._id || ""}" 
-                    data-master-param-key="${test.parameters?.[0]?.masterParameterKey || test.parameters?.[0]?._id || test._id || ('param_' + (test.parameters?.[0]?.Para_name || test.Name).toLowerCase().replace(/[^a-z0-9]/g, ''))}"
-                    data-param-name="${test.parameters?.[0]?.Para_name || test.Name}" 
-                    data-reference-type="${(test.parameters?.[0]?.ValueType || (test.parameters?.[0]?.text ? "text" : "numeric") || "numeric").toString().toLowerCase()}" 
-                    data-Shortname="${test.Short_name}" 
-                    data-id="${test.Name}" 
+                    data-test-id="${test._id || ""}" 
+                    data-param-id="${singleParam._id || ""}" 
+                    data-master-param-key="${singleParam.masterParameterKey || singleParam._id || test._id || ('param_' + singleParaName.toLowerCase().replace(/[^a-z0-9]/g, ''))}"
+                    data-param-name="${singleParaName}" 
+                    data-reference-type="${singleRefType}" 
+                    data-Shortname="${test.Short_name || ""}" 
+                    data-id="${safeTestName}" 
                     data-lower="${lowerValue || ""}" 
                     data-upper="${upperValue || ""}"
-                    data-for-random="${test.parameters?.[0]?.forRandom || false}"
-                    data-lower-range="${test.parameters?.[0]?.lowerRange || ""}"
-                    data-upper-range="${test.parameters?.[0]?.upperRange || ""}"
-                    value="${test.parameters?.[0]?.defaultresult || ""}">
-                <button type="button" class="text-dropdown-trigger ${(test.parameters?.[0]?.ValueType || (test.parameters?.[0]?.text ? "text" : "numeric") || "numeric").toString().toLowerCase() === "text" ? "" : "placeholder-trigger"}" tabindex="-1">
+                    data-for-random="${singleParam.forRandom || false}"
+                    data-lower-range="${singleParam.lowerRange || ""}"
+                    data-upper-range="${singleParam.upperRange || ""}"
+                    value="${singleParam.defaultresult || ""}">
+                <button type="button" class="text-dropdown-trigger ${singleRefType === "text" ? "" : "placeholder-trigger"}" tabindex="-1">
                     <i class="fas fa-caret-down"></i>
                 </button>
             </div>
             <button class="add-remark" tabindex="-1">+</button>
         </div>
     </td>
-    <td>${test.parameters?.[0]?.unit || ""}</td>
-    <td class="reference"><i class="fas fa-edit" onclick="openModal(this)"></i>${test.parameters[0]?.text || (lowerValue && upperValue ? `${lowerValue} - ${upperValue}` : "")}</td>
+    <td>${singleParam.unit || ""}</td>
+    <td class="reference"><i class="fas fa-edit" onclick="openModal(this)"></i>${singleParam?.text || (lowerValue && upperValue ? `${lowerValue} - ${upperValue}` : "")}</td>
 `;
                 tbody.appendChild(row);
 
@@ -3667,7 +3680,7 @@ async function loadfunction() {
             // Panel-level hide flags should hide details for all child tests,
             // while unchecked panel flags should still respect each test's own hide setting.
             const panelHideMethodInstrument = isPanel
-                ? panelDetails?.hideMethodInstrument
+                ? Boolean(panelDetails?.hideMethodInstrument)
                 : false;
             const testHideMethodInstrument = resolveStoredCheckboxFlag(
                 test.hideMethodInstrument,
@@ -3693,8 +3706,8 @@ async function loadfunction() {
             );
             const shouldHideInterpretation = panelHideInterpretation || testHideInterpretation;
 
-            const methodText = test.method.trim()? test.method.trim() : "";
-            const instrumentText = test.instrument.trim()? test.instrument.trim() : "";
+            const methodText = typeof test.method === "string" ? test.method.trim() : String(test.method || "").trim();
+            const instrumentText = typeof test.instrument === "string" ? test.instrument.trim() : String(test.instrument || "").trim();
 
             const interpretationText = typeof test.interpretation === "string"
                 ? test.interpretation.trim()
@@ -3781,7 +3794,7 @@ async function loadfunction() {
         buttonsRow.appendChild(buttonsCell);
         table.appendChild(buttonsRow);
 
-        if (isPanel) {
+        if (isPanel && panelDetails) {
             const hidePanelInterpretation = parseStoredCheckboxFlag(
                 panelDetails.hidePanelInterpretation ?? panelDetails.hidepanelinterpretation
             );
@@ -3816,7 +3829,7 @@ async function loadfunction() {
         // table.appendChild(buttonsRow);
         section.appendChild(table);
         document.getElementById("tables-container").appendChild(section);
-        if (isPanel) {
+        if (isPanel && panelDetails) {
             const hidePanelInterpretation = parseStoredCheckboxFlag(
                 panelDetails.hidePanelInterpretation ?? panelDetails.hidepanelinterpretation
             );
@@ -4189,6 +4202,7 @@ async function loadfunction() {
         const singleTestsByCategoryMap = new Map();
 
         singleTests.forEach((test) => {
+            if (!test || typeof test !== "object") return;
             // Update uniqueTestArray2
             const index = uniquetestArray2.indexOf(test.Name);
             if (index > -1 && test.Short_name) {
@@ -4211,6 +4225,27 @@ async function loadfunction() {
             }
 
             singleTestsByCategoryMap.get(key).tests.push(test);
+        });
+
+        const selectedItemIds = new Set(
+            (booking?.selectedItems || [])
+                .map((item) => String(item?.itemId || item?.id || ""))
+                .filter(Boolean)
+        );
+
+        // Ensure standalone booked single tests are reflected in uniqueTestArray2
+        singleTests.forEach((test) => {
+            if (!test || typeof test !== "object") return;
+            const testId = String(test._id || "");
+            const origTestId = String(test.originalTestId || "");
+            const label = test.Short_name || test.Name;
+            if (!label) return;
+            const isStandaloneBooked =
+                (testId && selectedItemIds.has(testId)) ||
+                (origTestId && selectedItemIds.has(origTestId));
+            if (isStandaloneBooked && !uniquetestArray2.includes(label)) {
+                uniquetestArray2.push(label);
+            }
         });
 
         // Ensure panels are reflected in uniqueTestArray2 with their latest names from DB
@@ -4241,7 +4276,7 @@ async function loadfunction() {
                         (b.testIds || []).some(t => String(t?.id) === panelId || String(t?.id) === origId)
                     ) || (booking?.tableData || []).some(row => 
                         (row.ids || []).some(t => String(t?.id) === panelId || String(t?.id) === origId)
-                    );
+                    ) || (panelId && selectedItemIds.has(panelId)) || (origId && selectedItemIds.has(origId));
 
                     if (isBooked) {
                         uniquetestArray2.push(panel.name);
@@ -4277,7 +4312,7 @@ async function loadfunction() {
                         (b.testIds || []).some(t => String(t?.id) === pkgId || String(t?.id) === origId)
                     ) || (booking?.tableData || []).some(row => 
                         (row.ids || []).some(t => String(t?.id) === pkgId || String(t?.id) === origId)
-                    );
+                    ) || (pkgId && selectedItemIds.has(pkgId)) || (origId && selectedItemIds.has(origId));
 
                     if (isBooked) {
                         uniquetestArray2.push(pkg.packageName);
@@ -4296,11 +4331,14 @@ async function loadfunction() {
         // Render panels and collect matched categories
         if (panels && panels.length > 0) {
             for (const panel of panels) {
+                if (!panel || typeof panel !== "object") continue;
                 const panelCategory = resolvePanelCategoryMeta(panel);
+                const panelTests = (Array.isArray(panel.testsId) ? panel.testsId : [])
+                    .filter((t) => t && typeof t === "object");
                 await createTable(
-                    `${panel.name}`,
+                    `${panel.name || panel.Short_name || "Panel"}`,
                     panelCategory,
-                    panel.testsId || [],
+                    panelTests,
                     true,
                     false,
                     panel
@@ -5817,15 +5855,20 @@ async function loadfunction() {
         }
         // Helper function to convert age to days based on the unit
         const convertToDays = (age, unit) => {
-            if (unit === "Years" || unit === "years") return age * 365;
-            if (unit === "Months" || unit === "months") return age * 30;
-            if (unit === "Days" || unit === "days") return age;
-            return 0; // Unknown unit
+            const numericAge = Number.isFinite(age) ? age : 0;
+            const normUnit = String(unit || "years").trim().toLowerCase();
+            if (normUnit.startsWith("y")) return numericAge * 365;
+            if (normUnit.startsWith("m")) return numericAge * 30;
+            if (normUnit.startsWith("d")) return numericAge;
+            return numericAge * 365;
         };
 
-        // Extract patient age and unit, then convert to days
-        const [patientAge, patientAgeUnit] = patient.age.split(" ");
-        const patientAgeInDays = convertToDays(parseInt(patientAge), patientAgeUnit);
+        // Extract patient age and unit safely, then convert to days
+        const ageStr = String(patient?.age ?? "").trim();
+        const ageMatch = ageStr.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?/);
+        const patientAge = ageMatch ? parseFloat(ageMatch[1]) : 0;
+        const patientAgeUnit = (ageMatch && ageMatch[2]) ? ageMatch[2] : "Years";
+        const patientAgeInDays = convertToDays(patientAge, patientAgeUnit);
 
         for (const result of defaultresults) {
             // Convert minAge and maxAge in result to days
@@ -6439,7 +6482,7 @@ async function initialization() {
     try {
         await loadfunction();
     } catch (error) {
-
+        console.error("Failed to initialize lab report:", error);
     } finally {
         loader.style.display = "none";
     }

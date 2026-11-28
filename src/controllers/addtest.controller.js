@@ -122,11 +122,17 @@ async function ensureTestDocumentsHaveMasterKeys(testRecords) {
 // tenant's own copy of that category. This replaces 1-2 database round trips that
 // used to run for every single test/panel that was being copied.
 function buildCategoryResolver(categories = []) {
+    const byId = new Map();
     const byOriginalId = new Map();
     const byName = new Map();
 
     const register = (category) => {
         if (!category) return;
+
+        const idStr = toIdString(category._id);
+        if (idStr && !byId.has(idStr)) {
+            byId.set(idStr, category);
+        }
 
         const originalId = toIdString(category.originalCategoryId);
         if (originalId && !byOriginalId.has(originalId)) {
@@ -160,7 +166,18 @@ function buildCategoryResolver(categories = []) {
             }
 
             if (entry._id) {
-                return byOriginalId.get(toIdString(entry._id)) || entry;
+                const entryId = toIdString(entry._id);
+                const byOwnId = byId.get(entryId);
+                if (byOwnId) return byOwnId;
+
+                const byOrig = byOriginalId.get(entryId);
+                if (byOrig) return byOrig;
+
+                if (entry.category) {
+                    const matchedByName = byName.get(String(entry.category));
+                    if (matchedByName) return matchedByName;
+                }
+                return entry;
             }
 
             if (entry.category) {
@@ -179,9 +196,28 @@ function resolveFormulaScopeId(user) {
     return user._id || null;
 }
 
+function normalizeObjectIdArray(values = []) {
+    if (!Array.isArray(values)) return [];
+    const seen = new Set();
+    const cleaned = [];
+    for (const val of values) {
+        const idStr = toIdString(val).trim();
+        if (!idStr || !mongoose.isValidObjectId(idStr) || seen.has(idStr)) continue;
+        seen.add(idStr);
+        cleaned.push(idStr);
+    }
+    return cleaned;
+}
+
+function isTransactionUnsupportedError(error) {
+    const msg = String(error?.message || "");
+    return /Transaction numbers are only allowed on a replica set member|replica set/i.test(msg);
+}
+
 async function copyScopedFormulasToTenant({
     session,
     sourceScopeId,
+    sourceScopeIds = [],
     targetTenantId,
     createdBy,
     relevantMasterKeys = [],
@@ -193,17 +229,28 @@ async function copyScopedFormulasToTenant({
         .map((entry) => toIdString(entry?.parameterId))
         .filter(Boolean);
 
-    if (!sourceScopeId || !targetTenantId || (!normalizedMasterKeys.length && !sourceParameterIds.length)) {
+    const scopeCandidates = [
+        ...(Array.isArray(sourceScopeIds) ? sourceScopeIds : []),
+        sourceScopeId,
+    ]
+        .map((val) => toIdString(val).trim())
+        .filter((val) => val && mongoose.isValidObjectId(val));
+    const uniqueScopeIds = [...new Set(scopeCandidates)].map((id) => new mongoose.Types.ObjectId(id));
+
+    if (!uniqueScopeIds.length || !targetTenantId || (!normalizedMasterKeys.length && !sourceParameterIds.length)) {
         return 0;
     }
 
-    const sourceFormulas = await Formula.find({
-        tenantId: sourceScopeId,
+    const sourceFormulasQuery = Formula.find({
+        tenantId: uniqueScopeIds.length === 1 ? uniqueScopeIds[0] : { $in: uniqueScopeIds },
         $or: [
             { targetMasterKey: { $in: normalizedMasterKeys } },
             { targetParameterId: { $in: sourceParameterIds } },
+            { "dependencies.parameterMasterKey": { $in: normalizedMasterKeys } },
         ],
-    }).session(session).lean();
+    });
+    if (session) sourceFormulasQuery.session(session);
+    const sourceFormulas = await sourceFormulasQuery.lean();
 
     if (!sourceFormulas.length) {
         return 0;
@@ -222,13 +269,11 @@ async function copyScopedFormulasToTenant({
         });
     }
 
-    const targetTests = await testSchema.find({
-        tenantId: targetTenantId,
-        "parameters.masterParameterKey": { $in: normalizedMasterKeys },
-    })
-        .select("_id Name parameters")
-        .session(session)
-        .lean();
+    const targetTestsQuery = testSchema
+        .find({ tenantId: targetTenantId })
+        .select("_id Name parameters");
+    if (session) targetTestsQuery.session(session);
+    const targetTests = await targetTestsQuery.lean();
 
     const targetParameterMap = new Map();
     for (const test of targetTests) {
@@ -244,11 +289,15 @@ async function copyScopedFormulasToTenant({
     }
 
     const formulaUpserts = [];
+    const seenTargetKeys = new Set();
 
     for (const formula of sourceFormulas) {
         const fallbackTargetMasterKey =
             String(formula.targetMasterKey || "").trim() ||
             String(sourceParameterMapById.get(toIdString(formula.targetParameterId))?.masterParameterKey || "").trim();
+        if (!fallbackTargetMasterKey || seenTargetKeys.has(fallbackTargetMasterKey)) {
+            continue;
+        }
         const targetEntry = targetParameterMap.get(fallbackTargetMasterKey);
         if (!targetEntry) {
             continue;
@@ -296,6 +345,7 @@ async function copyScopedFormulasToTenant({
             );
         }
 
+        seenTargetKeys.add(fallbackTargetMasterKey);
         formulaUpserts.push({
             updateOne: {
                 filter: {
@@ -331,11 +381,12 @@ async function copyScopedFormulasToTenant({
 
     // PERFORMANCE: one bulk write instead of one round trip per formula
     if (formulaUpserts.length > 0) {
-        await Formula.bulkWrite(formulaUpserts, { session, ordered: false });
-        copiedCount = formulaUpserts.length;
+        const bulkOptions = session ? { session, ordered: false } : { ordered: false };
+        await Formula.bulkWrite(formulaUpserts, bulkOptions);
+        return formulaUpserts.length;
     }
 
-    return copiedCount;
+    return 0;
 }
 
 
@@ -2206,415 +2257,423 @@ const tenantTest = asyncHandler(async (req, res) => {
             .json({ message: "Failed to fetch tests", error: error.message });
     }
 });
-const assignModelsToFranchisee = asyncHandler(async (req, res) => {
-    let session; // created later, after validation
-    try {
-        const {
-            franchiseeId,
-            testIds = [],
-            panelIds = [],
-            packageIds = [],
-            categoryIds = [],
-            unitIds = [],
-            sampleTypeIds = [],
-            overwriteExisting = false
-        } = req.body;
+const executeCatalogAssignment = async ({ req, tenant, session = null }) => {
+    const franchiseeId = req.body.franchiseeId;
+    const sourceAdminId = req.body.sourceAdminId && mongoose.isValidObjectId(String(req.body.sourceAdminId))
+        ? String(req.body.sourceAdminId).trim()
+        : null;
+    const testIds = normalizeObjectIdArray(req.body.testIds);
+    const panelIds = normalizeObjectIdArray(req.body.panelIds);
+    const packageIds = normalizeObjectIdArray(req.body.packageIds);
+    const categoryIds = normalizeObjectIdArray(req.body.categoryIds);
+    const unitIds = normalizeObjectIdArray(req.body.unitIds);
+    const sampleTypeIds = normalizeObjectIdArray(req.body.sampleTypeIds);
+    const overwriteExisting = req.body.overwriteExisting === true;
 
-        if (!franchiseeId) {
-            return res.status(400).json({ success: false, message: "Franchisee ID is required." });
+    const sessionOpt = session ? { session } : {};
+    const tenantInSessionQuery = Tenant.findById(franchiseeId);
+    if (session) tenantInSessionQuery.session(session);
+    const tenantInSession = await tenantInSessionQuery;
+    const createdBy = tenantInSession?.adminDetails?.userId || tenant.adminDetails.userId;
+
+    if (overwriteExisting === true) {
+        await categorydb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseCategory: true }, sessionOpt);
+        await unitdb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseUnit: true }, sessionOpt);
+        await sampleSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseSample: true }, sessionOpt);
+        await testSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseTest: true }, sessionOpt);
+        await addPannel.deleteMany({ tenantId: franchiseeId, purchasedFromBasePanel: true }, sessionOpt);
+        await Package.deleteMany({ tenantId: franchiseeId, purchasedFromBasePackage: true }, sessionOpt);
+    }
+
+    const assignedCounts = {
+        tests: 0,
+        panels: 0,
+        packages: 0,
+        categories: 0,
+        units: 0,
+        sampleTypes: 0,
+        formulas: 0,
+    };
+    const sourceFormulaScopeId = resolveFormulaScopeId(req.user);
+
+    const hasCategoryWork = Boolean(categoryIds.length + testIds.length + panelIds.length);
+    const hasTestWork = Boolean(testIds.length + panelIds.length + packageIds.length);
+    const hasPanelWork = Boolean(panelIds.length + packageIds.length);
+
+    const runFind = (model, filter, selectFields = null) => {
+        const q = model.find(filter);
+        if (selectFields) q.select(selectFields);
+        if (session) q.session(session);
+        return q.lean();
+    };
+
+    const [tenantCategoryDocs, tenantTestDocs, tenantPanelDocs, tenantUnitDocs, tenantSampleDocs, tenantPackageDocs] = await Promise.all([
+        hasCategoryWork ? runFind(categorydb, { tenantId: franchiseeId }) : [],
+        hasTestWork ? runFind(testSchema, { tenantId: franchiseeId }, "_id Name originalTestId") : [],
+        hasPanelWork ? runFind(addPannel, { tenantId: franchiseeId }, "_id name originalPanelId") : [],
+        unitIds.length > 0 ? runFind(unitdb, { tenantId: franchiseeId }, "_id unit originalUnitId") : [],
+        sampleTypeIds.length > 0 ? runFind(sampleSchema, { tenantId: franchiseeId }, "_id Name originalSampleId") : [],
+        packageIds.length > 0 ? runFind(Package, { tenantId: franchiseeId }, "_id packageName originalPackageId") : [],
+    ]);
+
+    const categoryResolver = buildCategoryResolver(tenantCategoryDocs);
+
+    const assignedCategoryOriginalIds = new Set(
+        tenantCategoryDocs.map((c) => toIdString(c.originalCategoryId)).filter(Boolean)
+    );
+    const assignedCategoryNames = new Set(
+        tenantCategoryDocs.map((c) => (c.category == null ? "" : String(c.category))).filter(Boolean)
+    );
+
+    const testIdByOriginalId = new Map();
+    const testIdByName = new Map();
+    for (const test of tenantTestDocs) {
+        const originalId = toIdString(test.originalTestId);
+        if (originalId && !testIdByOriginalId.has(originalId)) {
+            testIdByOriginalId.set(originalId, test._id);
+        }
+        const testName = test.Name == null ? "" : String(test.Name);
+        if (testName && !testIdByName.has(testName)) {
+            testIdByName.set(testName, test._id);
+        }
+    }
+
+    const panelIdByOriginalId = new Map();
+    const panelIdByName = new Map();
+    for (const panel of tenantPanelDocs) {
+        const originalId = toIdString(panel.originalPanelId);
+        if (originalId && !panelIdByOriginalId.has(originalId)) {
+            panelIdByOriginalId.set(originalId, panel._id);
+        }
+        const panelName = panel.name == null ? "" : String(panel.name);
+        if (panelName && !panelIdByName.has(panelName)) {
+            panelIdByName.set(panelName, panel._id);
+        }
+    }
+
+    const packageIdByOriginalId = new Map();
+    const packageIdByName = new Map();
+    for (const pkg of tenantPackageDocs) {
+        const originalId = toIdString(pkg.originalPackageId);
+        if (originalId && !packageIdByOriginalId.has(originalId)) {
+            packageIdByOriginalId.set(originalId, pkg._id);
+        }
+        const packageName = pkg.packageName == null ? "" : String(pkg.packageName);
+        if (packageName && !packageIdByName.has(packageName)) {
+            packageIdByName.set(packageName, pkg._id);
+        }
+    }
+
+    const assignedUnitOriginalIds = new Set(
+        tenantUnitDocs.map((u) => toIdString(u.originalUnitId)).filter(Boolean)
+    );
+    const assignedUnitNames = new Set(
+        tenantUnitDocs.map((u) => (u.unit == null ? "" : String(u.unit))).filter(Boolean)
+    );
+
+    const assignedSampleOriginalIds = new Set(
+        tenantSampleDocs.map((s) => toIdString(s.originalSampleId)).filter(Boolean)
+    );
+    const assignedSampleNames = new Set(
+        tenantSampleDocs.map((s) => (s.Name == null ? "" : String(s.Name))).filter(Boolean)
+    );
+
+    // === CATEGORIES ===
+    if (categoryIds.length > 0) {
+        const candidateCategories = await runFind(categorydb, {
+            _id: { $in: categoryIds },
+            $or: [
+                { isBaseCategory: true },
+                { isBaseCategory: { $exists: false } },
+                ...(sourceAdminId ? [{ tenantId: sourceAdminId }] : [{ tenantId: { $ne: null } }])
+            ]
+        });
+
+        const newCategories = [];
+        for (const cat of candidateCategories) {
+            const catName = String(cat.category || "").trim();
+            if (!catName) continue;
+            const origRef = toIdString(cat.originalCategoryId);
+            if (
+                assignedCategoryOriginalIds.has(String(cat._id)) ||
+                (origRef && assignedCategoryOriginalIds.has(origRef)) ||
+                assignedCategoryNames.has(catName)
+            ) {
+                continue;
+            }
+            assignedCategoryNames.add(catName);
+            newCategories.push(cat);
         }
 
-        // Pre-validate the tenant before starting a transaction so we don't leave open
-        // transactions when returning early due to bad input.
-        const tenant = await Tenant.findById(franchiseeId);
-        if (!tenant || !tenant.adminDetails?.userId) {
-            return res.status(404).json({ success: false, message: "Franchisee not found." });
-        }
+        if (newCategories.length > 0) {
+            const lastCatQ = categorydb
+                .findOne({ tenantId: franchiseeId })
+                .sort({ orderId: -1 })
+                .select("orderId");
+            if (session) lastCatQ.session(session);
+            const lastCategory = await lastCatQ.lean();
 
-        // Start a session only after basic validation passes
-        session = await mongoose.startSession();
-        session.startTransaction();
+            let nextCategoryOrder = Number.isFinite(Number(lastCategory?.orderId))
+                ? Number(lastCategory.orderId) + 1
+                : 1;
 
-        // If you need the tenant inside the transaction for consistent reads, re-fetch using the session.
-        const tenantInSession = await Tenant.findById(franchiseeId).session(session);
-        const createdBy = tenantInSession?.adminDetails?.userId || tenant.adminDetails.userId;
-
-        // Replace only catalog copies previously assigned from the Super Admin.
-        // Tenant-created tests/models remain untouched. All removals happen in
-        // this transaction, so a failed copy restores the old assignment intact.
-        if (overwriteExisting === true) {
-            await categorydb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseCategory: true }, { session });
-            await unitdb.deleteMany({ tenantId: franchiseeId, purchasedFromBaseUnit: true }, { session });
-            await sampleSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseSample: true }, { session });
-            await testSchema.deleteMany({ tenantId: franchiseeId, purchasedFromBaseTest: true }, { session });
-            await addPannel.deleteMany({ tenantId: franchiseeId, purchasedFromBasePanel: true }, { session });
-            await Package.deleteMany({ tenantId: franchiseeId, purchasedFromBasePackage: true }, { session });
-        }
-
-        let assignedCounts = {
-            tests: 0,
-            panels: 0,
-            packages: 0,
-            categories: 0,
-            units: 0,
-            sampleTypes: 0,
-            formulas: 0,
-        };
-        const sourceFormulaScopeId = resolveFormulaScopeId(req.user);
-
-        // === PERFORMANCE: PREFETCH EVERY LOOKUP TABLE ONCE ===
-        // Previously this endpoint ran 1-2 queries for every test / panel / package
-        // (duplicate checks + id remapping). For a big admin that meant thousands of
-        // sequential round trips, which blew past the proxy timeout and returned a
-        // 504 gateway timeout (html) to the browser. All lookup data is now loaded
-        // once into in-memory maps and reused for every item.
-        const hasCategoryWork = Boolean((categoryIds?.length || 0) + (testIds?.length || 0) + (panelIds?.length || 0));
-        const hasTestWork = Boolean((testIds?.length || 0) + (panelIds?.length || 0) + (packageIds?.length || 0));
-        const hasPanelWork = Boolean((panelIds?.length || 0) + (packageIds?.length || 0));
-
-        const [tenantCategoryDocs, tenantTestDocs, tenantPanelDocs, tenantUnitDocs, tenantSampleDocs, tenantPackageDocs] = await Promise.all([
-            hasCategoryWork
-                ? categorydb.find({ tenantId: franchiseeId }).session(session).lean()
-                : [],
-            hasTestWork
-                ? testSchema.find({ tenantId: franchiseeId }).select("_id Name originalTestId").session(session).lean()
-                : [],
-            hasPanelWork
-                ? addPannel.find({ tenantId: franchiseeId }).select("_id name originalPanelId").session(session).lean()
-                : [],
-            (unitIds?.length || 0) > 0
-                ? unitdb.find({ tenantId: franchiseeId }).select("_id unit originalUnitId").session(session).lean()
-                : [],
-            (sampleTypeIds?.length || 0) > 0
-                ? sampleSchema.find({ tenantId: franchiseeId }).select("_id Name originalSampleId").session(session).lean()
-                : [],
-            (packageIds?.length || 0) > 0
-                ? Package.find({ tenantId: franchiseeId }).select("_id packageName originalPackageId").session(session).lean()
-                : [],
-        ]);
-
-        const categoryResolver = buildCategoryResolver(tenantCategoryDocs);
-
-        const assignedCategoryOriginalIds = new Set(
-            tenantCategoryDocs.map((category) => toIdString(category.originalCategoryId)).filter(Boolean)
-        );
-        const assignedCategoryNames = new Set(
-            tenantCategoryDocs.map((category) => (category.category == null ? "" : String(category.category))).filter(Boolean)
-        );
-
-        const testIdByOriginalId = new Map();
-        const testIdByName = new Map();
-        for (const test of tenantTestDocs) {
-            const originalId = toIdString(test.originalTestId);
-            if (originalId && !testIdByOriginalId.has(originalId)) {
-                testIdByOriginalId.set(originalId, test._id);
-            }
-
-            const testName = test.Name == null ? "" : String(test.Name);
-            if (testName && !testIdByName.has(testName)) {
-                testIdByName.set(testName, test._id);
-            }
-        }
-
-        const panelIdByOriginalId = new Map();
-        const panelIdByName = new Map();
-        for (const panel of tenantPanelDocs) {
-            const originalId = toIdString(panel.originalPanelId);
-            if (originalId && !panelIdByOriginalId.has(originalId)) {
-                panelIdByOriginalId.set(originalId, panel._id);
-            }
-
-            const panelName = panel.name == null ? "" : String(panel.name);
-            if (panelName && !panelIdByName.has(panelName)) {
-                panelIdByName.set(panelName, panel._id);
-            }
-        }
-
-        const packageIdByOriginalId = new Map();
-        const packageIdByName = new Map();
-        for (const pkg of tenantPackageDocs) {
-            const originalId = toIdString(pkg.originalPackageId);
-            if (originalId && !packageIdByOriginalId.has(originalId)) {
-                packageIdByOriginalId.set(originalId, pkg._id);
-            }
-
-            const packageName = pkg.packageName == null ? "" : String(pkg.packageName);
-            if (packageName && !packageIdByName.has(packageName)) {
-                packageIdByName.set(packageName, pkg._id);
-            }
-        }
-
-        const assignedUnitOriginalIds = new Set(
-            tenantUnitDocs.map((unit) => toIdString(unit.originalUnitId)).filter(Boolean)
-        );
-        const assignedUnitNames = new Set(
-            tenantUnitDocs.map((unit) => (unit.unit == null ? "" : String(unit.unit))).filter(Boolean)
-        );
-
-        const assignedSampleOriginalIds = new Set(
-            tenantSampleDocs.map((sample) => toIdString(sample.originalSampleId)).filter(Boolean)
-        );
-        const assignedSampleNames = new Set(
-            tenantSampleDocs.map((sample) => (sample.Name == null ? "" : String(sample.Name))).filter(Boolean)
-        );
-
-        // === STEP 4: CATEGORIES ===
-        if (categoryIds && categoryIds.length > 0) {
-            const candidateCategories = await categorydb.find({
-                _id: { $in: categoryIds },
-                $or: [
-                    { isBaseCategory: true },
-                    { isBaseCategory: { $exists: false } }  // Field exist नहीं करता
-                ]
-            }).session(session).lean();
-
-            const newCategories = candidateCategories.filter(cat =>
-                !assignedCategoryOriginalIds.has(String(cat._id)) &&
-                !assignedCategoryNames.has(String(cat.category))
-            );
-
-            if (newCategories.length > 0) {
-                // Get next orderId for categories
-                const lastCategory = await categorydb
-                    .findOne({ tenantId: franchiseeId })
-                    .sort({ orderId: -1 })
-                    .select('orderId')
-                    .session(session)
-                    .lean();
-
-                let nextCategoryOrder = lastCategory ? lastCategory.orderId + 1 : 1;
-
-                const copiedCategories = newCategories.map(cat => {
-                    const { _id, ...rest } = cat;
-                    return {
-                        ...rest,
-                        _id: new mongoose.Types.ObjectId(),
-                        orderId: nextCategoryOrder++,
-                        createdBy,
-                        tenantId: franchiseeId,
-                        isBaseCategory: false,
-                        purchasedFromBaseCategory: true,
-                        originalCategoryId: cat._id,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    };
-                });
-
-                await categorydb.insertMany(copiedCategories, { session });
-                assignedCounts.categories = copiedCategories.length;
-
-                // Register the fresh copies so tests/panels copied in this same request
-                // can be mapped to them without extra database queries.
-                for (const copiedCategory of copiedCategories) {
-                    categoryResolver.register(copiedCategory);
-
-                    const copiedOriginalId = toIdString(copiedCategory.originalCategoryId);
-                    if (copiedOriginalId) {
-                        assignedCategoryOriginalIds.add(copiedOriginalId);
-                    }
-                    assignedCategoryNames.add(String(copiedCategory.category));
-                }
-            }
-        }
-
-        // === STEP 5: UNITS ===
-        if (unitIds && unitIds.length > 0) {
-            const candidateUnits = await unitdb.find({
-                _id: { $in: unitIds },
-                isBaseUnit: true,
-            }).session(session).lean();
-
-            const newUnits = candidateUnits.filter(unit =>
-                !assignedUnitOriginalIds.has(String(unit._id)) &&
-                !assignedUnitNames.has(String(unit.unit))
-            );
-
-            if (newUnits.length > 0) {
-                const copiedUnits = newUnits.map(unit => {
-                    const { _id, ...rest } = unit;
-                    return {
-                        ...rest,
-                        _id: new mongoose.Types.ObjectId(),
-                        createdBy,
-                        tenantId: franchiseeId,
-                        isBaseUnit: false,
-                        purchasedFromBaseUnit: true,
-                        originalUnitId: unit._id,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    };
-                });
-
-                await unitdb.insertMany(copiedUnits, { session });
-                assignedCounts.units = copiedUnits.length;
-
-                for (const copiedUnit of copiedUnits) {
-                    const copiedOriginalId = toIdString(copiedUnit.originalUnitId);
-                    if (copiedOriginalId) {
-                        assignedUnitOriginalIds.add(copiedOriginalId);
-                    }
-                    assignedUnitNames.add(String(copiedUnit.unit));
-                }
-            }
-        }
-
-        // === STEP 6: SAMPLE TYPES ===
-        if (sampleTypeIds && sampleTypeIds.length > 0) {
-            const candidateSamples = await sampleSchema.find({
-                _id: { $in: sampleTypeIds },
-                isBaseSample: true,
-            }).session(session).lean();
-
-            const newSamples = candidateSamples.filter(sample =>
-                !assignedSampleOriginalIds.has(String(sample._id)) &&
-                !assignedSampleNames.has(String(sample.Name))
-            );
-
-            if (newSamples.length > 0) {
-                const copiedSamples = newSamples.map(sample => {
-                    const { _id, ...rest } = sample;
-                    return {
-                        ...rest,
-                        _id: new mongoose.Types.ObjectId(),
-                        createdBy,
-                        tenantId: franchiseeId,
-                        isBaseSample: false,
-                        purchasedFromBaseSample: true,
-                        originalSampleId: sample._id,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    };
-                });
-
-                await sampleSchema.insertMany(copiedSamples, { session });
-                assignedCounts.sampleTypes = copiedSamples.length;
-
-                for (const copiedSample of copiedSamples) {
-                    const copiedOriginalId = toIdString(copiedSample.originalSampleId);
-                    if (copiedOriginalId) {
-                        assignedSampleOriginalIds.add(copiedOriginalId);
-                    }
-                    assignedSampleNames.add(String(copiedSample.Name));
-                }
-            }
-        }
-
-        // === STEP 1: TESTS (IMPROVED DUPLICATE DETECTION) ===
-        if (testIds && testIds.length > 0) {
-            // Base + already-assigned candidates in a single query
-            const allCandidateTests = await testSchema.find({
-                _id: { $in: testIds },
-            }).session(session).lean();
-
-            // Step 2: Split between baseTest & non-baseTest
-            const candidateTests = allCandidateTests.filter(t => {
-                if (t.createdByRole === 'admin' || t.createdByRole === 'superAdmin' || t.isBaseTest === true) {
-                    return true; // सबको allow
-                } else {
-                    // Already assigned to someone → treat as cloned
-                    return t.isBaseTest === false;
-                }
+            const copiedCategories = newCategories.map((cat) => {
+                const { _id, ...rest } = cat;
+                return {
+                    ...rest,
+                    _id: new mongoose.Types.ObjectId(),
+                    orderId: nextCategoryOrder++,
+                    createdBy,
+                    tenantId: franchiseeId,
+                    isBaseCategory: false,
+                    purchasedFromBaseCategory: true,
+                    originalCategoryId: cat.originalCategoryId || cat._id,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                };
             });
 
-            // Filter out tests that would cause duplicates (in-memory lookups only)
-            const newTests = candidateTests.filter(test =>
-                !testIdByOriginalId.has(String(test._id)) &&
-                !testIdByName.has(String(test.Name))
-            );
+            await categorydb.insertMany(copiedCategories, sessionOpt);
+            assignedCounts.categories = copiedCategories.length;
 
-            if (newTests.length > 0) {
-                const copiedTests = [];
+            for (const copiedCategory of copiedCategories) {
+                categoryResolver.register(copiedCategory);
+                const copiedOriginalId = toIdString(copiedCategory.originalCategoryId);
+                if (copiedOriginalId) assignedCategoryOriginalIds.add(copiedOriginalId);
+                assignedCategoryNames.add(String(copiedCategory.category));
+            }
+        }
+    }
 
-                for (const test of newTests) {
-                    const { _id, ...rest } = test;
+    // === UNITS ===
+    if (unitIds.length > 0) {
+        const candidateUnits = await runFind(unitdb, {
+            _id: { $in: unitIds },
+            $or: [
+                { isBaseUnit: true },
+                ...(sourceAdminId ? [{ tenantId: sourceAdminId }] : [{ tenantId: { $ne: null } }])
+            ]
+        });
 
-                    // Map the source category to the tenant's own copy (in-memory lookup)
-                    const newCategory = categoryResolver.resolve(test.category);
+        const newUnits = [];
+        for (const unit of candidateUnits) {
+            const unitLabel = String(unit.unit || "").trim();
+            if (!unitLabel) continue;
+            const origRef = toIdString(unit.originalUnitId);
+            if (
+                assignedUnitOriginalIds.has(String(unit._id)) ||
+                (origRef && assignedUnitOriginalIds.has(origRef)) ||
+                assignedUnitNames.has(unitLabel)
+            ) {
+                continue;
+            }
+            assignedUnitNames.add(unitLabel);
+            newUnits.push(unit);
+        }
 
-                    // Differentiate between SuperAdmin base-tests and admin-created tests
-                    if (test.createdByRole === 'superAdmin') {
-                        const copiedParameters = normalizeParameterPayload(
-                            (rest.parameters || []).map((parameter) => ({
-                                ...parameter,
-                                originalParameterId: toIdString(parameter.originalParameterId) || toIdString(parameter._id) || null,
-                            }))
-                        );
-                        // SuperAdmin base test -> create a tenant-scoped copy marked as purchased
-                        copiedTests.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            category: newCategory,
-                            parameters: copiedParameters,
-                            tenantId: franchiseeId,
-                            assignedPrices: [], // reset assignedPrices
-                            isBaseTest: false,
-                            purchasedFromBaseTest: true,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    } else if (test.createdByRole === 'admin') {
-                        const copiedParameters = normalizeParameterPayload(
-                            (rest.parameters || []).map((parameter) => ({
-                                ...parameter,
-                                originalParameterId: toIdString(parameter.originalParameterId) || toIdString(parameter._id) || null,
-                            }))
-                        );
-                        // Admin-created test -> create as baseTest for tenant but keep originalTestId linkage
-                        copiedTests.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            tenantId: franchiseeId,
-                            parameters: copiedParameters,
-                            isBaseTest: true,
-                            assignedPrices: [], // reset assignedPrices
-                            purchasePrice: [],
-                            purchasedFromBaseTest: false,
-                            originalTestId: test._id,
-                            category: newCategory,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    }
-                    // If neither condition matches we simply skip (no push)
+        if (newUnits.length > 0) {
+            const copiedUnits = newUnits.map((unit) => {
+                const { _id, ...rest } = unit;
+                return {
+                    ...rest,
+                    _id: new mongoose.Types.ObjectId(),
+                    createdBy,
+                    tenantId: franchiseeId,
+                    isBaseUnit: false,
+                    purchasedFromBaseUnit: true,
+                    originalUnitId: unit.originalUnitId || unit._id,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                };
+            });
+
+            await unitdb.insertMany(copiedUnits, sessionOpt);
+            assignedCounts.units = copiedUnits.length;
+
+            for (const copiedUnit of copiedUnits) {
+                const copiedOriginalId = toIdString(copiedUnit.originalUnitId);
+                if (copiedOriginalId) assignedUnitOriginalIds.add(copiedOriginalId);
+                assignedUnitNames.add(String(copiedUnit.unit));
+            }
+        }
+    }
+
+    // === SAMPLE TYPES ===
+    if (sampleTypeIds.length > 0) {
+        const candidateSamples = await runFind(sampleSchema, {
+            _id: { $in: sampleTypeIds },
+            $or: [
+                { isBaseSample: true },
+                ...(sourceAdminId ? [{ tenantId: sourceAdminId }] : [{ tenantId: { $ne: null } }])
+            ]
+        });
+
+        const newSamples = [];
+        for (const sample of candidateSamples) {
+            const sampleName = String(sample.Name || "").trim();
+            if (!sampleName) continue;
+            const origRef = toIdString(sample.originalSampleId);
+            if (
+                assignedSampleOriginalIds.has(String(sample._id)) ||
+                (origRef && assignedSampleOriginalIds.has(origRef)) ||
+                assignedSampleNames.has(sampleName)
+            ) {
+                continue;
+            }
+            assignedSampleNames.add(sampleName);
+            newSamples.push(sample);
+        }
+
+        if (newSamples.length > 0) {
+            const copiedSamples = newSamples.map((sample) => {
+                const { _id, ...rest } = sample;
+                return {
+                    ...rest,
+                    _id: new mongoose.Types.ObjectId(),
+                    createdBy,
+                    tenantId: franchiseeId,
+                    isBaseSample: false,
+                    purchasedFromBaseSample: true,
+                    originalSampleId: sample.originalSampleId || sample._id,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                };
+            });
+
+            await sampleSchema.insertMany(copiedSamples, sessionOpt);
+            assignedCounts.sampleTypes = copiedSamples.length;
+
+            for (const copiedSample of copiedSamples) {
+                const copiedOriginalId = toIdString(copiedSample.originalSampleId);
+                if (copiedOriginalId) assignedSampleOriginalIds.add(copiedOriginalId);
+                assignedSampleNames.add(String(copiedSample.Name));
+            }
+        }
+    }
+
+    // === TESTS ===
+    if (testIds.length > 0) {
+        const allCandidateTests = await runFind(testSchema, { _id: { $in: testIds } });
+
+        const candidateTests = allCandidateTests.filter((t) => {
+            if (t.createdByRole === "admin" || t.createdByRole === "superAdmin" || t.isBaseTest === true) {
+                return true;
+            }
+            return t.isBaseTest === false || Boolean(t.tenantId);
+        });
+
+        const newTests = [];
+        for (const test of candidateTests) {
+            const testName = test.Name == null ? "" : String(test.Name);
+            if (!testName.trim()) continue;
+            const origRef = toIdString(test.originalTestId);
+            if (
+                testIdByOriginalId.has(String(test._id)) ||
+                (origRef && testIdByOriginalId.has(origRef)) ||
+                testIdByName.has(testName)
+            ) {
+                continue;
+            }
+            testIdByName.set(testName, test._id);
+            newTests.push(test);
+        }
+
+        if (newTests.length > 0) {
+            const copiedTests = [];
+            const sourceTestTenantIds = new Set();
+
+            for (const test of newTests) {
+                const { _id, __v, ...rest } = test;
+                if (test.tenantId) sourceTestTenantIds.add(toIdString(test.tenantId));
+
+                const newCategory = categoryResolver.resolve(test.category);
+                const copiedParameters = normalizeParameterPayload(
+                    (Array.isArray(rest.parameters) ? rest.parameters : []).map((parameter) => ({
+                        ...parameter,
+                        originalParameterId: toIdString(parameter?.originalParameterId) || toIdString(parameter?._id) || null,
+                    }))
+                );
+
+                const safePrice = Number.isFinite(Number(rest.Price)) ? Number(rest.Price) : 0;
+                const safeFinalPrice = Number.isFinite(Number(rest.final_price)) ? Number(rest.final_price) : safePrice;
+                const safeSampleType = String(rest.sampleType || "").trim() || "Blood";
+                const resolvedOriginalTestId = test.originalTestId || test._id;
+
+                if (test.createdByRole === "superAdmin") {
+                    copiedTests.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        category: newCategory,
+                        parameters: copiedParameters,
+                        Price: safePrice,
+                        final_price: safeFinalPrice,
+                        sampleType: safeSampleType,
+                        tenantId: franchiseeId,
+                        assignedPrices: [],
+                        purchasedBy: [],
+                        isBaseTest: false,
+                        purchasedFromBaseTest: true,
+                        originalTestId: resolvedOriginalTestId,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                } else {
+                    copiedTests.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        createdByRole: "admin",
+                        category: newCategory,
+                        parameters: copiedParameters,
+                        Price: safePrice,
+                        final_price: safeFinalPrice,
+                        sampleType: safeSampleType,
+                        tenantId: franchiseeId,
+                        assignedPrices: [],
+                        purchasePrice: [],
+                        purchasedBy: [],
+                        isBaseTest: true,
+                        purchasedFromBaseTest: false,
+                        originalTestId: resolvedOriginalTestId,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
                 }
-                if (copiedTests.length > 0) {
-                    await testSchema.insertMany(copiedTests, { session });
-                    assignedCounts.tests = copiedTests.length;
+            }
 
-                    // Make the freshly created tests resolvable for the panels/packages
-                    // that are copied later in this very same request.
-                    for (const copiedTest of copiedTests) {
-                        const copiedOriginalId = toIdString(copiedTest.originalTestId);
-                        if (copiedOriginalId && !testIdByOriginalId.has(copiedOriginalId)) {
-                            testIdByOriginalId.set(copiedOriginalId, copiedTest._id);
-                        }
+            if (copiedTests.length > 0) {
+                await testSchema.insertMany(copiedTests, sessionOpt);
+                assignedCounts.tests = copiedTests.length;
 
-                        const copiedName = String(copiedTest.Name);
-                        if (!testIdByName.has(copiedName)) {
-                            testIdByName.set(copiedName, copiedTest._id);
-                        }
+                copiedTests.forEach((copiedTest, idx) => {
+                    const sourceTest = newTests[idx];
+                    if (sourceTest?._id) {
+                        testIdByOriginalId.set(String(sourceTest._id), copiedTest._id);
                     }
+                    const copiedOriginalId = toIdString(copiedTest.originalTestId);
+                    if (copiedOriginalId && !testIdByOriginalId.has(copiedOriginalId)) {
+                        testIdByOriginalId.set(copiedOriginalId, copiedTest._id);
+                    }
+                    testIdByName.set(String(copiedTest.Name), copiedTest._id);
+                });
 
-                    // Update base tests with purchasedBy info (ONE bulk update instead of N)
-                    const sourceTestIds = [...new Set(newTests.map(t => String(t._id)))];
-                    if (sourceTestIds.length > 0) {
-                        const purchaseDate = new Date();
-                        await testSchema.updateMany(
-                            { _id: { $in: sourceTestIds } },
-                            {
-                                $push: {
-                                    purchasedBy: {
-                                        tenantId: franchiseeId,
-                                        purchasePrice: 1,
-                                        purchaseDate
-                                    }
+                const sourceTestIds = [...new Set(newTests.map((t) => String(t._id)))];
+                if (sourceTestIds.length > 0) {
+                    const purchaseDate = new Date();
+                    await testSchema.updateMany(
+                        { _id: { $in: sourceTestIds }, "purchasedBy.tenantId": { $ne: franchiseeId } },
+                        {
+                            $push: {
+                                purchasedBy: {
+                                    tenantId: franchiseeId,
+                                    purchasePrice: 1,
+                                    purchaseDate
                                 }
-                            },
-                            { session }
-                        );
-                    }
+                            }
+                        },
+                        sessionOpt
+                    );
                 }
 
                 const relevantMasterKeys = copiedTests.flatMap((test) =>
@@ -2630,6 +2689,7 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                 assignedCounts.formulas = await copyScopedFormulasToTenant({
                     session,
                     sourceScopeId: sourceFormulaScopeId,
+                    sourceScopeIds: [sourceAdminId, ...sourceTestTenantIds, sourceFormulaScopeId],
                     targetTenantId: franchiseeId,
                     createdBy,
                     relevantMasterKeys,
@@ -2637,293 +2697,399 @@ const assignModelsToFranchisee = asyncHandler(async (req, res) => {
                 });
             }
         }
+    }
 
-        // === STEP 2: PANELS (IMPROVED DUPLICATE DETECTION & ID MAPPING) ===
-        if (panelIds && panelIds.length > 0) {
-            const allCandidatePanels = await addPannel.find({
-                _id: { $in: panelIds },
-            }).session(session).lean();
+    // === PANELS ===
+    if (panelIds.length > 0) {
+        const allCandidatePanels = await runFind(addPannel, { _id: { $in: panelIds } });
 
-            const candidatePanels = allCandidatePanels.filter(t => {
-                if (t.createdByRole === 'admin' || t.createdByRole === 'superAdmin' || t.isBasePanel === true) {
-                    return true; // सबको allow
-                } else {
-                    return t.isBasePanel === false
-                }
-            })
-
-            const newPanels = candidatePanels.filter(panel =>
-                !panelIdByOriginalId.has(String(panel._id)) &&
-                !panelIdByName.has(String(panel.name))
-            );
-
-            if (newPanels.length > 0) {
-                const copiedPanels = [];
-
-                for (const panel of newPanels) {
-                    const { _id, ...rest } = panel;
-
-                    // Map the source category to the tenant's own copy (in-memory lookup)
-                    const newCategory = categoryResolver.resolve(panel.category);
-
-                    // Map testsId array to tenant test ids (by originalTestId first, then by name).
-                    // Uses the prefetched test maps instead of one query per test.
-                    const mappedTestIds = [];
-                    const testsNames = Array.isArray(panel.tests) ? panel.tests : [];
-                    const testsIdArr = Array.isArray(panel.testsId) ? panel.testsId : [];
-
-                    for (let idx = 0; idx < testsIdArr.length; idx++) {
-                        const srcTestId = testsIdArr[idx];
-
-                        let foundTestId = testIdByOriginalId.get(toIdString(srcTestId));
-
-                        // If not found by originalTestId, try by name (fall back to same index in tests array)
-                        if (!foundTestId) {
-                            const maybeName = testsNames[idx] || null;
-                            if (maybeName) {
-                                foundTestId = testIdByName.get(String(maybeName));
-                            }
-                        }
-
-                        if (foundTestId) mappedTestIds.push(foundTestId);
-                        // else skip that test mapping; panel will have fewer testsId entries
-                    }
-
-                    if (panel.createdByRole === 'superAdmin') {
-                        copiedPanels.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            category: newCategory,
-                            tenantId: franchiseeId,
-                            isBasePanel: false,
-                            purchasedFromBasePanel: true,
-                            originalPanelId: panel._id,
-                            assignedPrices: {}, // reset assignedPrices
-                            // attach mapped test ids if any
-                            testsId: mappedTestIds,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    }
-                    else if (panel.createdByRole === 'admin') {
-                        copiedPanels.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            category: newCategory,
-                            tenantId: franchiseeId,
-                            isBasePanel: true,
-                            purchasedFromBasePanel: false,
-                            purchasedBy: [],
-                            originalPanelId: panel._id,
-                            assignedPrices: [], // reset assignedPrices
-                            // attach mapped test ids if any
-                            testsId: mappedTestIds,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    }
-                }
-
-                if (copiedPanels.length > 0) {
-                    await addPannel.insertMany(copiedPanels, { session });
-                    assignedCounts.panels = copiedPanels.length;
-
-                    // Make the fresh panels resolvable for the packages copied later
-                    for (const copiedPanel of copiedPanels) {
-                        const copiedOriginalId = toIdString(copiedPanel.originalPanelId);
-                        if (copiedOriginalId && !panelIdByOriginalId.has(copiedOriginalId)) {
-                            panelIdByOriginalId.set(copiedOriginalId, copiedPanel._id);
-                        }
-
-                        const copiedName = String(copiedPanel.name);
-                        if (!panelIdByName.has(copiedName)) {
-                            panelIdByName.set(copiedName, copiedPanel._id);
-                        }
-                    }
-
-                    // ONE bulk update instead of N per-panel updates
-                    const sourcePanelIds = [...new Set(newPanels.map(p => String(p._id)))];
-                    if (sourcePanelIds.length > 0) {
-                        const purchaseDate = new Date();
-                        await addPannel.updateMany(
-                            { _id: { $in: sourcePanelIds } },
-                            {
-                                $push: {
-                                    purchasedBy: {
-                                        tenantId: franchiseeId,
-                                        purchasePrice: 2,
-                                        purchaseDate
-                                    }
-                                }
-                            },
-                            { session }
-                        );
-                    }
-                }
+        const candidatePanels = allCandidatePanels.filter((p) => {
+            if (p.createdByRole === "admin" || p.createdByRole === "superAdmin" || p.isBasePanel === true) {
+                return true;
             }
-        }
-
-        // === STEP 3: PACKAGES (IMPROVED DUPLICATE DETECTION & ID MAPPING) ===
-        if (packageIds && packageIds.length > 0) {
-            const allCandidatePackages = await Package.find({
-                _id: { $in: packageIds },
-            }).session(session).lean();
-
-            const candidatePackages = allCandidatePackages.filter(p => {
-                if (p.createdByRole === 'admin' || p.createdByRole === 'superAdmin' || p.isBasePackage === true) {
-                    return true; // सबको allow
-                }
-                else {
-                    return p.isBasePackage === false
-                }
-            })
-
-            const newPackages = candidatePackages.filter(pkg =>
-                !packageIdByOriginalId.has(String(pkg._id)) &&
-                !packageIdByName.has(String(pkg.packageName))
-            );
-
-            if (newPackages.length > 0) {
-
-                const copiedPackages = [];
-
-                for (const pkg of newPackages) {
-                    const { _id, ...rest } = pkg;
-
-                    // Map testIds to tenant test ids (in-memory lookups)
-                    const mappedTestIds = [];
-                    const srcTestIds = Array.isArray(pkg.testIds) ? pkg.testIds : [];
-                    const srcTestNames = Array.isArray(pkg.testname) ? pkg.testname : [];
-
-                    for (let i = 0; i < srcTestIds.length; i++) {
-                        const srcId = srcTestIds[i];
-                        let foundTestId = testIdByOriginalId.get(toIdString(srcId));
-
-                        if (!foundTestId) {
-                            const maybeName = srcTestNames[i] || null;
-                            if (maybeName) {
-                                foundTestId = testIdByName.get(String(maybeName));
-                            }
-                        }
-
-                        if (foundTestId) mappedTestIds.push(foundTestId);
-                    }
-
-                    // Map pannelIds to tenant panel ids (in-memory lookups)
-                    const mappedPanelIds = [];
-                    const srcPanelIds = Array.isArray(pkg.pannelIds) ? pkg.pannelIds : [];
-                    const srcPanelNames = Array.isArray(pkg.pannelname) ? pkg.pannelname : [];
-
-                    for (let i = 0; i < srcPanelIds.length; i++) {
-                        const srcId = srcPanelIds[i];
-                        let foundPanelId = panelIdByOriginalId.get(toIdString(srcId));
-
-                        if (!foundPanelId) {
-                            const maybeName = srcPanelNames[i] || null;
-                            if (maybeName) {
-                                foundPanelId = panelIdByName.get(String(maybeName));
-                            }
-                        }
-
-                        if (foundPanelId) mappedPanelIds.push(foundPanelId);
-                    }
-
-                    if (pkg.createdByRole === 'superAdmin') {
-                        copiedPackages.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            tenantId: franchiseeId,
-                            isBasePackage: false,
-                            purchasedFromBasePackage: true,
-                            assignedPrices: [], // reset assignedPrices
-                            originalPackageId: pkg._id,
-                            testIds: mappedTestIds,
-                            pannelIds: mappedPanelIds,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    } else if (pkg.createdByRole === 'admin') {
-                        copiedPackages.push({
-                            ...rest,
-                            _id: new mongoose.Types.ObjectId(),
-                            createdBy,
-                            tenantId: franchiseeId,
-                            isBasePackage: true,
-                            purchasedFromBasePackage: false,
-                            assignedPrices: [], // reset assignedPrices
-                            purchasedBy: [],
-                            originalPackageId: pkg._id,
-                            testIds: mappedTestIds,
-                            pannelIds: mappedPanelIds,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    }
-                }
-
-                if (copiedPackages.length > 0) {
-                    await Package.insertMany(copiedPackages, { session });
-                    assignedCounts.packages = copiedPackages.length;
-
-                    // ONE bulk update instead of N per-package updates
-                    const sourcePackageIds = [...new Set(newPackages.map(p => String(p._id)))];
-                    if (sourcePackageIds.length > 0) {
-                        const purchaseDate = new Date();
-                        await Package.updateMany(
-                            { _id: { $in: sourcePackageIds } },
-                            {
-                                $push: {
-                                    purchasedBy: {
-                                        tenantId: franchiseeId,
-                                        purchasePrice: 3,
-                                        purchaseDate
-                                    }
-                                }
-                            },
-                            { session }
-                        );
-                    }
-                }
-            }
-        }
-
-        await session.commitTransaction();
-        session.endSession();
-
-        const totalAssigned = Object.values(assignedCounts).reduce((sum, count) => sum + count, 0);
-
-        res.status(200).json({
-            success: true,
-            message: `Successfully assigned ${totalAssigned} models without duplicates.`,
-            assignedCounts: assignedCounts,
-            details: {
-                skippedDuplicates: {
-                    tests: (testIds?.length || 0) - assignedCounts.tests,
-                    panels: (panelIds?.length || 0) - assignedCounts.panels,
-                    packages: (packageIds?.length || 0) - assignedCounts.packages,
-                    categories: (categoryIds?.length || 0) - assignedCounts.categories,
-                    units: (unitIds?.length || 0) - assignedCounts.units,
-                    sampleTypes: (sampleTypeIds?.length || 0) - assignedCounts.sampleTypes
-                }
-            }
+            return p.isBasePanel === false || Boolean(p.tenantId);
         });
 
+        const newPanels = [];
+        for (const panel of candidatePanels) {
+            const panelName = panel.name == null ? "" : String(panel.name);
+            if (!panelName.trim()) continue;
+            const origRef = toIdString(panel.originalPanelId);
+            if (
+                panelIdByOriginalId.has(String(panel._id)) ||
+                (origRef && panelIdByOriginalId.has(origRef)) ||
+                panelIdByName.has(panelName)
+            ) {
+                continue;
+            }
+            panelIdByName.set(panelName, panel._id);
+            newPanels.push(panel);
+        }
+
+        if (newPanels.length > 0) {
+            const unresolvedSrcTestIds = [];
+            for (const panel of newPanels) {
+                for (const srcId of Array.isArray(panel.testsId) ? panel.testsId : []) {
+                    const idStr = toIdString(srcId);
+                    if (idStr && !testIdByOriginalId.has(idStr)) {
+                        unresolvedSrcTestIds.push(idStr);
+                    }
+                }
+            }
+            const sourceTestFallbackMap = new Map();
+            if (unresolvedSrcTestIds.length > 0) {
+                const srcTestDocs = await runFind(
+                    testSchema,
+                    { _id: { $in: [...new Set(unresolvedSrcTestIds)] } },
+                    "_id Name originalTestId"
+                );
+                for (const doc of srcTestDocs) {
+                    sourceTestFallbackMap.set(String(doc._id), doc);
+                }
+            }
+
+            const resolveTargetTestId = (srcTestId, fallbackName) => {
+                const srcIdStr = toIdString(srcTestId);
+                let found = srcIdStr ? testIdByOriginalId.get(srcIdStr) : null;
+                if (!found && fallbackName) {
+                    found = testIdByName.get(String(fallbackName));
+                }
+                if (!found && srcIdStr) {
+                    const srcDoc = sourceTestFallbackMap.get(srcIdStr);
+                    if (srcDoc) {
+                        const origId = toIdString(srcDoc.originalTestId);
+                        found = (origId && testIdByOriginalId.get(origId)) || testIdByName.get(String(srcDoc.Name));
+                    }
+                }
+                return found || null;
+            };
+
+            const copiedPanels = [];
+            for (const panel of newPanels) {
+                const { _id, __v, ...rest } = panel;
+                const newCategory = categoryResolver.resolve(panel.category);
+
+                const mappedTestIds = [];
+                const testsNames = Array.isArray(panel.tests) ? panel.tests : [];
+                const testsIdArr = Array.isArray(panel.testsId) ? panel.testsId : [];
+
+                for (let idx = 0; idx < testsIdArr.length; idx++) {
+                    const foundTestId = resolveTargetTestId(testsIdArr[idx], testsNames[idx] || null);
+                    if (foundTestId) mappedTestIds.push(foundTestId);
+                }
+
+                const resolvedOriginalPanelId = panel.originalPanelId || panel._id;
+                const safeSampleTypes = Array.isArray(rest.sample_types)
+                    ? rest.sample_types.filter(Boolean)
+                    : [];
+
+                if (panel.createdByRole === "superAdmin") {
+                    copiedPanels.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        category: newCategory,
+                        tenantId: franchiseeId,
+                        isBasePanel: false,
+                        purchasedFromBasePanel: true,
+                        originalPanelId: resolvedOriginalPanelId,
+                        assignedPrices: [],
+                        purchasedBy: [],
+                        sample_types: safeSampleTypes,
+                        testsId: mappedTestIds,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                } else {
+                    copiedPanels.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        createdByRole: "admin",
+                        category: newCategory,
+                        tenantId: franchiseeId,
+                        isBasePanel: true,
+                        purchasedFromBasePanel: false,
+                        purchasedBy: [],
+                        originalPanelId: resolvedOriginalPanelId,
+                        assignedPrices: [],
+                        sample_types: safeSampleTypes,
+                        testsId: mappedTestIds,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                }
+            }
+
+            if (copiedPanels.length > 0) {
+                await addPannel.insertMany(copiedPanels, sessionOpt);
+                assignedCounts.panels = copiedPanels.length;
+
+                copiedPanels.forEach((copiedPanel, idx) => {
+                    const sourcePanel = newPanels[idx];
+                    if (sourcePanel?._id) {
+                        panelIdByOriginalId.set(String(sourcePanel._id), copiedPanel._id);
+                    }
+                    const copiedOriginalId = toIdString(copiedPanel.originalPanelId);
+                    if (copiedOriginalId && !panelIdByOriginalId.has(copiedOriginalId)) {
+                        panelIdByOriginalId.set(copiedOriginalId, copiedPanel._id);
+                    }
+                    panelIdByName.set(String(copiedPanel.name), copiedPanel._id);
+                });
+
+                const sourcePanelIds = [...new Set(newPanels.map((p) => String(p._id)))];
+                if (sourcePanelIds.length > 0) {
+                    const purchaseDate = new Date();
+                    await addPannel.updateMany(
+                        { _id: { $in: sourcePanelIds }, "purchasedBy.tenantId": { $ne: franchiseeId } },
+                        {
+                            $push: {
+                                purchasedBy: {
+                                    tenantId: franchiseeId,
+                                    purchasePrice: 2,
+                                    purchaseDate
+                                }
+                            }
+                        },
+                        sessionOpt
+                    );
+                }
+            }
+        }
+    }
+
+    // === PACKAGES ===
+    if (packageIds.length > 0) {
+        const allCandidatePackages = await runFind(Package, { _id: { $in: packageIds } });
+
+        const candidatePackages = allCandidatePackages.filter((p) => {
+            if (p.createdByRole === "admin" || p.createdByRole === "superAdmin" || p.isBasePackage === true) {
+                return true;
+            }
+            return p.isBasePackage === false || Boolean(p.tenantId);
+        });
+
+        const newPackages = [];
+        for (const pkg of candidatePackages) {
+            const pkgName = pkg.packageName == null ? "" : String(pkg.packageName);
+            if (!pkgName.trim()) continue;
+            const origRef = toIdString(pkg.originalPackageId);
+            if (
+                packageIdByOriginalId.has(String(pkg._id)) ||
+                (origRef && packageIdByOriginalId.has(origRef)) ||
+                packageIdByName.has(pkgName)
+            ) {
+                continue;
+            }
+            packageIdByName.set(pkgName, pkg._id);
+            newPackages.push(pkg);
+        }
+
+        if (newPackages.length > 0) {
+            const unresolvedSrcTestIds = [];
+            const unresolvedSrcPanelIds = [];
+            for (const pkg of newPackages) {
+                for (const id of Array.isArray(pkg.testIds) ? pkg.testIds : []) {
+                    const s = toIdString(id);
+                    if (s && !testIdByOriginalId.has(s)) unresolvedSrcTestIds.push(s);
+                }
+                for (const id of Array.isArray(pkg.pannelIds) ? pkg.pannelIds : []) {
+                    const s = toIdString(id);
+                    if (s && !panelIdByOriginalId.has(s)) unresolvedSrcPanelIds.push(s);
+                }
+            }
+
+            const [srcTestDocs, srcPanelDocs] = await Promise.all([
+                unresolvedSrcTestIds.length > 0
+                    ? runFind(testSchema, { _id: { $in: [...new Set(unresolvedSrcTestIds)] } }, "_id Name originalTestId")
+                    : [],
+                unresolvedSrcPanelIds.length > 0
+                    ? runFind(addPannel, { _id: { $in: [...new Set(unresolvedSrcPanelIds)] } }, "_id name originalPanelId")
+                    : []
+            ]);
+
+            const sourceTestFallbackMap = new Map(srcTestDocs.map((d) => [String(d._id), d]));
+            const sourcePanelFallbackMap = new Map(srcPanelDocs.map((d) => [String(d._id), d]));
+
+            const copiedPackages = [];
+            for (const pkg of newPackages) {
+                const { _id, __v, ...rest } = pkg;
+
+                const mappedTestIds = [];
+                const srcTestIds = Array.isArray(pkg.testIds) ? pkg.testIds : [];
+                const srcTestNames = Array.isArray(pkg.testname) ? pkg.testname : [];
+                for (let i = 0; i < srcTestIds.length; i++) {
+                    const srcIdStr = toIdString(srcTestIds[i]);
+                    let foundTestId = srcIdStr ? testIdByOriginalId.get(srcIdStr) : null;
+                    if (!foundTestId && srcTestNames[i]) {
+                        foundTestId = testIdByName.get(String(srcTestNames[i]));
+                    }
+                    if (!foundTestId && srcIdStr) {
+                        const srcDoc = sourceTestFallbackMap.get(srcIdStr);
+                        if (srcDoc) {
+                            const origId = toIdString(srcDoc.originalTestId);
+                            foundTestId = (origId && testIdByOriginalId.get(origId)) || testIdByName.get(String(srcDoc.Name));
+                        }
+                    }
+                    if (foundTestId) mappedTestIds.push(foundTestId);
+                }
+
+                const mappedPanelIds = [];
+                const srcPanelIds = Array.isArray(pkg.pannelIds) ? pkg.pannelIds : [];
+                const srcPanelNames = Array.isArray(pkg.pannelname) ? pkg.pannelname : [];
+                for (let i = 0; i < srcPanelIds.length; i++) {
+                    const srcIdStr = toIdString(srcPanelIds[i]);
+                    let foundPanelId = srcIdStr ? panelIdByOriginalId.get(srcIdStr) : null;
+                    if (!foundPanelId && srcPanelNames[i]) {
+                        foundPanelId = panelIdByName.get(String(srcPanelNames[i]));
+                    }
+                    if (!foundPanelId && srcIdStr) {
+                        const srcDoc = sourcePanelFallbackMap.get(srcIdStr);
+                        if (srcDoc) {
+                            const origId = toIdString(srcDoc.originalPanelId);
+                            foundPanelId = (origId && panelIdByOriginalId.get(origId)) || panelIdByName.get(String(srcDoc.name));
+                        }
+                    }
+                    if (foundPanelId) mappedPanelIds.push(foundPanelId);
+                }
+
+                const resolvedOriginalPackageId = pkg.originalPackageId || pkg._id;
+                const safeGender = ["male", "female", "Both"].includes(rest.packageGender) ? rest.packageGender : "Both";
+                const safePackageFee = String(rest.packageFee ?? rest.final_price ?? "0");
+                const safeFinalPrice = String(rest.final_price ?? rest.packageFee ?? "0");
+
+                if (pkg.createdByRole === "superAdmin") {
+                    copiedPackages.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        tenantId: franchiseeId,
+                        packageGender: safeGender,
+                        packageFee: safePackageFee,
+                        final_price: safeFinalPrice,
+                        isBasePackage: false,
+                        purchasedFromBasePackage: true,
+                        assignedPrices: [],
+                        purchasedBy: [],
+                        originalPackageId: resolvedOriginalPackageId,
+                        testIds: mappedTestIds,
+                        pannelIds: mappedPanelIds,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                } else {
+                    copiedPackages.push({
+                        ...rest,
+                        _id: new mongoose.Types.ObjectId(),
+                        createdBy,
+                        createdByRole: "admin",
+                        tenantId: franchiseeId,
+                        packageGender: safeGender,
+                        packageFee: safePackageFee,
+                        final_price: safeFinalPrice,
+                        isBasePackage: true,
+                        purchasedFromBasePackage: false,
+                        assignedPrices: [],
+                        purchasedBy: [],
+                        originalPackageId: resolvedOriginalPackageId,
+                        testIds: mappedTestIds,
+                        pannelIds: mappedPanelIds,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                }
+            }
+
+            if (copiedPackages.length > 0) {
+                await Package.insertMany(copiedPackages, sessionOpt);
+                assignedCounts.packages = copiedPackages.length;
+
+                const sourcePackageIds = [...new Set(newPackages.map((p) => String(p._id)))];
+                if (sourcePackageIds.length > 0) {
+                    const purchaseDate = new Date();
+                    await Package.updateMany(
+                        { _id: { $in: sourcePackageIds }, "purchasedBy.tenantId": { $ne: franchiseeId } },
+                        {
+                            $push: {
+                                purchasedBy: {
+                                    tenantId: franchiseeId,
+                                    purchasePrice: 3,
+                                    purchaseDate
+                                }
+                            }
+                        },
+                        sessionOpt
+                    );
+                }
+            }
+        }
+    }
+
+    const skippedCounts = {
+        tests: Math.max(0, testIds.length - assignedCounts.tests),
+        panels: Math.max(0, panelIds.length - assignedCounts.panels),
+        packages: Math.max(0, packageIds.length - assignedCounts.packages),
+        categories: Math.max(0, categoryIds.length - assignedCounts.categories),
+        units: Math.max(0, unitIds.length - assignedCounts.units),
+        sampleTypes: Math.max(0, sampleTypeIds.length - assignedCounts.sampleTypes),
+    };
+
+    return { assignedCounts, skippedCounts };
+};
+
+const assignModelsToFranchisee = asyncHandler(async (req, res) => {
+    let session = null;
+    try {
+        const { franchiseeId } = req.body || {};
+
+        if (!franchiseeId || !mongoose.isValidObjectId(String(franchiseeId))) {
+            return res.status(400).json({ success: false, message: "Valid Franchisee ID is required." });
+        }
+
+        const tenant = await Tenant.findById(franchiseeId);
+        if (!tenant || !tenant.adminDetails?.userId) {
+            return res.status(404).json({ success: false, message: "Franchisee or its admin account was not found." });
+        }
+
+        let assignmentResult = null;
+        try {
+            session = await mongoose.startSession();
+            session.startTransaction();
+            assignmentResult = await executeCatalogAssignment({ req, tenant, session });
+            await session.commitTransaction();
+            session.endSession();
+            session = null;
+        } catch (txError) {
+            if (session) {
+                try { await session.abortTransaction(); } catch (_) {}
+                try { session.endSession(); } catch (_) {}
+                session = null;
+            }
+            if (!isTransactionUnsupportedError(txError)) {
+                throw txError;
+            }
+            assignmentResult = await executeCatalogAssignment({ req, tenant, session: null });
+        }
+
+        const { assignedCounts, skippedCounts } = assignmentResult;
+        const totalAssigned = Object.values(assignedCounts).reduce((sum, count) => sum + count, 0);
+
+        return res.status(200).json({
+            success: true,
+            message: `Successfully assigned ${totalAssigned} models without duplicates.`,
+            assignedCounts,
+            skippedCounts,
+            details: {
+                skippedDuplicates: skippedCounts
+            }
+        });
     } catch (err) {
         if (session) {
-            try {
-                await session.abortTransaction();
-            } catch (e) {
-                // ignore abort errors
-            }
-            try {
-                session.endSession();
-            } catch (e) { }
+            try { await session.abortTransaction(); } catch (_) {}
+            try { session.endSession(); } catch (_) {}
         }
         console.error("Assignment Error:", err);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Failed to assign models",
             error: err.message
@@ -2963,51 +3129,94 @@ const getAllModels = async (req, res) => {
 // Add this route to your backend
 const adminAssign = asyncHandler(async (req, res) => {
     try {
-        const { adminId } = req.body;
+        const { adminId } = req.body || {};
 
-        // Fetch assigned tests, panels, packages for this admin.
-        // FIXED (performance): the preview only needs id + name + price + createdByRole, so
-        // fetch just those fields instead of every full document (which could build a
-        // multi-MB response for a large admin and time out at the gateway with a 504).
-        const assignedTests = await testSchema.find({ tenantId: adminId })
-            .select("_id Name Price createdByRole")
-            .lean();
-        const assignedPanels = await addPannel.find({ tenantId: adminId })
-            .select("_id name price createdByRole")
-            .lean();
-        const assignedPackages = await Package.find({ tenantId: adminId })
-            .select("_id packageName packageFee createdByRole")
-            .lean();
+        if (!adminId || !mongoose.isValidObjectId(String(adminId))) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid adminId is required."
+            });
+        }
 
-        res.json({
+        const [
+            assignedTests,
+            assignedPanels,
+            assignedPackages,
+            assignedCategories,
+            assignedUnits,
+            assignedSampleTypes
+        ] = await Promise.all([
+            testSchema
+                .find({ tenantId: adminId })
+                .select("_id Name Short_name Price final_price category sampleType createdByRole originalTestId purchasedFromBaseTest")
+                .sort({ order: 1, _id: 1 })
+                .lean(),
+            addPannel
+                .find({ tenantId: adminId })
+                .select("_id name Short_name price final_price category testsId createdByRole originalPanelId purchasedFromBasePanel")
+                .sort({ order: 1, _id: 1 })
+                .lean(),
+            Package
+                .find({ tenantId: adminId })
+                .select("_id packageName packageFee final_price testIds pannelIds createdByRole originalPackageId purchasedFromBasePackage")
+                .sort({ order: 1, _id: 1 })
+                .lean(),
+            categorydb
+                .find({ tenantId: adminId })
+                .select("_id category orderId originalCategoryId createdByRole")
+                .sort({ orderId: 1, _id: 1 })
+                .lean(),
+            unitdb
+                .find({ tenantId: adminId })
+                .select("_id unit originalUnitId createdByRole")
+                .lean(),
+            sampleSchema
+                .find({ tenantId: adminId })
+                .select("_id Name originalSampleId createdByRole")
+                .lean(),
+        ]);
+
+        return res.status(200).json({
             success: true,
             data: {
                 tests: assignedTests,
                 panels: assignedPanels,
-                packages: assignedPackages
+                packages: assignedPackages,
+                categories: assignedCategories,
+                units: assignedUnits,
+                sampleTypes: assignedSampleTypes,
             }
         });
-
     } catch (error) {
-        res.json({ success: false, message: error.message });
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 
 const getAllAddOns = asyncHandler(async (req, res) => {
     let userId;
     if (req.user.role === 'staff') {
-        userId = req.user.parentUser
+        userId = req.user.parentUser;
     } else {
-        userId = req.user._id
+        userId = req.user._id;
     }
     try {
-        // Assignment is only allowed to copy catalog records. Tenant-created
-        // records must never be offered as global add-ons, even if their creator
-        // happens to be the same Super Admin account.
+        // Assignment copies SuperAdmin base catalog records (never tenant-scoped records).
         const [units, sampleTypes, categories] = await Promise.all([
-            unitdb.find({ createdBy: userId, isBaseUnit: true }).select("_id").lean(),
-            sampleSchema.find({ createdBy: userId, isBaseSample: true }).select("_id").lean(),
-            categorydb.find({ createdBy: userId, isBaseCategory: true }).select("_id").lean(),
+            unitdb.find({
+                tenantId: null,
+                isBaseUnit: true,
+                $or: [{ createdBy: userId }, { createdByRole: "superAdmin" }]
+            }).select("_id").lean(),
+            sampleSchema.find({
+                tenantId: null,
+                isBaseSample: true,
+                $or: [{ createdBy: userId }, { createdByRole: "superAdmin" }]
+            }).select("_id").lean(),
+            categorydb.find({
+                tenantId: null,
+                isBaseCategory: true,
+                $or: [{ createdBy: userId }, { createdByRole: "superAdmin" }]
+            }).select("_id").lean(),
         ]);
         const unitIds = units.map(u => u._id);
         const sampleTypeIds = sampleTypes.map(s => s._id);

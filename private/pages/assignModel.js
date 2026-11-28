@@ -14,8 +14,18 @@
     // ==========================================
     // 1. STATE & CONSTANTS
     // ==========================================
+    const pageRoot =
+        Array.from(document.querySelectorAll('.spa-page-canvas[data-spa-page="assignModel"]')).pop() ||
+        document;
+    const getEl = (id) =>
+        pageRoot instanceof HTMLElement
+            ? pageRoot.querySelector(`#${CSS.escape(id)}`) || document.getElementById(id)
+            : document.getElementById(id);
+    const getAll = (selector) => pageRoot.querySelectorAll(selector);
+
     let isSyncingDate = false;
     let selectedLayer = '1'; // Default to 1 Layer Model
+    let editTenantId = null;
     const BASE_URL = window.location.origin;
 
     // Field Documentation Tooltip Registry
@@ -51,72 +61,72 @@
     // ==========================================
     const els = {
         // Model Selection Cards
-        modelCards: document.querySelectorAll('.model-card'),
-        rentDetails: document.getElementById('rentDetails'),
+        modelCards: getAll('.model-card'),
+        rentDetails: getEl('rentDetails'),
 
         // AI Extraction
-        aiRawInput: document.getElementById('aiRawInput'),
-        btnAiParse: document.getElementById('btnAiParse'),
-        btnAiClear: document.getElementById('btnAiClear'),
-        aiParseSpinner: document.getElementById('aiParseSpinner'),
-        aiParseStatus: document.getElementById('aiParseStatus'),
+        aiRawInput: getEl('aiRawInput'),
+        btnAiParse: getEl('btnAiParse'),
+        btnAiClear: getEl('btnAiClear'),
+        aiParseSpinner: getEl('aiParseSpinner'),
+        aiParseStatus: getEl('aiParseStatus'),
 
         // Identity
-        franchiseName: document.getElementById('franchiseName'),
-        fullName: document.getElementById('fullName'),
-        email: document.getElementById('email'),
-        phoneNo: document.getElementById('phoneNo'),
-        username: document.getElementById('username'),
-        password: document.getElementById('password'),
-        btnTogglePassword: document.getElementById('btnTogglePassword'),
-        btnGeneratePassword: document.getElementById('btnGeneratePassword'),
-        referral: document.getElementById('referral'),
+        franchiseName: getEl('franchiseName'),
+        fullName: getEl('fullName'),
+        email: getEl('email'),
+        phoneNo: getEl('phoneNo'),
+        username: getEl('username'),
+        password: getEl('password'),
+        btnTogglePassword: getEl('btnTogglePassword'),
+        btnGeneratePassword: getEl('btnGeneratePassword'),
+        referral: getEl('referral'),
 
         // Address & Pincode
-        pincode: document.getElementById('pincode'),
-        pincodeSpinner: document.getElementById('pincodeSpinner'),
-        pincodeFeedback: document.getElementById('pincodeFeedback'),
-        district: document.getElementById('district'),
-        state: document.getElementById('state'),
-        address: document.getElementById('address'),
+        pincode: getEl('pincode'),
+        pincodeSpinner: getEl('pincodeSpinner'),
+        pincodeFeedback: getEl('pincodeFeedback'),
+        district: getEl('district'),
+        state: getEl('state'),
+        address: getEl('address'),
 
         // Plan & Dates
-        leaseTerms: document.getElementById('leaseTerms'),
-        rentAmount: document.getElementById('rentAmount'),
-        quaterlyRentAmount: document.getElementById('quaterlyRentAmount'),
-        yearlyRentAmount: document.getElementById('yearlyRentAmount'),
-        activeForDays: document.getElementById('activeForDays'),
-        customExpiryDate: document.getElementById('customExpiryDate'),
-        expirySyncText: document.getElementById('expirySyncText'),
+        leaseTerms: getEl('leaseTerms'),
+        rentAmount: getEl('rentAmount'),
+        quaterlyRentAmount: getEl('quaterlyRentAmount'),
+        yearlyRentAmount: getEl('yearlyRentAmount'),
+        activeForDays: getEl('activeForDays'),
+        customExpiryDate: getEl('customExpiryDate'),
+        expirySyncText: getEl('expirySyncText'),
 
         // Grace Period
-        graceMonths: document.getElementById('graceMonths'),
-        graceDays: document.getElementById('graceDays'),
-        graceHours: document.getElementById('graceHours'),
-        graceNote: document.getElementById('graceNote'),
+        graceMonths: getEl('graceMonths'),
+        graceDays: getEl('graceDays'),
+        graceHours: getEl('graceHours'),
+        graceNote: getEl('graceNote'),
 
         // Device Restriction
-        deviceRestrictionToggle: document.getElementById('deviceRestrictionToggle'),
-        maxDevicesContainer: document.getElementById('maxDevicesContainer'),
-        maxAllowedDevices: document.getElementById('maxAllowedDevices'),
-        policyDisplayCount: document.getElementById('policyDisplayCount'),
+        deviceRestrictionToggle: getEl('deviceRestrictionToggle'),
+        maxDevicesContainer: getEl('maxDevicesContainer'),
+        maxAllowedDevices: getEl('maxAllowedDevices'),
+        policyDisplayCount: getEl('policyDisplayCount'),
 
         // Features & PDF Format
-        formatRadios: document.querySelectorAll('input[name="format"]'),
-        printsetting: document.getElementById('printsetting'),
-        testdatabase: document.getElementById('testdatabase'),
-        randomResult: document.getElementById('randomResult'),
+        formatRadios: getAll('input[name="format"]'),
+        printsetting: getEl('printsetting'),
+        testdatabase: getEl('testdatabase'),
+        randomResult: getEl('randomResult'),
 
         // Submission
-        assignButton: document.getElementById('assignButton'),
-        formStatusNotice: document.getElementById('formStatusNotice'),
+        assignButton: getEl('assignButton'),
+        formStatusNotice: getEl('formStatusNotice'),
 
         // Format Image Elements
-        formatDiv1: document.querySelector('.format1'),
-        formatDiv2: document.querySelector('.format2'),
-        formatDiv3: document.querySelector('.format3'),
-        formatDiv4: document.querySelector('.format4'),
-        formatDiv5: document.querySelector('.format5')
+        formatDiv1: pageRoot.querySelector('.format1'),
+        formatDiv2: pageRoot.querySelector('.format2'),
+        formatDiv3: pageRoot.querySelector('.format3'),
+        formatDiv4: pageRoot.querySelector('.format4'),
+        formatDiv5: pageRoot.querySelector('.format5')
     };
 
     // ==========================================
@@ -821,6 +831,7 @@
         const tenantId = urlParams.get('tenantId') || urlParams.get('modelId') || urlParams.get('id');
         if (!tenantId) return;
 
+        editTenantId = tenantId;
         try {
             const res = await fetch(`/api/v1/user/tenants-model/${tenantId}`);
             if (res.ok) {
@@ -955,16 +966,54 @@
         }
 
         try {
-            const response = await fetch(`${BASE_URL}/api/v1/user/tenants`, {
-                method: 'POST',
+            const isEditMode = Boolean(editTenantId);
+            const endpoint = isEditMode
+                ? `${BASE_URL}/api/v1/user/update-model/${editTenantId}`
+                : `${BASE_URL}/api/v1/user/tenants`;
+            const requestBody = isEditMode
+                ? {
+                    fullName: rawFullName || rawFranchiseName || undefined,
+                    username: rawUsername || undefined,
+                    email: rawEmail || undefined,
+                    ...(rawPassword ? { password: rawPassword } : {}),
+                    phoneNo: rawPhoneNo ? (parseInt(rawPhoneNo, 10) || undefined) : undefined,
+                    state: rawState,
+                    district: rawDistrict,
+                    pinCode: rawPincode,
+                    address: rawAddress,
+                    pdfFormat,
+                    showprintsetting,
+                    showtestdatabase,
+                    showRandomBtn,
+                    planType: rawLeaseTerms,
+                    price: numericRent,
+                    monthlyPrice: numericRent,
+                    quaterlyPrice: Number(rawQuaterlyRent || 0),
+                    yearlyPrice: Number(rawYearlyRent || 0),
+                    activeForDays: numericActiveDays,
+                    customExpiryDate: rawCustomExpiry || null,
+                    graceMonths: Number(rawGraceMonths || 0),
+                    graceDays: Number(rawGraceDays || 0),
+                    graceHours: Number(rawGraceHours || 0),
+                    graceNote: rawGraceNote,
+                    deviceRestriction: { isEnabled: isDeviceEnabled, maxAllowedDevices: maxDevices },
+                    is_device_restriction_enabled: isDeviceEnabled,
+                    max_allowed_devices: maxDevices || 1
+                }
+                : payload;
+
+            const response = await fetch(endpoint, {
+                method: isEditMode ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(requestBody)
             });
 
             const result = await response.json();
 
             if (response.ok) {
-                const successMsg = `
+                const successMsg = isEditMode
+                    ? `<strong>✓ Franchise Model Updated Successfully!</strong><br><span><strong>Client:</strong> ${sanitizedName} | <strong>Device Policy:</strong> ${isDeviceEnabled ? `${maxDevices} Device Limit` : 'No Restrictions'}</span>`
+                    : `
                     <strong>✓ Franchise Model Assigned Successfully!</strong><br>
                     <span><strong>Architecture:</strong> ${selectedLayer} Layer Model | <strong>Client:</strong> ${sanitizedName}</span><br>
                     <span><strong>Login Username:</strong> ${sanitizedUsername} | <strong>Device Policy:</strong> ${isDeviceEnabled ? `${maxDevices} Device Limit` : 'No Restrictions'}</span>

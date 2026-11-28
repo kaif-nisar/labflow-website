@@ -455,10 +455,12 @@ export const createTenant = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Username, email, password, and fullName are required" });
   }
 
-  // Check if requesting user is a superadmin
+  // Check if requesting user is a superadmin or authorized superadmin staff
   const requestingUser = req.user;
-  // console.log("Requesting User:", requestingUser.role);
-  if (requestingUser.role !== "superAdmin") {
+  const isAuthorizedSuperAdmin =
+    requestingUser?.role === "superAdmin" ||
+    (requestingUser?.role === "staff" && requestingUser?.parentRole === "superAdmin");
+  if (!isAuthorizedSuperAdmin) {
     return res.status(403).json({ message: "Only superadmins can assign tenants" });
   }
 

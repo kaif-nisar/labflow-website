@@ -328,25 +328,37 @@
         }
 
         .copy-design {
-            font-size: 1rem;
-            color: rgb(255, 248, 248);
+            font-size: 0.95rem;
+            color: #ffffff;
             font-weight: 600;
             cursor: pointer;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 8px;
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-decoration: none;
         }
 
         .admin-assign {
             margin-bottom: 20px;
-            border: 1px solid #040e23;
-            display: flex;
+            border: 1px solid #3730a3;
+            display: inline-flex;
             justify-content: center;
             align-items: center;
-            width: 215px;
-            background-color: #4f46e5;
-            border-radius: 8px;
-            padding: 10px;
+            min-width: 220px;
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            border-radius: 10px;
+            padding: 10px 18px;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .admin-assign:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(79, 70, 229, 0.28);
         }
 
         @keyframes spin {
@@ -418,12 +430,9 @@
             </div>
 
             <div class="admin-assign">
-                <div class="menu-item" data-page="copyTestAssign.html">
-                    <a href="superAdmin.html?page=copyTestAssign" class="copy-design"
-                        style="text-decoration: none; font-weight: 600;">
-                        <i class="fas fa-arrow-left"></i> Admin Assignment
-                    </a>
-                </div>
+                <a href="superAdmin.html?page=copyTestAssign" data-page="copyTestAssign" class="copy-design">
+                    <i class="fas fa-people-arrows"></i> Admin Assignment
+                </a>
             </div>
 
             <!-- Franchisee Selection -->

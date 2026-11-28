@@ -5,6 +5,7 @@ import { Package } from "../models/addPackage.model.js";
 import { Ledger } from "../models/ledger.model.js";
 import { User } from "../models/user.model.js";
 import { Types } from "mongoose";
+import { hydrateLiveCatalogSampleTypes } from "../utils/bookingPackageResolver.js";
 // Bulk price assignment API
 const assignTestPrice = asyncHandler(async (req, res) => {
   try {
@@ -530,10 +531,11 @@ const getAssignedPanels = async (req, res) => {
       // Get all tests
       const panels = await addPannel
         .find({ tenantId: req.user.tenantId })
-        .select("name Short_name price final_price assignedPrices sample_types createdAt")
+        .select("name Short_name price final_price assignedPrices testsId sample_types createdAt")
         .lean();
+      const hydratedPanels = (await hydrateLiveCatalogSampleTypes({ panels, testSchema, addPannel })).panels;
       // Map all tests with either assigned price to the franchisee or default price
-      const result = panels.map((panel) => {
+      const result = hydratedPanels.map((panel) => {
         // Check if the panel has an assigned price for the specified franchisee (oldId)
         const assignedToFranchisee = panel.assignedPrices?.find(
           (ap) => ap?.userId?.toString() === oldId
@@ -550,7 +552,7 @@ const getAssignedPanels = async (req, res) => {
           franchiseePrice: assignedToFranchisee ? assignedToFranchisee.price : panel.price || 0,
           myPrice: assignedToFranchisee ? assignedToFranchisee.price : panel.price || 0,
           mrpPrice: panel.final_price || 0,
-          sampleType: panel.sample_types || "N/A",
+          sampleType: (panel._liveSampleTypes?.length ? panel._liveSampleTypes : panel.sample_types) || "N/A",
           assignedPriceToUser: assignedToFranchisee ? assignedToFranchisee.price : null,
           commissionToUser: assignedToFranchisee ? assignedToFranchisee.commission : null,
           // Flag to indicate if this test has been assigned to the franchisee
@@ -576,8 +578,9 @@ const getAssignedPanels = async (req, res) => {
             },
           ],
         })
-        .select("name Short_name tests price final_price assignedPrices sample_types createdAt")
+        .select("name Short_name tests testsId price final_price assignedPrices sample_types createdAt")
         .lean();
+      panels = (await hydrateLiveCatalogSampleTypes({ panels, testSchema, addPannel })).panels;
     }
 
     // Filter assignedPrices for the specific franchisee and include necessary fields
@@ -602,7 +605,7 @@ const getAssignedPanels = async (req, res) => {
         tests: panel.tests, // From pannelSchema
         basePrice: panel.price, // From pannelSchema
         mrpPrice: panel.final_price,
-        sampleType: panel.sample_types,
+        sampleType: (panel._liveSampleTypes?.length ? panel._liveSampleTypes : panel.sample_types),
 
         // Price assigned to the selected franchisee
         franchiseePrice: assignedToFranchisee?.price || 0,
@@ -643,10 +646,11 @@ const getAssignedPackages = async (req, res) => {
       // Get all tests
       const packages = await Package
         .find({ tenantId: req.user.tenantId })
-        .select("packageName packageFee final_price assignedPrices testSample pannelSample createdAt")
+        .select("packageName packageFee final_price assignedPrices testIds pannelIds testSample pannelSample createdAt")
         .lean();
+      const hydratedPackages = (await hydrateLiveCatalogSampleTypes({ packages, testSchema, addPannel })).packages;
       // Map all tests with either assigned price to the franchisee or default price
-      const result = packages.map((packageList) => {
+      const result = hydratedPackages.map((packageList) => {
         // Check if the panel has an assigned price for the specified franchisee (oldId)
         const assignedToFranchisee = packageList.assignedPrices?.find(
           (ap) => ap.userId.toString() === oldId
@@ -658,7 +662,7 @@ const getAssignedPackages = async (req, res) => {
           panelNames: packageList.pannelname, // From packageSchema
           basePrice: packageList.packageFee, // From packageSchema
           mrpPrice: packageList.final_price,
-          sampleType: packageList.testSample,
+          sampleType: (packageList._liveSampleTypes?.length ? packageList._liveSampleTypes : packageList.testSample),
           sample_types: packageList.pannelSample,
           // If there's an assigned price for the franchisee, use it; otherwise use default
           franchiseePrice: assignedToFranchisee ? assignedToFranchisee.price : packageList.packageFee || 0,
@@ -684,8 +688,9 @@ const getAssignedPackages = async (req, res) => {
           },
         ],
       }).select(
-        "packageName testname pannelname packageFee final_price assignedPrices testSample pannelSample createdAt"
+        "packageName testname pannelname packageFee final_price assignedPrices testIds pannelIds testSample pannelSample createdAt"
       ).lean();
+      packages = (await hydrateLiveCatalogSampleTypes({ packages, testSchema, addPannel })).packages;
     }
     // Filter assignedPrices for the specific franchisee and include necessary fields
     const result = packages.map((packageList) => {
@@ -708,7 +713,7 @@ const getAssignedPackages = async (req, res) => {
         panelNames: packageList.pannelname, // From packageSchema
         basePrice: packageList.packageFee, // From packageSchema
         mrpPrice: packageList.final_price,
-        sampleType: packageList.testSample,
+        sampleType: (packageList._liveSampleTypes?.length ? packageList._liveSampleTypes : packageList.testSample),
         sample_types: packageList.pannelSample,
 
         // Price assigned to the selected franchisee

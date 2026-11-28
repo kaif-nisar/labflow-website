@@ -50,6 +50,15 @@ function isSilentSaTransitionUrl(rawUrl) {
     return SILENT_BACKGROUND_API_PATTERNS.some((pattern) => url.includes(pattern));
 }
 
+function normalizeSaPageName(rawPage) {
+    const cleaned = String(rawPage || "")
+        .trim()
+        .replace(/^\/+/, "")
+        .replace(/^pages\//i, "")
+        .replace(/\.html$/i, "");
+    return cleaned || "dashboard";
+}
+
 function getSaRouteTitle(page) {
     if (!page) return "Workspace";
     const safePage = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(page) : String(page);
@@ -669,7 +678,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     initNavigation();
 
     const urlParams = new URLSearchParams(window.location.search);
-    const currentPage = urlParams.get("page") || "dashboard";
+    const currentPage = normalizeSaPageName(urlParams.get("page") || "dashboard");
 
     let bootRestoreScrollY = 0;
     try {
@@ -777,7 +786,7 @@ class SPARouter {
         if (!this.container) return;
 
         const urlParams = new URLSearchParams(window.location.search);
-        const currentPage = bootOptions.initialPage || urlParams.get("page") || "dashboard";
+        const currentPage = normalizeSaPageName(bootOptions.initialPage || urlParams.get("page") || "dashboard");
 
         this.setupDynamicLinks();
 
@@ -800,7 +809,7 @@ class SPARouter {
             this._popstateBound = true;
             window.addEventListener("popstate", (event) => {
                 const params = new URLSearchParams(window.location.search);
-                const targetPage = event.state?.page || params.get("page") || "dashboard";
+                const targetPage = normalizeSaPageName(event.state?.page || params.get("page") || "dashboard");
                 this.loadPage(
                     targetPage,
                     event.state?.Name || params.get("Name") || null,
@@ -848,8 +857,9 @@ class SPARouter {
         document.title = `LabFlow Super Admin | ${title}`;
     }
 
-    async loadPage(page, Name = null, _id = null, BASE_URL = null, name = null, updateHistory = true, options = {}) {
-        if (!this.container || !page) return;
+    async loadPage(rawPage, Name = null, _id = null, BASE_URL = null, name = null, updateHistory = true, options = {}) {
+        if (!this.container || !rawPage) return;
+        const page = normalizeSaPageName(rawPage);
 
         const currentSearch = new URLSearchParams(window.location.search);
         const nextParams = new URLSearchParams();
@@ -1095,7 +1105,8 @@ class SPARouter {
         }
     }
 
-    async fetchPageHTML(page, cacheBust = Date.now(), preFetchedPromise = null) {
+    async fetchPageHTML(rawPage, cacheBust = Date.now(), preFetchedPromise = null) {
+        const page = normalizeSaPageName(rawPage);
         let response = null;
         if (preFetchedPromise) {
             response = await preFetchedPromise;

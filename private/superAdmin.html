@@ -604,6 +604,10 @@
                 <i class="fas fa-store"></i>
                 <span>Test Analysis</span>
             </div>
+            <div class="menu-item" data-page="copyTestAssign">
+                <i class="fas fa-people-arrows"></i>
+                <span>Admin Assignment</span>
+            </div>
             <div class="menu-item" data-page="Add_staff">
                 <i class="fas fa-store"></i>
                 <span>Add Staff</span>
@@ -697,7 +701,8 @@
             try {
                 var SNAPSHOT_KEY = "lf_spa_snapshot_superadmin";
                 var params = new URLSearchParams(window.location.search);
-                var targetPage = params.get("page") || "dashboard";
+                var rawTargetPage = params.get("page") || "dashboard";
+                var targetPage = String(rawTargetPage).trim().replace(/^\/+/, "").replace(/^pages\//i, "").replace(/\.html$/i, "") || "dashboard";
                 var escapeAttr = function (v) {
                     var s = String(v || "");
                     return (window.CSS && typeof window.CSS.escape === "function")

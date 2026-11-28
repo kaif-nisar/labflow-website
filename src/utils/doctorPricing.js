@@ -6,6 +6,10 @@ import { testSchema } from "../models/newTest.model.js";
 import { addPannel } from "../models/AddPannel.model.js";
 import { Package } from "../models/addPackage.model.js";
 import { ensureBookingCodesForScope } from "./bookingCode.js";
+import {
+  extractTestSampleTypes,
+  hydrateLiveCatalogSampleTypes,
+} from "./bookingPackageResolver.js";
 
 const SELF_DOCTOR_DOB = new Date("2000-01-01T00:00:00.000Z");
 
@@ -103,8 +107,13 @@ const getDocumentShortNameByType = (doc, itemType) => {
 };
 
 const getDocumentSampleTypesByType = (doc, itemType) => {
+  if (Array.isArray(doc?._liveSampleTypes) && doc._liveSampleTypes.length > 0) {
+    return uniqueStrings(doc._liveSampleTypes);
+  }
+
   if (itemType === "test") {
-    return uniqueStrings([doc.sampleType]);
+    const testSamples = extractTestSampleTypes(doc);
+    return uniqueStrings(testSamples.length ? testSamples : [doc.sampleType]);
   }
 
   if (itemType === "panel") {
@@ -364,6 +373,7 @@ const fetchCatalogDocuments = async ({ req, bookingUserId, itemIdsByType = null 
           Short_name: 1,
           bookingCode: 1,
           order: 1,
+          testsId: 1,
           sample_types: 1,
           price: 1,
           final_price: 1,
@@ -380,6 +390,8 @@ const fetchCatalogDocuments = async ({ req, bookingUserId, itemIdsByType = null 
           packageName: 1,
           bookingCode: 1,
           order: 1,
+          testIds: 1,
+          pannelIds: 1,
           testSample: 1,
           pannelSample: 1,
           packageFee: 1,
@@ -390,10 +402,18 @@ const fetchCatalogDocuments = async ({ req, bookingUserId, itemIdsByType = null 
     ]),
   ]);
 
-  return {
+  const hydratedCatalog = await hydrateLiveCatalogSampleTypes({
     tests,
     panels,
     packages,
+    testSchema,
+    addPannel,
+  });
+
+  return {
+    tests: hydratedCatalog.tests,
+    panels: hydratedCatalog.panels,
+    packages: hydratedCatalog.packages,
     bookingUserId: normalizedBookingUserId,
   };
 };
@@ -599,18 +619,26 @@ const fetchCatalogItemsForSelection = async ({ req, bookingUserId, normalizedIte
   const tenantId = getTenantIdFromReq(req);
   const [tests, panels, packages] = await Promise.all([
     testSchema.find({ tenantId, _id: { $in: objectIds } }).select("Name Short_name bookingCode order sampleType Price final_price assignedPrices").lean(),
-    addPannel.find({ tenantId, _id: { $in: objectIds } }).select("name bookingCode order sample_types price final_price assignedPrices").lean(),
-    Package.find({ tenantId, _id: { $in: objectIds } }).select("packageName bookingCode order testSample pannelSample packageFee final_price assignedPrices").lean(),
+    addPannel.find({ tenantId, _id: { $in: objectIds } }).select("name bookingCode order testsId sample_types price final_price assignedPrices").lean(),
+    Package.find({ tenantId, _id: { $in: objectIds } }).select("packageName bookingCode order testIds pannelIds testSample pannelSample packageFee final_price assignedPrices").lean(),
   ]);
 
+  const hydratedCatalog = await hydrateLiveCatalogSampleTypes({
+    tests,
+    panels,
+    packages,
+    testSchema,
+    addPannel,
+  });
+
   return {
-    tests: tests.map((doc) =>
+    tests: hydratedCatalog.tests.map((doc) =>
       serializeCatalogDocument({ doc, itemType: "test", bookingUserId: getActorOwnerId(req), req })
     ).filter(Boolean),
-    panels: panels.map((doc) =>
+    panels: hydratedCatalog.panels.map((doc) =>
       serializeCatalogDocument({ doc, itemType: "panel", bookingUserId: getActorOwnerId(req), req })
     ).filter(Boolean),
-    packages: packages.map((doc) =>
+    packages: hydratedCatalog.packages.map((doc) =>
       serializeCatalogDocument({ doc, itemType: "package", bookingUserId: getActorOwnerId(req), req })
     ).filter(Boolean),
   };
