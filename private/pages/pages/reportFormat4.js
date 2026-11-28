@@ -758,7 +758,7 @@
                     tests.forEach(test => {
                         if (!test.testName) return;
 
-                        if (test.pagebreak) {
+                        if (parseStoredCheckboxFlag(data.categorizedPDF) && test.pagebreak) {
                             const pbRow = document.createElement('tr');
                             pbRow.className = 'page-break';
                             tbody.appendChild(pbRow);

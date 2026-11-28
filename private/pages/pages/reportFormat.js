@@ -622,7 +622,7 @@
                 if (test.testName) {
                     testRow = document.createElement("tr");
 
-                    if (test.pagebreak) {
+                    if (parseStoredCheckboxFlag(data.categorizedPDF) && test.pagebreak) {
                         testRow.classList.add('page-break');
                     }
 

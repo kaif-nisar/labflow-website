@@ -1402,7 +1402,8 @@
       section.setAttribute("data-specimen-type", specimen.sampleType || "");
       if (specimenImg) section.setAttribute("data-specimen-barcode-img", specimenImg);
 
-      if ((report.categorizedPDF && safeIdx > 0) || cat.pagebreak) {
+      const startCategoryOnNewPage = parseBool(report.categorizedPDF, false);
+      if (startCategoryOnNewPage && (safeIdx > 0 || cat.pagebreak)) {
         section.classList.add("page-break", "oh5-page-break-before");
       }
 
@@ -1466,7 +1467,7 @@
         if (test.isDocumented || test.document) {
           closeTable();
           const docCard = document.createElement("div");
-          docCard.className = `documented-content oh5-documented-card${test.pagebreak ? " page-break oh5-page-break-before" : ""}`;
+          docCard.className = `documented-content oh5-documented-card${parseBool(report.categorizedPDF, false) && test.pagebreak ? " page-break oh5-page-break-before" : ""}`;
           docCard.innerHTML = sanitizeRichHtml(test.document || test.testName || test.value || "");
           section.appendChild(docCard);
           return;
@@ -1813,7 +1814,8 @@
       const forceNewPage =
         idx > 0 &&
         current.body.children.length > 0 &&
-        (catSection.classList.contains("page-break") || specimenChanged);
+        (catSection.classList.contains("page-break") ||
+          (parseBool(state.report?.categorizedPDF, false) && specimenChanged));
 
       if (forceNewPage) {
         current = createSheet(catSpecimen);
@@ -2655,7 +2657,7 @@
         topSummary.innerHTML = `${escapeHtml(reportData.patientName || "Patient")} <span>#${escapeHtml(state.bookingId)}</span>`;
       }
       const catPill = document.getElementById("oh5CatModePill");
-      if (catPill && reportData.categorizedPDF) {
+      if (catPill && parseBool(reportData.categorizedPDF, false)) {
         catPill.style.display = "inline-flex";
       }
 

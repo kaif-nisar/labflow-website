@@ -4352,7 +4352,14 @@ async function loadfunction() {
         for (const entry of singleTestsByCategory) {
             const { category, tests } = entry;
             if (matchedCategories.has(normalizeCategoryKey(category.category))) {
-                await createTable(category.category, category, tests, false, false);
+                // Keep each booked standalone test as its own report section.
+                // The PDF renderer can then honor "Print Categories from new
+                // Page" per booked item, while unchecked sections still flow
+                // one after another without a forced break.
+                for (const test of tests) {
+                    const testTitle = test.Name || test.Short_name || category.category;
+                    await createTable(testTitle, category, [test], false, false);
+                }
             }
         }
 
@@ -4360,7 +4367,10 @@ async function loadfunction() {
         for (const entry of singleTestsByCategory) {
             const { category, tests } = entry;
             if (!matchedCategories.has(normalizeCategoryKey(category.category))) {
-                await createTable(category.category, category, tests);
+                for (const test of tests) {
+                    const testTitle = test.Name || test.Short_name || category.category;
+                    await createTable(testTitle, category, [test]);
+                }
             }
         }
 
@@ -5912,7 +5922,12 @@ async function loadfunction() {
             let tableInterpretation = null;
 
             rows.forEach((row) => {
-                const pagebreak = row?.cells[0]?.querySelector('input[type="checkbox"]')?.checked || false;
+                // The category page-break option is the print-level master switch.
+                // Clearing it must also clear any stale per-row breaks saved by an
+                // older report, otherwise the PDF renderer still starts each test
+                // on a fresh page even though categories are set to continue.
+                const pagebreak = document.getElementById('check1')?.checked === true &&
+                    row?.cells[0]?.querySelector('input[type="checkbox"]')?.checked === true;
 
                 const testName = getCleanTestNameHtml(row);
                 const inputEl = row.querySelector(".value-input");
@@ -5996,11 +6011,10 @@ async function loadfunction() {
                     }
                 }
 
-                if (shouldSkipBlankValueRow) {
-                    return;
-                }
-
-                if (testName || valueInput || unit || reference || editorContent) {
+                // Keep booked investigations in the saved report even before a
+                // result has been entered. The previous early return silently
+                // removed every blank-result test/parameter from the PDF.
+                if (testName || valueInput || unit || reference || editorContent || inputEl) {
                     tableData.push({
                         pagebreak,
                         testName: editorContent || testName,
@@ -6114,10 +6128,16 @@ async function loadfunction() {
         booking.collectedOn = collectedOn;
         booking.receivedOn = receivedOn;
         booking.reportedOn = reportedOn;
+        const categorized = document.getElementById('check1').checked;
+        // Keep the canonical flag on the booking in sync with the checkbox.
+        // The PDF pages read categorizedPDF from the saved report/booking, while
+        // this page previously only sent a transient `categorized` field. That
+        // allowed an older true value to survive and keep inserting category
+        // page breaks after the checkbox had been cleared.
+        booking.categorizedPDF = categorized;
         try {
             localStorage.setItem("booking", JSON.stringify(booking));
         } catch (e) {}
-        const categorized = document.getElementById('check1').checked;
         const moredetails = document.getElementById('moredetails').value;
         const completionMeta = extractedData.completionMeta;
         const completionStatus = extractedData.completionStatus;
@@ -6139,7 +6159,7 @@ async function loadfunction() {
                     reg_id: booking.bookingId,
                     booking,
                     registeredOn,
-                    collectedOn, receivedOn, reportedOn, categorized, moredetails,
+                    collectedOn, receivedOn, reportedOn, categorized, categorizedPDF: categorized, moredetails,
                     uniquetestArray: uniquetestArray2,
                     isdocumented,
                     reportCompletionMeta: completionMeta,

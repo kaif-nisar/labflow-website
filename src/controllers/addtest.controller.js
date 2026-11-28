@@ -80,8 +80,19 @@ function normalizeParameterPayload(parameters = [], existingParameters = []) {
             toIdString(matchedExistingParameter?.originalParameterId) ||
             null;
 
+        const normalizeOptionalNumber = (value) => {
+            if (value === undefined || value === null || String(value).trim() === "") return null;
+            const number = Number(value);
+            return Number.isFinite(number) ? number : null;
+        };
+
         return {
             ...parameter,
+            // These fields are Numbers in the parameter schema. The catalog form
+            // submits empty strings for blank inputs, which Mongoose cannot cast.
+            lowerRange: normalizeOptionalNumber(parameter?.lowerRange),
+            upperRange: normalizeOptionalNumber(parameter?.upperRange),
+            forRandom: parseBooleanInput(parameter?.forRandom),
             masterParameterKey,
             originalParameterId,
         };

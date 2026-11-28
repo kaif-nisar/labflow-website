@@ -1745,7 +1745,7 @@
 
                 if (test.testName) {
                     testRow = document.createElement("tr");
-                    if (test.pagebreak) testRow.classList.add('page-break');
+                    if (parseStoredCheckboxFlag(data.categorizedPDF) && test.pagebreak) testRow.classList.add('page-break');
                     let appendedTestRow = false;
 
                     const evalRes = reportActionHelpers.evaluateLegacyTestAbnormal

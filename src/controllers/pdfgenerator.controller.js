@@ -301,6 +301,7 @@ const buildPdfBodyDocument = ({
         '<style>',
         '*{margin:0;padding:0;box-sizing:border-box;}',
         safeCss,
+        '.page-break { break-before: page !important; page-break-before: always !important; }',
         transparentOuterCss,
         '.wrong i, .delete-btn i { display: none; }',
         'h2 { margin: 0 !important; padding: 0 !important; }',

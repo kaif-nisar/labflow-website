@@ -453,6 +453,8 @@ export const buildFormat1PdfBodyDocument = ({
     "* { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }",
     `html, body { width: 100%; background: transparent !important; font-family: ${fontStack} !important; color: #0f172a; font-size: ${fontSize}px; line-height: 1.35; font-variant-numeric: tabular-nums; }`,
     safeCss,
+    // Keep report pagination working even when tenant CSS omits this rule.
+    '.page-break { break-before: page !important; page-break-before: always !important; }',
     `html, body, .middle, .container, .container2, .container-format1, .container22 { background-color: transparent !important; background-image: none !important; font-family: ${fontStack} !important; }`,
     `.middle { width: 100% !important; padding: 0 ${FORMAT1_SIDE_PAD_PX}px !important; font-size: ${fontSize}px !important; }`,
     ".middle .container-format1, .middle .container22, .middle .container2 { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; min-width: 0 !important; overflow: visible !important; }",

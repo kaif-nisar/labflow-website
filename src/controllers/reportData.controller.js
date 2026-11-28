@@ -82,14 +82,17 @@ const buildSavedReportData = (reportData = []) => {
                 totalRows += 1;
             }
 
-            if (!hasDocumentedContent && isBlankValue && !isStructuralHeadingRow) {
-                if (hasTrackedValueField) {
-                    skippedRows += 1;
-                }
+            const isBlankTrackedResult = hasTrackedValueField && !hasDocumentedContent && isBlankValue;
+            if (!hasDocumentedContent && isBlankValue && !isStructuralHeadingRow && !hasTrackedValueField) {
                 continue;
             }
 
-            if (hasTrackedValueField) {
+            // Keep empty result rows in CategoryAndTest so every booked test and
+            // package member still prints while the report is partially complete.
+            // Completion status continues to mark these rows as incomplete.
+            if (isBlankTrackedResult) {
+                skippedRows += 1;
+            } else if (hasTrackedValueField) {
                 savedRows += 1;
             }
 
